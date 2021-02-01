@@ -1,65 +1,34 @@
 package ssh
 
 import (
-	"sync"
-	"time"
-
 	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/pkg/ssh/clients"
+	"github.com/hightouchio/passage/pkg/ssh/server"
 )
 
-const refreshDuration = time.Second
-
 type Manager struct {
-	tunnels     map[string]models.Tunnel
-	supervisors map[string]supervisor
-	lock        sync.Mutex
-	once        sync.Once
+	clientsManager *clients.Manager
+	server         *server.Server
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		tunnels:     make(map[string]models.Tunnel),
-		supervisors: make(map[string]supervisor),
-		lock:        sync.Mutex{},
-		once:        sync.Once{},
+		clientsManager: clients.NewManager(),
+		server:         server.NewServer(),
 	}
 }
 
 func (m *Manager) SetTunnels(tunnels []models.Tunnel) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	m.tunnels = make(map[string]models.Tunnel)
+	var normalTunnels []models.Tunnel
+	var reverseTunnels []models.Tunnel
 	for _, tunnel := range tunnels {
-		m.tunnels[tunnel.ID] = tunnel
-	}
-
-	m.once.Do(func() {
-		go m.start()
-	})
-}
-
-func (m *Manager) start() {
-	ticker := time.NewTicker(refreshDuration)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			m.refresh()
+		switch tunnel.Type {
+		case models.TunnelTypeNormal:
+			normalTunnels = append(normalTunnels, tunnel)
+		case models.TunnelTypeReverse:
+			reverseTunnels = append(reverseTunnels, tunnel)
 		}
 	}
-}
-
-func (m *Manager) refresh() {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	for tunnelID, tunnel := range m.tunnels {
-		if _, ok := m.supervisors[tunnelID]; !ok {
-			s := newSupervisor(tunnel)
-			s.Start()
-			m.supervisors[tunnelID] = *s
-		}
-	}
+	m.clientsManager.SetTunnels(normalTunnels)
+	m.server.SetTunnels(reverseTunnels)
 }
