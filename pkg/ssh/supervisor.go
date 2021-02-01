@@ -84,7 +84,6 @@ func (s *supervisor) startSSHServer() error {
 	}
 
 	if err = sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
-		ssh.KeysEqual()
 		/*for _, authorizedKey := range s.variables.GetAuthorizedSSHKeys() {
 			if ssh.KeysEqual(key, authorizedKey) {
 				return true
