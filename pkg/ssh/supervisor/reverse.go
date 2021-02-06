@@ -1,9 +1,7 @@
-package server
+package supervisor
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/apex/log"
@@ -12,59 +10,45 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-const retryDuration = time.Second
+const reverseSupervisorRetryDuration = time.Second
 
-type Server struct {
-	tunnels map[string]models.Tunnel
-	lock    sync.RWMutex
-	once    sync.Once
+type ReverseSupervisor struct {
+	reverseTunnel models.ReverseTunnel
 }
 
-func NewServer() *Server {
-	return &Server{
-		tunnels: make(map[string]models.Tunnel),
-		lock:    sync.RWMutex{},
-		once:    sync.Once{},
+func NewReverseSupervisor(reverseTunnel models.ReverseTunnel) *ReverseSupervisor {
+	return &ReverseSupervisor{
+		reverseTunnel: reverseTunnel,
 	}
 }
 
-func (s *Server) SetTunnels(tunnels []models.Tunnel) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	s.tunnels = make(map[string]models.Tunnel)
-	for _, tunnel := range tunnels {
-		s.tunnels[tunnel.ID] = tunnel
-	}
-
-	s.once.Do(func() {
-		go s.start()
-	})
+func (s *ReverseSupervisor) Start() {
+	go s.start()
 }
 
-func (s *Server) start() {
-	ticker := time.NewTicker(retryDuration)
+func (s *ReverseSupervisor) start() {
+	ticker := time.NewTicker(reverseSupervisorRetryDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
 			if err := s.startSSHServer(); err != nil {
-				log.WithError(err).Error("start ssh server")
-				continue
+				log.Error("start ssh server")
 			}
 		}
 	}
 }
 
-func (s *Server) startSSHServer() error {
-	signer, err := getSigner()
+func (s *ReverseSupervisor) startSSHServer() error {
+	signer, err := gossh.ParsePrivateKey([]byte(s.reverseTunnel.PrivateKey))
 	if err != nil {
 		return err
 	}
 
 	forwardHandler := &ssh.ForwardedTCPHandler{}
 	sshServer := &ssh.Server{
+		Addr: fmt.Sprintf(":%d", s.reverseTunnel.SSHPort),
 		Handler: func(s ssh.Session) {
 			select {}
 		},
@@ -78,29 +62,19 @@ func (s *Server) startSSHServer() error {
 		},
 		HostSigners: []ssh.Signer{signer},
 		ReversePortForwardingCallback: func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-			return bindHost == "localhost"
+			return bindHost == "0.0.0.0" && bindPort == s.reverseTunnel.Port
 		},
 	}
 
 	if err = sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
-		return true
+		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(s.reverseTunnel.PublicKey))
+		if err != nil {
+			return false
+		}
+		return ssh.KeysEqual(key, authorizedKey)
 	})); err != nil {
 		return err
 	}
 
 	return sshServer.ListenAndServe()
-}
-
-func getSigner() (ssh.Signer, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, err
-	}
-
-	signer, err := gossh.NewSignerFromKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return signer, nil
 }

@@ -43,10 +43,12 @@ func main() {
 		return
 	}
 
-	tunnels := tunnels.NewTunnels(postgres.NewTunnels(db))
+	t := tunnels.NewTunnels(postgres.NewTunnels(db))
+	rt := tunnels.NewReverseTunnels(postgres.NewReverseTunnels(db))
 
 	worker := worker.NewWorker(
-		tunnels,
+		t,
+		rt,
 		time.Second,
 	)
 
@@ -55,7 +57,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    *addr,
-		Handler: service.NewService(tunnels),
+		Handler: service.NewService(t, rt),
 	}
 
 	log.Infof("starting server on %s", *addr)

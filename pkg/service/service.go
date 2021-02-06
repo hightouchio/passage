@@ -2,26 +2,26 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-
-	"github.com/hightouchio/passage/pkg/models"
 
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/pkg/tunnels"
 )
 
 type Service struct {
-	tunnels *tunnels.Tunnels
-	router  *mux.Router
+	tunnels        *tunnels.Tunnels
+	reverseTunnels *tunnels.ReverseTunnels
+	router         *mux.Router
 }
 
 func NewService(
 	tunnels *tunnels.Tunnels,
+	reverseTunnels *tunnels.ReverseTunnels,
 ) *Service {
 	s := &Service{
-		tunnels: tunnels,
-		router:  mux.NewRouter(),
+		tunnels:        tunnels,
+		reverseTunnels: reverseTunnels,
+		router:         mux.NewRouter(),
 	}
 
 	apiRouter := s.router.PathPrefix("/api").Subrouter()
@@ -39,17 +39,16 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) createTunnel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID   string            `json:"id"`
-		Type models.TunnelType `json:"type"`
+		ID              string `json:"id"`
+		ServiceEndpoint string `json:"serviceEndpoint"`
+		ServicePort     uint32 `json:"servicePort"`
 	}
 	if err := read(r, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println(req)
-
-	tunnel, err := s.tunnels.Create(r.Context(), req.ID, req.Type)
+	tunnel, err := s.tunnels.Create(r.Context(), req.ID, req.ServiceEndpoint, req.ServicePort)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

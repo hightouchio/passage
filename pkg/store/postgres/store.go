@@ -14,7 +14,8 @@ type scanner interface {
 }
 
 var (
-	_ store.Tunnels = &Tunnels{}
+	_ store.Tunnels        = &Tunnels{}
+	_ store.ReverseTunnels = &ReverseTunnels{}
 )
 
 type Tunnels struct {
@@ -29,25 +30,22 @@ func NewTunnels(db *sql.DB) *Tunnels {
 
 func (t *Tunnels) Create(
 	ctx context.Context,
-	id string,
-	tunnelType models.TunnelType,
-	publicKey string,
-	privateKey string,
-	port uint32,
+	tunnel models.Tunnel,
 ) (*models.Tunnel, error) {
 	if _, err := t.db.ExecContext(
 		ctx,
 		createTunnel,
-		id,
-		tunnelType,
-		publicKey,
-		privateKey,
-		port,
+		tunnel.ID,
+		tunnel.PublicKey,
+		tunnel.PrivateKey,
+		tunnel.Port,
+		tunnel.ServiceEndpont,
+		tunnel.ServicePort,
 	); err != nil {
 		return nil, err
 	}
 
-	return t.Get(ctx, id)
+	return t.Get(ctx, tunnel.ID)
 }
 
 func (t *Tunnels) Get(
@@ -96,12 +94,98 @@ func (t *Tunnels) scanTunnel(scanner scanner) (*models.Tunnel, error) {
 	if err := scanner.Scan(
 		&tunnel.ID,
 		&tunnel.CreatedAt,
-		&tunnel.Type,
 		&tunnel.PublicKey,
 		&tunnel.PrivateKey,
 		&tunnel.Port,
+		&tunnel.ServiceEndpont,
+		&tunnel.ServicePort,
 	); err != nil {
 		return nil, err
 	}
 	return &tunnel, nil
+}
+
+type ReverseTunnels struct {
+	db *sql.DB
+}
+
+func NewReverseTunnels(db *sql.DB) *ReverseTunnels {
+	return &ReverseTunnels{
+		db: db,
+	}
+}
+
+func (t *ReverseTunnels) Create(
+	ctx context.Context,
+	reverseTunnel models.ReverseTunnel,
+) (*models.ReverseTunnel, error) {
+	if _, err := t.db.ExecContext(
+		ctx,
+		createReverseTunnel,
+		reverseTunnel.ID,
+		reverseTunnel.PublicKey,
+		reverseTunnel.PrivateKey,
+		reverseTunnel.Port,
+		reverseTunnel.SSHPort,
+	); err != nil {
+		return nil, err
+	}
+
+	return t.Get(ctx, reverseTunnel.ID)
+}
+
+func (t *ReverseTunnels) Get(
+	ctx context.Context,
+	id string,
+) (*models.ReverseTunnel, error) {
+	row := t.db.QueryRowContext(ctx, getReverseTunnel, id)
+
+	reverseTunnel, err := t.scanReverseTunnel(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrReverseTunnelNotFound
+	} else if err != nil {
+		return nil, err
+	}
+
+	return reverseTunnel, nil
+}
+
+func (t *ReverseTunnels) List(
+	ctx context.Context,
+) ([]models.ReverseTunnel, error) {
+	rows, err := t.db.QueryContext(ctx, listReverseTunnels)
+	if err != nil {
+		return nil, errors.Wrap(err, "query reverse tunnels")
+	}
+	defer rows.Close()
+
+	reverseTunnels := make([]models.ReverseTunnel, 0)
+	for rows.Next() {
+		reverseTunnel, err := t.scanReverseTunnel(rows)
+		if err != nil {
+			return nil, err
+		}
+		reverseTunnels = append(reverseTunnels, *reverseTunnel)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return reverseTunnels, nil
+}
+
+func (t *ReverseTunnels) scanReverseTunnel(scanner scanner) (*models.ReverseTunnel, error) {
+	var reverseTunnel models.ReverseTunnel
+	if err := scanner.Scan(
+		&reverseTunnel.ID,
+		&reverseTunnel.CreatedAt,
+		&reverseTunnel.PublicKey,
+		&reverseTunnel.PrivateKey,
+		&reverseTunnel.Port,
+		&reverseTunnel.SSHPort,
+	); err != nil {
+		return nil, err
+	}
+	return &reverseTunnel, nil
 }

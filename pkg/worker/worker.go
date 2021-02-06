@@ -11,16 +11,19 @@ import (
 
 type Worker struct {
 	tunnels         *tunnels.Tunnels
+	reverseTunnels  *tunnels.ReverseTunnels
 	sshManager      *ssh.Manager
 	pollingDuration time.Duration
 }
 
 func NewWorker(
 	tunnels *tunnels.Tunnels,
+	reverseTunnels *tunnels.ReverseTunnels,
 	pollingDuration time.Duration,
 ) *Worker {
 	return &Worker{
 		tunnels:         tunnels,
+		reverseTunnels:  reverseTunnels,
 		pollingDuration: pollingDuration,
 		sshManager:      ssh.NewManager(),
 	}
@@ -50,5 +53,10 @@ func (w *Worker) refresh(ctx context.Context) {
 		log.WithError(err).Error("list tunnels")
 		return
 	}
-	w.sshManager.SetTunnels(tunnels)
+	reverseTunnels, err := w.reverseTunnels.List(ctx)
+	if err != nil {
+		log.WithError(err).Error("list reverse tunnels")
+		return
+	}
+	w.sshManager.SetTunnels(tunnels, reverseTunnels)
 }

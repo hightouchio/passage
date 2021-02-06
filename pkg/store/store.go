@@ -12,11 +12,7 @@ var ErrTunnelNotFound = errors.New("tunnel not found")
 type Tunnels interface {
 	Create(
 		ctx context.Context,
-		id string,
-		tunnelType models.TunnelType,
-		publicKey string,
-		privateKey string,
-		port uint32,
+		tunnel models.Tunnel,
 	) (*models.Tunnel, error)
 	Get(
 		ctx context.Context,
@@ -25,4 +21,20 @@ type Tunnels interface {
 	List(
 		ctx context.Context,
 	) ([]models.Tunnel, error)
+}
+
+var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
+
+type ReverseTunnels interface {
+	Create(
+		ctx context.Context,
+		reverseTunnel models.ReverseTunnel,
+	) (*models.ReverseTunnel, error)
+	Get(
+		ctx context.Context,
+		id string,
+	) (*models.ReverseTunnel, error)
+	List(
+		ctx context.Context,
+	) ([]models.ReverseTunnel, error)
 }
