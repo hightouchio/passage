@@ -11,6 +11,3 @@ RUN GOOS=linux CGO_ENABLED=0 go build \
 FROM scratch
 COPY --from=0 /app/passage /bin/passage
 ENTRYPOINT ["/bin/passage"]
-
-
-
