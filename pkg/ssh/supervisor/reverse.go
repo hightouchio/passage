@@ -13,11 +13,16 @@ import (
 const reverseSupervisorRetryDuration = time.Second
 
 type ReverseSupervisor struct {
+	bindHost      string
 	reverseTunnel models.ReverseTunnel
 }
 
-func NewReverseSupervisor(reverseTunnel models.ReverseTunnel) *ReverseSupervisor {
+func NewReverseSupervisor(
+	bindHost string,
+	reverseTunnel models.ReverseTunnel,
+) *ReverseSupervisor {
 	return &ReverseSupervisor{
+		bindHost:      bindHost,
 		reverseTunnel: reverseTunnel,
 	}
 }
@@ -62,7 +67,7 @@ func (s *ReverseSupervisor) startSSHServer() error {
 		},
 		HostSigners: []ssh.Signer{signer},
 		ReversePortForwardingCallback: func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-			return bindHost == "0.0.0.0" && bindPort == s.reverseTunnel.Port
+			return bindHost == s.bindHost && bindPort == s.reverseTunnel.Port
 		},
 	}
 

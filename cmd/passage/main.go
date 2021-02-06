@@ -26,6 +26,10 @@ var (
 		Flag("pg", "").
 		Default("postgres://postgres:postgres@localhost:5432/passage?sslmode=disable").
 		String()
+	bindHost = kingpin.
+			Flag("bind-host", "").
+			Default("localhost").
+			String()
 )
 
 func main() {
@@ -49,6 +53,7 @@ func main() {
 	worker := worker.NewWorker(
 		t,
 		rt,
+		*bindHost,
 		time.Second,
 	)
 
