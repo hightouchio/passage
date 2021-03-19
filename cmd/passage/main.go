@@ -20,22 +20,29 @@ var name = "passage"
 var (
 	addr = kingpin.
 		Flag("addr", "").
+		Envar("ADDR").
 		Default(":8080").
 		String()
-	pg = kingpin.
-		Flag("pg", "").
-		Default("postgres://postgres:postgres@localhost:5432/passage?sslmode=disable").
-		String()
+	postgresUri = kingpin.
+			Flag("pg-uri", "").
+			Envar("PG_URI").
+			Default("postgres://postgres:postgres@localhost:5432/passage?sslmode=disable").
+			String()
 	bindHost = kingpin.
 			Flag("bind-host", "").
+			Envar("BIND_HOST").
 			Default("localhost").
 			String()
+	hostKey = kingpin.
+		Flag("host-key", "").
+		Envar("HOST_KEY").
+		String()
 )
 
 func main() {
 	kingpin.Parse()
 
-	db, err := sql.Open("postgres", *pg)
+	db, err := sql.Open("postgres", *postgresUri)
 	if err != nil {
 		log.WithError(err).Fatal("connect to postgres")
 		return
@@ -54,6 +61,7 @@ func main() {
 		t,
 		rt,
 		*bindHost,
+		hostKey,
 		time.Second,
 	)
 

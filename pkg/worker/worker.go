@@ -12,22 +12,22 @@ import (
 type Worker struct {
 	tunnels         *tunnels.Tunnels
 	reverseTunnels  *tunnels.ReverseTunnels
-	bindHost        string
-	sshManager      *ssh.Manager
 	pollingDuration time.Duration
+	sshManager      *ssh.Manager
 }
 
 func NewWorker(
 	tunnels *tunnels.Tunnels,
 	reverseTunnels *tunnels.ReverseTunnels,
 	bindHost string,
+	hostKey *string,
 	pollingDuration time.Duration,
 ) *Worker {
 	return &Worker{
 		tunnels:         tunnels,
 		reverseTunnels:  reverseTunnels,
 		pollingDuration: pollingDuration,
-		sshManager:      ssh.NewManager(bindHost),
+		sshManager:      ssh.NewManager(bindHost, hostKey),
 	}
 }
 
