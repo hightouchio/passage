@@ -46,6 +46,9 @@ golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+## explicit
+golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20191010194322-b09406accb47
 golang.org/x/sys/cpu
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6

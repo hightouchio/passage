@@ -37,6 +37,10 @@ var (
 		Flag("host-key", "").
 		Envar("HOST_KEY").
 		String()
+	sshUser = kingpin.
+		Flag("ssh-user", "").
+		Envar("SSH_USER").
+		String()
 )
 
 func main() {
@@ -62,6 +66,7 @@ func main() {
 		rt,
 		*bindHost,
 		hostKey,
+		*sshUser,
 		time.Second,
 	)
 

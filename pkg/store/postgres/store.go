@@ -39,7 +39,7 @@ func (t *Tunnels) Create(
 		tunnel.PublicKey,
 		tunnel.PrivateKey,
 		tunnel.Port,
-		tunnel.ServiceEndpont,
+		tunnel.ServiceEndpoint,
 		tunnel.ServicePort,
 	); err != nil {
 		return nil, err
@@ -97,7 +97,9 @@ func (t *Tunnels) scanTunnel(scanner scanner) (*models.Tunnel, error) {
 		&tunnel.PublicKey,
 		&tunnel.PrivateKey,
 		&tunnel.Port,
-		&tunnel.ServiceEndpont,
+		&tunnel.ServerEndpoint,
+		&tunnel.ServerPort,
+		&tunnel.ServiceEndpoint,
 		&tunnel.ServicePort,
 	); err != nil {
 		return nil, err

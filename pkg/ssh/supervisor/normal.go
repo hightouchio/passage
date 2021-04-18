@@ -1,21 +1,35 @@
 package supervisor
 
 import (
+	"fmt"
+	"io"
+	"net"
 	"time"
 
 	"github.com/apex/log"
 	"github.com/hightouchio/passage/pkg/models"
+	"golang.org/x/crypto/ssh"
+	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
 const normalSupervisorRetryDuration = time.Second
 
 type NormalSupervisor struct {
-	tunnel models.Tunnel
+	bindHost string
+	user     string
+	tunnel   models.Tunnel
 }
 
-func NewNormalSupervisor(tunnel models.Tunnel) *NormalSupervisor {
+func NewNormalSupervisor(
+	bindHost string,
+	user string,
+	tunnel models.Tunnel,
+) *NormalSupervisor {
 	return &NormalSupervisor{
-		tunnel: tunnel,
+		bindHost: bindHost,
+		user:     user,
+		tunnel:   tunnel,
 	}
 }
 
@@ -30,13 +44,91 @@ func (s *NormalSupervisor) start() {
 	for {
 		select {
 		case <-ticker.C:
-			if err := s.startSSHClient(); err != nil {
-				log.Error("start ssh client")
+			if err := s.listen(); err != nil {
+				log.WithError(err).Error("ssh client listener")
 			}
 		}
 	}
 }
 
-func (s *NormalSupervisor) startSSHClient() error {
-	return nil
+func (s *NormalSupervisor) listen() error {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.bindHost, s.tunnel.Port))
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+
+	for {
+		localConn, err := listener.Accept()
+		if err != nil {
+			return err
+		}
+		go func() {
+			defer localConn.Close()
+			if err := s.handleConn(localConn); err != nil {
+				log.WithError(err).Error("handle ssh client connection")
+				listener.Close()
+			}
+		}()
+	}
+}
+
+func (s *NormalSupervisor) handleConn(localConn net.Conn) error {
+	signer, err := gossh.ParsePrivateKey([]byte(s.tunnel.PrivateKey))
+	if err != nil {
+		return err
+	}
+
+	serverConn, err := ssh.Dial(
+		"tcp",
+		fmt.Sprintf("%s:%d", s.tunnel.ServerEndpoint, s.tunnel.ServerPort),
+		&ssh.ClientConfig{
+			User: s.user,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(signer),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	defer serverConn.Close()
+
+	remoteConn, err := serverConn.Dial(
+		"tcp",
+		fmt.Sprintf("%s:%d", s.tunnel.ServiceEndpoint, s.tunnel.ServicePort),
+	)
+	if err != nil {
+		return err
+	}
+	defer remoteConn.Close()
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		_, err := io.Copy(remoteConn, localConn)
+		return err
+	})
+
+	g.Go(func() error {
+		_, err := io.Copy(localConn, remoteConn)
+		return err
+	})
+
+	return g.Wait()
+}
+
+func (s *NormalSupervisor) getTunnelConnection(server string, remote string, config ssh.ClientConfig) (net.Conn, error) {
+	serverConn, err := ssh.Dial("tcp", server, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	remoteConn, err := serverConn.Dial("tcp", remote)
+	if err != nil {
+		return nil, err
+	}
+
+	return remoteConn, nil
 }

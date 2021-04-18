@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS tunnels(
   public_key TEXT NOT NULL,
   private_key TEXT NOT NULL,
   port INTEGER NOT NULL,
+  server_endpoint TEXT NOT NULL,
+  server_port INTEGER NOT NULL,
   service_endpoint TEXT NOT NULL,
   service_port INTEGER NOT NULL,
   PRIMARY KEY (id)

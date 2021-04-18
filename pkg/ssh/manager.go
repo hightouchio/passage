@@ -13,6 +13,7 @@ const refreshDuration = time.Second
 type Manager struct {
 	bindHost           string
 	hostKey            *string
+	user               string
 	tunnels            map[string]models.Tunnel
 	reverseTunnels     map[string]models.ReverseTunnel
 	normalSupervisors  map[string]supervisor.NormalSupervisor
@@ -21,10 +22,15 @@ type Manager struct {
 	once               sync.Once
 }
 
-func NewManager(bindHost string, hostKey *string) *Manager {
+func NewManager(
+	bindHost string,
+	hostKey *string,
+	user string,
+) *Manager {
 	return &Manager{
 		bindHost:           bindHost,
 		hostKey:            hostKey,
+		user:               user,
 		tunnels:            make(map[string]models.Tunnel),
 		reverseTunnels:     make(map[string]models.ReverseTunnel),
 		normalSupervisors:  make(map[string]supervisor.NormalSupervisor),
@@ -74,7 +80,7 @@ func (m *Manager) refresh() {
 
 	for tunnelID, tunnel := range m.tunnels {
 		if _, ok := m.normalSupervisors[tunnelID]; !ok {
-			s := supervisor.NewNormalSupervisor(tunnel)
+			s := supervisor.NewNormalSupervisor(m.bindHost, m.user, tunnel)
 			s.Start()
 			m.normalSupervisors[tunnelID] = *s
 		}

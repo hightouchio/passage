@@ -33,12 +33,12 @@ func (t *Tunnels) Create(
 		return nil, err
 	}
 	return t.tunnels.Create(ctx, models.Tunnel{
-		ID:             id,
-		PublicKey:      public,
-		PrivateKey:     private,
-		Port:           1,
-		ServiceEndpont: serviceEndpoint,
-		ServicePort:    servicePort,
+		ID:              id,
+		PublicKey:       public,
+		PrivateKey:      private,
+		Port:            1,
+		ServiceEndpoint: serviceEndpoint,
+		ServicePort:     servicePort,
 	})
 }
 

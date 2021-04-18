@@ -21,13 +21,14 @@ func NewWorker(
 	reverseTunnels *tunnels.ReverseTunnels,
 	bindHost string,
 	hostKey *string,
+	user string,
 	pollingDuration time.Duration,
 ) *Worker {
 	return &Worker{
 		tunnels:         tunnels,
 		reverseTunnels:  reverseTunnels,
 		pollingDuration: pollingDuration,
-		sshManager:      ssh.NewManager(bindHost, hostKey),
+		sshManager:      ssh.NewManager(bindHost, hostKey, user),
 	}
 }
 
