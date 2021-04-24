@@ -41,6 +41,16 @@ var (
 		Flag("ssh-user", "").
 		Envar("SSH_USER").
 		String()
+	disableNormal = kingpin.
+			Flag("disable-normal", "").
+			Envar("DISABLE_NORMAL").
+			Default("false").
+			Bool()
+	disableReverse = kingpin.
+			Flag("disable-reverse", "").
+			Envar("DISABLE_REVERSE").
+			Default("false").
+			Bool()
 )
 
 func main() {
@@ -62,6 +72,8 @@ func main() {
 	rt := tunnels.NewReverseTunnels(postgres.NewReverseTunnels(db))
 
 	worker := worker.NewWorker(
+		*disableNormal,
+		*disableReverse,
 		t,
 		rt,
 		*bindHost,
