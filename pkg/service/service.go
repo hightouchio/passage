@@ -30,6 +30,9 @@ func NewService(
 	apiRouter.HandleFunc("/tunnels/{id}", s.getTunnel).Methods("GET")
 	apiRouter.HandleFunc("/tunnels", s.listTunnels).Methods("GET")
 
+	apiRouter.HandleFunc("/reverse_tunnels", s.createReverseTunnel).Methods("POST")
+
+
 	return s
 }
 
@@ -49,6 +52,24 @@ func (s *Service) createTunnel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tunnel, err := s.tunnels.Create(r.Context(), req.ID, req.ServiceEndpoint, req.ServicePort)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	respond(w, tunnel)
+}
+
+func (s *Service) createReverseTunnel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID              string `json:"id"`
+	}
+	if err := read(r, &req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tunnel, err := s.reverseTunnels.Create(r.Context(), req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
