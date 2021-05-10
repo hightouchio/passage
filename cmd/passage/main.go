@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -23,29 +24,35 @@ var (
 		Envar("ADDR").
 		Default(":8080").
 		String()
+
 	postgresUri = kingpin.
 			Flag("pg-uri", "").
 			Envar("PG_URI").
 			Default("postgres://postgres:postgres@localhost:5432/passage?sslmode=disable").
 			String()
+
 	bindHost = kingpin.
 			Flag("bind-host", "").
 			Envar("BIND_HOST").
 			Default("localhost").
 			String()
-	hostKey = kingpin.
-		Flag("host-key", "").
-		Envar("HOST_KEY").
+
+	hostKeyPath = kingpin.
+		Flag("host-key-path", "").
+		Envar("HOST_KEY_PATH").
 		String()
+
 	sshUser = kingpin.
 		Flag("ssh-user", "").
 		Envar("SSH_USER").
 		String()
+
 	disableNormal = kingpin.
 			Flag("disable-normal", "").
 			Envar("DISABLE_NORMAL").
 			Default("false").
 			Bool()
+
 	disableReverse = kingpin.
 			Flag("disable-reverse", "").
 			Envar("DISABLE_REVERSE").
@@ -65,6 +72,13 @@ func main() {
 
 	if err = db.Ping(); err != nil {
 		log.WithError(err).Fatal("ping postgres")
+		return
+	}
+
+	// read host key from disk
+	hostKey, err := ioutil.ReadFile(*hostKeyPath)
+	if err != nil {
+		log.WithError(err).Fatal("read host key")
 		return
 	}
 

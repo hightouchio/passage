@@ -96,8 +96,6 @@ func (t *ReverseTunnels) List(
 }
 
 func generateKeyPair() (string, string, error) {
-	return "", "", nil
-
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return "", "", err
@@ -107,7 +105,7 @@ func generateKeyPair() (string, string, error) {
 		return "", "", err
 	}
 
-	publicKey, err := ssh.NewPublicKey(privateKey)
+	publicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return "", "", err
 	}

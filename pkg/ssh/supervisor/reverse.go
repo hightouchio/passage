@@ -14,13 +14,13 @@ const reverseSupervisorRetryDuration = time.Second
 
 type ReverseSupervisor struct {
 	bindHost      string
-	hostKey       *string
+	hostKey       []byte
 	reverseTunnel models.ReverseTunnel
 }
 
 func NewReverseSupervisor(
 	bindHost string,
-	hostKey *string,
+	hostKey []byte,
 	reverseTunnel models.ReverseTunnel,
 ) *ReverseSupervisor {
 	return &ReverseSupervisor{
@@ -50,8 +50,8 @@ func (s *ReverseSupervisor) start() {
 
 func (s *ReverseSupervisor) startSSHServer() error {
 	var hostSigners []ssh.Signer
-	if s.hostKey != nil {
-		hostSigner, err := gossh.ParsePrivateKey([]byte(*s.hostKey))
+	if len(s.hostKey) != 0 {
+		hostSigner, err := gossh.ParsePrivateKey(s.hostKey)
 		if err != nil {
 			return err
 		}
