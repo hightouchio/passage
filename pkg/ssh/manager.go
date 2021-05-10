@@ -12,7 +12,7 @@ const refreshDuration = time.Second
 
 type Manager struct {
 	bindHost           string
-	hostKey            *string
+	hostKey            []byte
 	user               string
 	tunnels            map[string]models.Tunnel
 	reverseTunnels     map[string]models.ReverseTunnel
@@ -24,7 +24,7 @@ type Manager struct {
 
 func NewManager(
 	bindHost string,
-	hostKey *string,
+	hostKey []byte,
 	user string,
 ) *Manager {
 	return &Manager{

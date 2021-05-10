@@ -25,7 +25,7 @@ func NewWorker(
 	tunnels *tunnels.Tunnels,
 	reverseTunnels *tunnels.ReverseTunnels,
 	bindHost string,
-	hostKey *string,
+	hostKey []byte,
 	user string,
 	pollingDuration time.Duration,
 ) *Worker {
