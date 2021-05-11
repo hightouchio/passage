@@ -2,7 +2,7 @@ package supervisor
 
 import (
 	"fmt"
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 	"io"
 	"net"
 	"time"
@@ -18,13 +18,13 @@ const normalSupervisorRetryDuration = time.Second
 type NormalSupervisor struct {
 	bindHost string
 	user     string
-	tunnel   models.Tunnel
+	tunnel   tunnel.NormalTunnel
 }
 
 func NewNormalSupervisor(
 	bindHost string,
 	user string,
-	tunnel models.Tunnel,
+	tunnel tunnel.NormalTunnel,
 ) *NormalSupervisor {
 	return &NormalSupervisor{
 		bindHost: bindHost,

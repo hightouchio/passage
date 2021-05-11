@@ -2,9 +2,9 @@ package tunnels
 
 import (
 	"context"
-	"github.com/hightouchio/passage/pkg/models"
 	"github.com/hightouchio/passage/pkg/ssh"
 	"github.com/hightouchio/passage/pkg/store"
+	"github.com/hightouchio/passage/tunnel"
 )
 
 type Tunnels struct {
@@ -17,8 +17,8 @@ func NewTunnels(tunnels store.Tunnels) *Tunnels {
 	}
 }
 
-func (t *Tunnels) Create(ctx context.Context, id string, serviceEndpoint string, servicePort uint32, keys ssh.KeyPair) (*models.Tunnel, error) {
-	return t.tunnels.Create(ctx, models.Tunnel{
+func (t *Tunnels) Create(ctx context.Context, id string, serviceEndpoint string, servicePort uint32, keys ssh.KeyPair) (*tunnel.NormalTunnel, error) {
+	return t.tunnels.Create(ctx, tunnel.NormalTunnel{
 		ID:              id,
 		PublicKey:       keys.PublicKey,
 		PrivateKey:      keys.PrivateKey,
@@ -28,11 +28,11 @@ func (t *Tunnels) Create(ctx context.Context, id string, serviceEndpoint string,
 	})
 }
 
-func (t *Tunnels) Get(ctx context.Context, id string) (*models.Tunnel, error) {
+func (t *Tunnels) Get(ctx context.Context, id string) (*tunnel.NormalTunnel, error) {
 	return t.tunnels.Get(ctx, id)
 }
 
-func (t *Tunnels) List(ctx context.Context) ([]models.Tunnel, error) {
+func (t *Tunnels) List(ctx context.Context) ([]tunnel.NormalTunnel, error) {
 	return t.tunnels.List(ctx)
 }
 
@@ -46,8 +46,8 @@ func NewReverseTunnels(reverseTunnels store.ReverseTunnels) *ReverseTunnels {
 	}
 }
 
-func (t *ReverseTunnels) Create(ctx context.Context, keys ssh.KeyPair) (*models.ReverseTunnel, error) {
-	record, err := t.reverseTunnels.Create(ctx, models.ReverseTunnel{
+func (t *ReverseTunnels) Create(ctx context.Context, keys ssh.KeyPair) (*tunnel.ReverseTunnel, error) {
+	record, err := t.reverseTunnels.Create(ctx, tunnel.ReverseTunnel{
 		PublicKey: keys.PublicKey,
 	})
 	if err != nil {
@@ -56,10 +56,10 @@ func (t *ReverseTunnels) Create(ctx context.Context, keys ssh.KeyPair) (*models.
 	return record, nil
 }
 
-func (t *ReverseTunnels) Get(ctx context.Context, id int) (*models.ReverseTunnel, error) {
+func (t *ReverseTunnels) Get(ctx context.Context, id int) (*tunnel.ReverseTunnel, error) {
 	return t.reverseTunnels.Get(ctx, id)
 }
 
-func (t *ReverseTunnels) List(ctx context.Context) ([]models.ReverseTunnel, error) {
+func (t *ReverseTunnels) List(ctx context.Context) ([]tunnel.ReverseTunnel, error) {
 	return t.reverseTunnels.List(ctx)
 }

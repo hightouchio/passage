@@ -1,7 +1,7 @@
 package ssh
 
 import (
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 	"sync"
 	"time"
 
@@ -10,10 +10,10 @@ import (
 
 const refreshDuration = time.Second
 
-type NormalRegistry map[string]models.Tunnel
+type NormalRegistry map[string]tunnel.NormalTunnel
 type NormalSupervisor map[string]supervisor.NormalSupervisor
 
-type ReverseRegistry map[int]models.ReverseTunnel
+type ReverseRegistry map[int]tunnel.ReverseTunnel
 type ReverseSupervisor map[int]supervisor.ReverseSupervisor
 
 type Manager struct {
@@ -47,8 +47,8 @@ func NewManager(
 }
 
 func (m *Manager) SetTunnels(
-	tunnels []models.Tunnel,
-	reverseTunnels []models.ReverseTunnel,
+	tunnels []tunnel.NormalTunnel,
+	reverseTunnels []tunnel.ReverseTunnel,
 ) {
 	m.lock.Lock()
 	defer m.lock.Unlock()

@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 	"time"
 
 	"github.com/apex/log"
@@ -60,20 +60,20 @@ func (w *Worker) start() {
 func (w *Worker) refresh(ctx context.Context) {
 	var err error
 
-	var tunnels []models.Tunnel
+	var tunnels []tunnel.NormalTunnel
 	if !w.disableNormal {
 		tunnels, err = w.tunnels.List(ctx)
 		if err != nil {
-			log.WithError(err).Error("list tunnels")
+			log.WithError(err).Error("list tunnel")
 			return
 		}
 	}
 
-	var reverseTunnels []models.ReverseTunnel
+	var reverseTunnels []tunnel.ReverseTunnel
 	if !w.disableReverse {
 		reverseTunnels, err = w.reverseTunnels.List(ctx)
 		if err != nil {
-			log.WithError(err).Error("list reverse tunnels")
+			log.WithError(err).Error("list reverse tunnel")
 			return
 		}
 	}
