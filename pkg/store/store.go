@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-
 	"github.com/hightouchio/passage/pkg/models"
 )
 
@@ -32,7 +31,7 @@ type ReverseTunnels interface {
 	) (*models.ReverseTunnel, error)
 	Get(
 		ctx context.Context,
-		id string,
+		id int,
 	) (*models.ReverseTunnel, error)
 	List(
 		ctx context.Context,

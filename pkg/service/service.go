@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
-	"net/http"
-
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/pkg/ssh"
 	"github.com/hightouchio/passage/pkg/tunnels"
+	"github.com/pkg/errors"
+	"net/http"
 )
 
 type Service struct {
@@ -14,10 +16,7 @@ type Service struct {
 	router         *mux.Router
 }
 
-func NewService(
-	tunnels *tunnels.Tunnels,
-	reverseTunnels *tunnels.ReverseTunnels,
-) *Service {
+func NewService(tunnels *tunnels.Tunnels, reverseTunnels *tunnels.ReverseTunnels) *Service {
 	s := &Service{
 		tunnels:        tunnels,
 		reverseTunnels: reverseTunnels,
@@ -30,8 +29,7 @@ func NewService(
 	apiRouter.HandleFunc("/tunnels/{id}", s.getTunnel).Methods("GET")
 	apiRouter.HandleFunc("/tunnels", s.listTunnels).Methods("GET")
 
-	apiRouter.HandleFunc("/reverse_tunnels", s.createReverseTunnel).Methods("POST")
-
+	apiRouter.HandleFunc("/reverse_tunnels", s.handleWebCreateReverseTunnel).Methods("POST")
 
 	return s
 }
@@ -51,7 +49,13 @@ func (s *Service) createTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tunnel, err := s.tunnels.Create(r.Context(), req.ID, req.ServiceEndpoint, req.ServicePort)
+	// we always generate keys for normal tunnels because we are initiating an outbound connection to the customer
+	keys, err := ssh.GenerateKeyPair()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	tunnel, err := s.tunnels.Create(r.Context(), req.ID, req.ServiceEndpoint, req.ServicePort, keys)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -60,22 +64,60 @@ func (s *Service) createTunnel(w http.ResponseWriter, r *http.Request) {
 	respond(w, tunnel)
 }
 
-func (s *Service) createReverseTunnel(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID              string `json:"id"`
-	}
+type createReverseTunnelRequest struct {
+	PublicKey string `json:"publicKey"`
+}
+
+type createReverseTunnelResponse struct {
+	ID         int     `json:"id"`
+	PrivateKey *string `json:"privateKeyBase64,omitempty"`
+}
+
+func (s *Service) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
+	var req createReverseTunnelRequest
 	if err := read(r, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	tunnel, err := s.reverseTunnels.Create(r.Context(), req.ID)
+	response, err := s.createReverseTunnel(r.Context(), req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	respond(w, tunnel)
+	respond(w, response)
+}
+
+func (s *Service) createReverseTunnel(ctx context.Context, req createReverseTunnelRequest) (*createReverseTunnelResponse, error) {
+	// check if we need to generate a new keypair or can just use what the customer provided
+	var keys ssh.KeyPair
+	if req.PublicKey != "" {
+		if !ssh.IsValidPublicKey(req.PublicKey) {
+			return nil, errors.New("invalid public key")
+		}
+
+		keys = ssh.KeyPair{PublicKey: req.PublicKey}
+	} else {
+		var err error
+		keys, err = ssh.GenerateKeyPair()
+		if err != nil {
+			return nil, errors.New("could not generate key pair")
+		}
+	}
+
+	tunnel, err := s.reverseTunnels.Create(ctx, keys)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create reverse tunnel")
+	}
+
+	response := &createReverseTunnelResponse{ID: tunnel.ID}
+	// attach private key if necessary
+	if keys.PrivateKey != "" {
+		b64 := keys.Base64PrivateKey()
+		response.PrivateKey = &b64
+	}
+	return response, nil
 }
 
 func (s *Service) getTunnel(w http.ResponseWriter, r *http.Request) {

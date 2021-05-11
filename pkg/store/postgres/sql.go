@@ -17,17 +17,18 @@ FROM tunnels
 `
 
 const createReverseTunnel = `
-INSERT INTO reverse_tunnels (id, public_key, private_key, port, ssh_port)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO reverse_tunnels (public_key)
+VALUES ($1)
+RETURNING id
 `
 
 const getReverseTunnel = `
-SELECT id, created_at, public_key, private_key, port, ssh_port
+SELECT id, created_at, public_key, service_port, ssh_port
 FROM reverse_tunnels
 WHERE id = $1
 `
 
 const listReverseTunnels = `
-SELECT id, created_at, public_key, private_key, port, ssh_port
+SELECT id, created_at, public_key, service_port, ssh_port
 FROM reverse_tunnels
 `
