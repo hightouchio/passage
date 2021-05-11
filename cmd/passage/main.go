@@ -2,17 +2,14 @@ package main
 
 import (
 	"database/sql"
-	"io/ioutil"
-	"net/http"
-	"time"
-
 	"github.com/apex/log"
-	"github.com/hightouchio/passage/pkg/service"
-	"github.com/hightouchio/passage/pkg/store/postgres"
-	"github.com/hightouchio/passage/pkg/tunnels"
-	"github.com/hightouchio/passage/pkg/worker"
+	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/tunnel"
+	"github.com/hightouchio/passage/tunnel/postgres"
 	_ "github.com/lib/pq"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"io/ioutil"
+	"net/http"
 )
 
 var version = "dev"
@@ -82,30 +79,33 @@ func main() {
 		return
 	}
 
-	t := tunnels.NewTunnels(postgres.NewTunnels(db))
-	rt := tunnels.NewReverseTunnels(postgres.NewReverseTunnels(db))
+	router := mux.NewRouter()
 
-	worker := worker.NewWorker(
-		*disableNormal,
-		*disableReverse,
-		t,
-		rt,
-		*bindHost,
-		hostKey,
-		*sshUser,
-		time.Second,
-	)
+	server := tunnel.Server{
+		SQL: postgres.NewClient(db),
+		HostKey: hostKey,
+	}
+	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
-	log.Info("starting worker")
-	worker.Start()
+	//worker := worker.NewWorker(
+	//	*disableNormal,
+	//	*disableReverse,
+	//	*bindHost,
+	//	hostKey,
+	//	*sshUser,
+	//	time.Second,
+	//)
 
-	server := &http.Server{
+	//log.Info("starting worker")
+	//worker.Start()
+
+	httpServer := &http.Server{
 		Addr:    *addr,
-		Handler: service.NewService(t, rt),
+		Handler: router,
 	}
 
-	log.Infof("starting server on %s", *addr)
-	if err := server.ListenAndServe(); err != nil {
+	log.Infof("starting http server on %s", *addr)
+	if err := httpServer.ListenAndServe(); err != nil {
 		log.WithError(err).Fatal("listen and serve")
 	}
 }
