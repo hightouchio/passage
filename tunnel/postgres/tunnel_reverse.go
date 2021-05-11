@@ -8,11 +8,11 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID         int
-	CreatedAt  time.Time
-	PublicKey  string
-	Port       uint32
-	SSHPort    uint32
+	ID        int
+	CreatedAt time.Time
+	PublicKey string
+	Port      uint32
+	SSHPort   uint32
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (ReverseTunnel, error) {
@@ -81,6 +81,7 @@ func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 }
 
 var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
+
 const createReverseTunnel = `
 INSERT INTO reverse_tunnels (public_key)
 VALUES ($1)
