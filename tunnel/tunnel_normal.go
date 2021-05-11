@@ -21,6 +21,14 @@ type NormalTunnel struct {
 	ServerPort      uint32 `json:"serverPort"`
 	ServiceEndpoint string `json:"serviceEndpoint"`
 	ServicePort     uint32 `json:"servicePort"`
+
+	services normalTunnelServices
+}
+
+// normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
+type normalTunnelServices struct {
+	sql interface {
+	}
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
@@ -115,7 +123,7 @@ func (t NormalTunnel) GetID() int {
 }
 
 // createNormalTunnelListFunc wraps our Postgres list function in something that converts the records into Normal structs so they can be passed to Manager which accepts the Tunnel interface
-func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.NormalTunnel, error)) ListFunc {
+func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.NormalTunnel, error), services normalTunnelServices) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
 		normalTunnels, err := postgresList(ctx)
 		if err != nil {
@@ -124,8 +132,10 @@ func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgr
 
 		// convert all the SQL records to our primary struct
 		tunnels := make([]Tunnel, len(normalTunnels))
-		for i, tunnel := range normalTunnels {
-			tunnels[i] = normalTunnelFromSQL(tunnel)
+		for i, record := range normalTunnels {
+			tunnel := normalTunnelFromSQL(record)
+			tunnel.services = services // inject dependencies
+			tunnels[i] = tunnel
 		}
 
 		return tunnels, nil
