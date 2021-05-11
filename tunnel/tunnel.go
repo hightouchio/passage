@@ -1,6 +1,8 @@
 package tunnel
 
-import "context"
+import (
+	"context"
+)
 
 type Tunnel interface {
 	GetID() int

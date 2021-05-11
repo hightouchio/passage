@@ -6,6 +6,8 @@ import (
 	"github.com/apex/log"
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	gossh "golang.org/x/crypto/ssh"
 	"time"
 )
@@ -15,6 +17,15 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	SSHDPort  uint32    `json:"sshPort"`
 	Port      uint32    `json:"port"`
+
+	services reverseTunnelServices
+}
+
+// reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
+type reverseTunnelServices struct {
+	sql interface {
+		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]string, error)
+	}
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
@@ -51,7 +62,13 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 	// integrate public key auth
 	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		return t.isAuthorizedKey(ctx, incomingKey)
+		ok, err := t.isAuthorizedKey(ctx, incomingKey)
+		if err != nil {
+			t.Logger().WithError(err).Error("could not get authorized keys")
+			return false
+		}
+
+		return ok
 	})); err != nil {
 		return err
 	}
@@ -62,16 +79,32 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 }
 
 // compare incoming connection key to the key authorized for this tunnel configuration
-// TODO: check the key from the database in realtime
-func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, key ssh.PublicKey) bool {
-	return true
+func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
+	authorizedKeys, err := t.services.sql.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
+	if err != nil {
+		return false, errors.Wrap(err, "database error")
+	}
 
-	// authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(t.PublicKey))
-	// if err != nil {
-	// 	return false
-	// }
+	// check all authorized keys configured for this tunnel
+	for i, key := range authorizedKeys {
+		authorizedKey, comment, _, _, err := gossh.ParseAuthorizedKey([]byte(key))
+		if err != nil {
+			return false, errors.Errorf("could not parse key %d with comment %s", i, comment)
+		}
 
-	// return ssh.KeysEqual(key, authorizedKey)
+		if ssh.KeysEqual(testKey, authorizedKey) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (t ReverseTunnel) Logger() *logrus.Entry {
+	return logrus.WithFields(logrus.Fields{
+		"tunnel_type": "reverse",
+		"tunnel_id":   t.ID,
+	})
 }
 
 func (t ReverseTunnel) GetID() int {
@@ -79,7 +112,7 @@ func (t ReverseTunnel) GetID() int {
 }
 
 // createReverseTunnelListFunc wraps our Postgres list function in something that converts the records into ReverseTunnel structs so they can be passed to Manager which accepts the Tunnel interface
-func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.ReverseTunnel, error)) ListFunc {
+func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.ReverseTunnel, error), services reverseTunnelServices) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
 		reverseTunnels, err := postgresList(ctx)
 		if err != nil {
@@ -88,8 +121,10 @@ func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postg
 
 		// convert all the SQL records to our primary struct
 		tunnels := make([]Tunnel, len(reverseTunnels))
-		for i, tunnel := range reverseTunnels {
-			tunnels[i] = reverseTunnelFromSQL(tunnel)
+		for i, record := range reverseTunnels {
+			tunnel := reverseTunnelFromSQL(record)
+			tunnel.services = services // inject dependencies
+			tunnels[i] = tunnel
 		}
 
 		return tunnels, nil
