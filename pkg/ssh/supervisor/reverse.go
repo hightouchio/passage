@@ -2,11 +2,11 @@ package supervisor
 
 import (
 	"fmt"
+	"github.com/hightouchio/passage/pkg/models"
 	"time"
 
 	"github.com/apex/log"
 	"github.com/gliderlabs/ssh"
-	"github.com/hightouchio/passage/pkg/models"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -62,6 +62,7 @@ func (s *ReverseSupervisor) startSSHServer() error {
 	sshServer := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", s.reverseTunnel.SSHPort),
 		Handler: func(s ssh.Session) {
+			log.Debug("reverse tunnel handler triggered")
 			select {}
 		},
 		RequestHandlers: map[string]ssh.RequestHandler{
@@ -78,15 +79,20 @@ func (s *ReverseSupervisor) startSSHServer() error {
 		},
 	}
 
-	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
+	// compare incoming connection key to the key authorized for this tunnel configuration
+	// TODO: check the key from the database in realtime
+	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(s.reverseTunnel.PublicKey))
 		if err != nil {
 			return false
 		}
-		return ssh.KeysEqual(key, authorizedKey)
+
+		return ssh.KeysEqual(incomingKey, authorizedKey)
 	})); err != nil {
 		return err
 	}
+
+	log.WithField("ssh_port", s.reverseTunnel.SSHPort).Info("started reverse tunnel")
 
 	return sshServer.ListenAndServe()
 }

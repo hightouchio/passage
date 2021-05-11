@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 	"database/sql"
-
 	"github.com/hightouchio/passage/pkg/models"
+
 	"github.com/hightouchio/passage/pkg/store"
 	"github.com/pkg/errors"
 )
@@ -117,44 +117,35 @@ func NewReverseTunnels(db *sql.DB) *ReverseTunnels {
 	}
 }
 
-func (t *ReverseTunnels) Create(
-	ctx context.Context,
-	reverseTunnel models.ReverseTunnel,
-) (*models.ReverseTunnel, error) {
-	if _, err := t.db.ExecContext(
-		ctx,
-		createReverseTunnel,
-		reverseTunnel.ID,
-		reverseTunnel.PublicKey,
-		reverseTunnel.PrivateKey,
-		reverseTunnel.Port,
-		reverseTunnel.SSHPort,
-	); err != nil {
-		return nil, err
+func (t *ReverseTunnels) Create(ctx context.Context, reverseTunnel models.ReverseTunnel) (*models.ReverseTunnel, error) {
+	result, err := t.db.QueryContext(ctx, createReverseTunnel, reverseTunnel.PublicKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not insert reverse tunnel")
+	}
+	result.Next()
+
+	var recordID int
+	if err = result.Scan(&recordID); err != nil {
+		return nil, errors.Wrap(err, "could not scan id")
 	}
 
-	return t.Get(ctx, reverseTunnel.ID)
+	return t.Get(ctx, recordID)
 }
 
-func (t *ReverseTunnels) Get(
-	ctx context.Context,
-	id string,
-) (*models.ReverseTunnel, error) {
+func (t *ReverseTunnels) Get(ctx context.Context, id int) (*models.ReverseTunnel, error) {
 	row := t.db.QueryRowContext(ctx, getReverseTunnel, id)
 
 	reverseTunnel, err := t.scanReverseTunnel(row)
 	if err == sql.ErrNoRows {
 		return nil, store.ErrReverseTunnelNotFound
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not get reverse tunnel")
 	}
 
 	return reverseTunnel, nil
 }
 
-func (t *ReverseTunnels) List(
-	ctx context.Context,
-) ([]models.ReverseTunnel, error) {
+func (t *ReverseTunnels) List(ctx context.Context) ([]models.ReverseTunnel, error) {
 	rows, err := t.db.QueryContext(ctx, listReverseTunnels)
 	if err != nil {
 		return nil, errors.Wrap(err, "query reverse tunnels")
@@ -183,7 +174,6 @@ func (t *ReverseTunnels) scanReverseTunnel(scanner scanner) (*models.ReverseTunn
 		&reverseTunnel.ID,
 		&reverseTunnel.CreatedAt,
 		&reverseTunnel.PublicKey,
-		&reverseTunnel.PrivateKey,
 		&reverseTunnel.Port,
 		&reverseTunnel.SSHPort,
 	); err != nil {

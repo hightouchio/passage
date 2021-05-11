@@ -2,10 +2,10 @@ package worker
 
 import (
 	"context"
+	"github.com/hightouchio/passage/pkg/models"
 	"time"
 
 	"github.com/apex/log"
-	"github.com/hightouchio/passage/pkg/models"
 	"github.com/hightouchio/passage/pkg/ssh"
 	"github.com/hightouchio/passage/pkg/tunnels"
 )

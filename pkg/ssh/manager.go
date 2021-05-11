@@ -1,23 +1,29 @@
 package ssh
 
 import (
+	"github.com/hightouchio/passage/pkg/models"
 	"sync"
 	"time"
 
-	"github.com/hightouchio/passage/pkg/models"
 	"github.com/hightouchio/passage/pkg/ssh/supervisor"
 )
 
 const refreshDuration = time.Second
 
+type NormalRegistry map[string]models.Tunnel
+type NormalSupervisor map[string]supervisor.NormalSupervisor
+
+type ReverseRegistry map[int]models.ReverseTunnel
+type ReverseSupervisor map[int]supervisor.ReverseSupervisor
+
 type Manager struct {
 	bindHost           string
 	hostKey            []byte
 	user               string
-	tunnels            map[string]models.Tunnel
-	reverseTunnels     map[string]models.ReverseTunnel
-	normalSupervisors  map[string]supervisor.NormalSupervisor
-	reverseSupervisors map[string]supervisor.ReverseSupervisor
+	tunnels            NormalRegistry
+	reverseTunnels     ReverseRegistry
+	normalSupervisors  NormalSupervisor
+	reverseSupervisors ReverseSupervisor
 	lock               sync.Mutex
 	once               sync.Once
 }
@@ -31,10 +37,10 @@ func NewManager(
 		bindHost:           bindHost,
 		hostKey:            hostKey,
 		user:               user,
-		tunnels:            make(map[string]models.Tunnel),
-		reverseTunnels:     make(map[string]models.ReverseTunnel),
-		normalSupervisors:  make(map[string]supervisor.NormalSupervisor),
-		reverseSupervisors: make(map[string]supervisor.ReverseSupervisor),
+		tunnels:            make(NormalRegistry),
+		reverseTunnels:     make(ReverseRegistry),
+		normalSupervisors:  make(NormalSupervisor),
+		reverseSupervisors: make(ReverseSupervisor),
 		lock:               sync.Mutex{},
 		once:               sync.Once{},
 	}
@@ -47,12 +53,12 @@ func (m *Manager) SetTunnels(
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.tunnels = make(map[string]models.Tunnel)
+	m.tunnels = make(NormalRegistry)
 	for i, tunnel := range tunnels {
 		m.tunnels[tunnel.ID] = tunnels[i]
 	}
 
-	m.reverseTunnels = make(map[string]models.ReverseTunnel)
+	m.reverseTunnels = make(ReverseRegistry)
 	for i, reverseTunnel := range reverseTunnels {
 		m.reverseTunnels[reverseTunnel.ID] = reverseTunnels[i]
 	}

@@ -38,9 +38,9 @@ var (
 			String()
 
 	hostKeyPath = kingpin.
-		Flag("host-key-path", "").
-		Envar("HOST_KEY_PATH").
-		String()
+			Flag("host-key-path", "").
+			Envar("HOST_KEY_PATH").
+			String()
 
 	sshUser = kingpin.
 		Flag("ssh-user", "").

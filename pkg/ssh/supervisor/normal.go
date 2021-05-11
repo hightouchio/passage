@@ -2,12 +2,12 @@ package supervisor
 
 import (
 	"fmt"
+	"github.com/hightouchio/passage/pkg/models"
 	"io"
 	"net"
 	"time"
 
 	"github.com/apex/log"
-	"github.com/hightouchio/passage/pkg/models"
 	"golang.org/x/crypto/ssh"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
