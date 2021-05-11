@@ -87,17 +87,8 @@ func main() {
 	})
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
-	//worker := worker.NewWorker(
-	//	*disableNormal,
-	//	*disableReverse,
-	//	*bindHost,
-	//	hostKey,
-	//	*sshUser,
-	//	time.Second,
-	//)
-
-	//log.Info("starting worker")
-	//worker.Start()
+	log.Debug("starting workers")
+	server.StartWorkers()
 
 	httpServer := &http.Server{
 		Addr:    *addr,

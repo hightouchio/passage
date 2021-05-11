@@ -10,4 +10,6 @@ type Tunnel interface {
 type SSHOptions struct {
 	BindHost string
 	HostKey  []byte
+
+	User string
 }

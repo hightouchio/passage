@@ -41,6 +41,11 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, super
 	}
 }
 
+func (m *Manager) Start() {
+	go m.startDatabaseWorker()
+	go m.startSupervisorWorker()
+}
+
 func (m *Manager) startSupervisorWorker() {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
