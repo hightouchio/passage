@@ -1,0 +1,6 @@
+- Re-enable authentication checking
+- Make sure host-key-file is being properly set via ECS
+- Try to find a way to make the client blind to whether its a normal or reverse proxy. It shouldn't matter.
+- Encrypt private keys.
+- Datadog integration
+- Better logging
