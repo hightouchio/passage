@@ -7,6 +7,7 @@ import (
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	_ "github.com/lib/pq"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"io/ioutil"
 	"net/http"
@@ -62,20 +63,19 @@ func main() {
 
 	db, err := sql.Open("postgres", *postgresUri)
 	if err != nil {
-		log.WithError(err).Fatal("connect to postgres")
+		logrus.WithError(err).Fatal("connect to postgres")
 		return
 	}
 	defer db.Close()
-
 	if err = db.Ping(); err != nil {
-		log.WithError(err).Fatal("ping postgres")
+		logrus.WithError(err).Fatal("ping postgres")
 		return
 	}
 
 	// read host key from disk
 	hostKey, err := ioutil.ReadFile(*hostKeyPath)
 	if err != nil {
-		log.WithError(err).Fatal("read host key")
+		logrus.WithError(err).Fatal("read host key")
 		return
 	}
 
@@ -95,7 +95,7 @@ func main() {
 		Handler: router,
 	}
 
-	log.Infof("starting http server on %s", *addr)
+	log.WithField("bindAddr", *addr).Info("starting http server")
 	if err := httpServer.ListenAndServe(); err != nil {
 		log.WithError(err).Fatal("listen and serve")
 	}
