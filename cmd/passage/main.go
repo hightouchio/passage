@@ -84,6 +84,7 @@ func main() {
 	server := tunnel.NewServer(postgres.NewClient(db), tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
+		User:     *sshUser,
 	})
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
