@@ -8,15 +8,14 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID        int
-	CreatedAt time.Time
-	PublicKey string
-	Port      uint32
-	SSHPort   uint32
+	ID         int
+	CreatedAt  time.Time
+	TunnelPort uint32
+	SSHDPort   uint32
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (ReverseTunnel, error) {
-	result, err := c.db.QueryContext(ctx, createReverseTunnel, tunnel.PublicKey)
+	result, err := c.db.QueryContext(ctx, createReverseTunnel)
 	if err != nil {
 		return ReverseTunnel{}, errors.Wrap(err, "could not insert reverse tunnel")
 	}
@@ -71,9 +70,8 @@ func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 	if err := scanner.Scan(
 		&reverseTunnel.ID,
 		&reverseTunnel.CreatedAt,
-		&reverseTunnel.PublicKey,
-		&reverseTunnel.Port,
-		&reverseTunnel.SSHPort,
+		&reverseTunnel.TunnelPort,
+		&reverseTunnel.SSHDPort,
 	); err != nil {
 		return ReverseTunnel{}, err
 	}
@@ -83,18 +81,17 @@ func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
 
 const createReverseTunnel = `
-INSERT INTO reverse_tunnels (public_key)
-VALUES ($1)
+INSERT INTO passage.reverse_tunnels DEFAULT VALUES
 RETURNING id
 `
 
 const getReverseTunnel = `
-SELECT id, created_at, public_key, service_port, ssh_port
-FROM reverse_tunnels
-WHERE id = $1
+SELECT id, created_at, tunnel_port, sshd_port
+FROM passage.reverse_tunnels
+WHERE id=$1
 `
 
 const listReverseTunnels = `
-SELECT id, created_at, public_key, service_port, ssh_port
-FROM reverse_tunnels
+SELECT id, created_at, tunnel_port, sshd_port
+FROM passage.reverse_tunnels
 `
