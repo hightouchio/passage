@@ -88,8 +88,17 @@ func main() {
 	})
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
-	log.Debug("starting workers")
-	server.StartWorkers()
+	if !*disableNormal {
+		log.Debug("starting normal tunnels")
+		server.StartNormalTunnels()
+		defer server.StopNormalTunnels()
+	}
+
+	if !*disableReverse {
+		log.Debug("starting reverse tunnels")
+		server.StartReverseTunnels()
+		defer server.StopReverseTunnels()
+	}
 
 	httpServer := &http.Server{
 		Addr:    *addr,
@@ -98,6 +107,6 @@ func main() {
 
 	log.WithField("bindAddr", *addr).Info("starting http server")
 	if err := httpServer.ListenAndServe(); err != nil {
-		log.WithError(err).Fatal("listen and serve")
+		log.WithError(err).Fatal("http server shutdown")
 	}
 }
