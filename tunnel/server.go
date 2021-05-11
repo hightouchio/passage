@@ -34,10 +34,18 @@ func NewServer(sql sqlClient, options SSHOptions) Server {
 	}
 }
 
-// StartWorkers kicks off internal worker processes
-func (s Server) StartWorkers() {
-	s.reverseTunnels.Start()
+func (s Server) StartNormalTunnels() {
 	s.normalTunnels.Start()
+}
+
+func (s Server) StopNormalTunnels() {
+}
+
+func (s Server) StartReverseTunnels() {
+	s.reverseTunnels.Start()
+}
+
+func (s Server) StopReverseTunnels() {
 }
 
 type NewReverseTunnelRequest struct {
