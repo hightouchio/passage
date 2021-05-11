@@ -16,7 +16,7 @@ import (
 //		tunnel.PrivateKey,
 //		tunnel.Port,
 //		tunnel.ServiceEndpoint,
-//		tunnel.ServicePort,
+//		tunnel.BindPort,
 //	); err != nil {
 //		return nil, err
 //	}
@@ -44,10 +44,7 @@ type NormalTunnel struct {
 	ID        int       `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	PublicKey  string `json:"publicKey"`
-	PrivateKey string `json:"privateKey"`
-
-	Port            uint32 `json:"port"`
+	TunnelPort      uint32 `json:"tunnelPort"`
 	ServerEndpoint  string `json:"serverEndpoint"`
 	ServerPort      uint32 `json:"serverPort"`
 	ServiceEndpoint string `json:"serviceEndpoint"`
@@ -82,9 +79,7 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 	if err := scanner.Scan(
 		&tunnel.ID,
 		&tunnel.CreatedAt,
-		&tunnel.PublicKey,
-		&tunnel.PrivateKey,
-		&tunnel.Port,
+		&tunnel.TunnelPort,
 		&tunnel.ServerEndpoint,
 		&tunnel.ServerPort,
 		&tunnel.ServiceEndpoint,
@@ -98,17 +93,18 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 var ErrNormalTunnelNotFound = errors.New("tunnel not found")
 
 const createTunnel = `
-INSERT INTO tunnel (id, public_key, private_key, port, server_endpoint, server_port, service_endpoint, service_port)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO passage.tunnels (server_endpoint, server_port, service_endpoint, service_port)
+VALUES ($1, $2, $3, $4)
+RETURNING id
 `
 
 const getTunnel = `
-SELECT id, created_at, public_key, private_key, port, server_endpoint, server_port, service_endpoint, service_port
-FROM tunnel
-WHERE id = $1
+SELECT id, created_at, tunnel_port, server_endpoint, server_port, service_endpoint, service_port
+FROM passage.tunnels
+WHERE id=$1
 `
 
 const listNormalTunnels = `
-SELECT id, created_at, public_key, private_key, port, server_endpoint, server_port, service_endpoint, service_port
-FROM tunnel
+SELECT id, created_at, tunnel_port, server_endpoint, server_port, service_endpoint, service_port
+FROM passage.tunnels
 `

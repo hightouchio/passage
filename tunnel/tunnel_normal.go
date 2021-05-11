@@ -6,7 +6,6 @@ import (
 	"github.com/apex/log"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"golang.org/x/crypto/ssh"
-	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
 	"io"
 	"net"
@@ -14,19 +13,18 @@ import (
 )
 
 type NormalTunnel struct {
-	ID              int       `json:"id"`
-	CreatedAt       time.Time `json:"createdAt"`
-	PublicKey       string    `json:"publicKey"`
-	PrivateKey      string    `json:"privateKey"`
-	Port            uint32    `json:"port"`
-	ServerEndpoint  string    `json:"serverEndpoint"`
-	ServerPort      uint32    `json:"serverPort"`
-	ServiceEndpoint string    `json:"serviceEndpoint"`
-	ServicePort     uint32    `json:"servicePort"`
+	ID        int       `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	TunnelPort      uint32 `json:"port"`
+	ServerEndpoint  string `json:"serverEndpoint"`
+	ServerPort      uint32 `json:"serverPort"`
+	ServiceEndpoint string `json:"serviceEndpoint"`
+	ServicePort     uint32 `json:"servicePort"`
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.Port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return err
 	}
@@ -48,19 +46,14 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 }
 
 func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
-	signer, err := gossh.ParsePrivateKey([]byte(t.PrivateKey))
-	if err != nil {
-		return err
-	}
+	auth, err := t.generateAuthMethod()
 
 	serverConn, err := ssh.Dial(
 		"tcp",
 		fmt.Sprintf("%s:%d", t.ServerEndpoint, t.ServerPort),
 		&ssh.ClientConfig{
-			User: options.User,
-			Auth: []ssh.AuthMethod{
-				ssh.PublicKeys(signer),
-			},
+			User:            options.User,
+			Auth:            auth,
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
 	)
@@ -76,7 +69,6 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 	defer remoteConn.Close()
 
 	g := new(errgroup.Group)
-
 	g.Go(func() error {
 		_, err := io.Copy(remoteConn, localConn)
 		return err
@@ -88,6 +80,20 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 	})
 
 	return g.Wait()
+}
+
+func (t NormalTunnel) generateAuthMethod() ([]ssh.AuthMethod, error) {
+	return []ssh.AuthMethod{}, nil
+
+	// TODO: Re-enable when we wire up the keys
+	//signer, err := ssh.ParsePrivateKey([]byte(t.PrivateKey))
+	//if err != nil {
+	//	return []ssh.AuthMethod{}, err
+	//}
+	//
+	//return []ssh.AuthMethod{
+	//	ssh.PublicKeys(signer),
+	//}, nil
 }
 
 func (t NormalTunnel) getTunnelConnection(server string, remote string, config ssh.ClientConfig) (net.Conn, error) {
@@ -131,9 +137,7 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 	return NormalTunnel{
 		ID:              record.ID,
 		CreatedAt:       record.CreatedAt,
-		PublicKey:       record.PublicKey,
-		PrivateKey:      record.PrivateKey,
-		Port:            record.Port,
+		TunnelPort:      record.TunnelPort,
 		ServerEndpoint:  record.ServerEndpoint,
 		ServerPort:      record.ServerPort,
 		ServiceEndpoint: record.ServiceEndpoint,

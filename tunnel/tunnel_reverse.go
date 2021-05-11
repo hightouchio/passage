@@ -14,8 +14,8 @@ type ReverseTunnel struct {
 	ID        int       `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	PublicKey string    `json:"publicKey"`
+	SSHDPort  uint32    `json:"sshPort"`
 	Port      uint32    `json:"port"`
-	SSHPort   uint32    `json:"sshPort"`
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
@@ -31,7 +31,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 	forwardHandler := &ssh.ForwardedTCPHandler{}
 	sshServer := &ssh.Server{
-		Addr: fmt.Sprintf(":%d", t.SSHPort),
+		Addr: fmt.Sprintf(":%d", t.SSHDPort),
 		Handler: func(s ssh.Session) {
 			log.Debug("reverse tunnel handler triggered")
 			select {}
@@ -63,7 +63,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return err
 	}
 
-	log.WithField("ssh_port", t.SSHPort).Info("started reverse tunnel")
+	log.WithField("ssh_port", t.SSHDPort).Info("started reverse tunnel")
 
 	return sshServer.ListenAndServe()
 }
@@ -95,8 +95,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 	return ReverseTunnel{
 		ID:        record.ID,
 		CreatedAt: record.CreatedAt,
-		PublicKey: record.PublicKey,
-		Port:      record.Port,
-		SSHPort:   record.SSHPort,
+		Port:      record.TunnelPort,
+		SSHDPort:  record.SSHDPort,
 	}
 }

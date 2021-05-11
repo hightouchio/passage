@@ -63,7 +63,6 @@ func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelReques
 		if !IsValidPublicKey(req.PublicKey) {
 			return nil, errors.New("invalid public key")
 		}
-
 		keys = KeyPair{PublicKey: req.PublicKey}
 	} else {
 		var err error
@@ -73,7 +72,7 @@ func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelReques
 		}
 	}
 
-	tunnel, err := s.SQL.CreateReverseTunnel(ctx, postgres.ReverseTunnel{PublicKey: keys.PublicKey})
+	tunnel, err := s.SQL.CreateReverseTunnel(ctx, postgres.ReverseTunnel{})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create reverse tunnel")
 	}
@@ -85,4 +84,15 @@ func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelReques
 		response.PrivateKey = &b64
 	}
 	return response, nil
+}
+
+type GetTunnelConnectionDetailsRequest struct {
+	ID int
+}
+
+type GetTunnelConnectionDetailsResponse struct {
+}
+
+func (s Server) GetTunnelConnectionDetails(ctx context.Context, req GetTunnelConnectionDetailsRequest) (*GetTunnelConnectionDetailsResponse, error) {
+	return nil, nil
 }
