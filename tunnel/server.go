@@ -10,7 +10,16 @@ import (
 type Server struct {
 	SQL sqlClient
 
+	normalTunnels  *Manager
 	reverseTunnels *Manager
+}
+
+type sqlClient interface {
+	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
+	GetReverseTunnel(ctx context.Context, id int) (postgres.ReverseTunnel, error)
+	ListReverseTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
+
+	ListNormalTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
 }
 
 const managerRefreshDuration = 1 * time.Second
@@ -21,13 +30,14 @@ func NewServer(sql sqlClient, options SSHOptions) Server {
 		SQL: sql,
 
 		reverseTunnels: newManager(createReverseTunnelListFunc(sql.ListReverseTunnels), options, managerRefreshDuration, supervisorRetryDuration),
+		normalTunnels:  newManager(createNormalTunnelListFunc(sql.ListNormalTunnels), options, managerRefreshDuration, supervisorRetryDuration),
 	}
 }
 
-type sqlClient interface {
-	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
-	GetReverseTunnel(ctx context.Context, id int) (postgres.ReverseTunnel, error)
-	ListReverseTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
+// StartWorkers kicks off internal worker processes
+func (s Server) StartWorkers() {
+	s.reverseTunnels.Start()
+	s.normalTunnels.Start()
 }
 
 type NewReverseTunnelRequest struct {
