@@ -25,9 +25,9 @@ func NewService(tunnels *tunnels.Tunnels, reverseTunnels *tunnels.ReverseTunnels
 
 	apiRouter := s.router.PathPrefix("/api").Subrouter()
 
-	apiRouter.HandleFunc("/tunnels", s.createTunnel).Methods("POST")
-	apiRouter.HandleFunc("/tunnels/{id}", s.getTunnel).Methods("GET")
-	apiRouter.HandleFunc("/tunnels", s.listTunnels).Methods("GET")
+	apiRouter.HandleFunc("/tunnel", s.createTunnel).Methods("POST")
+	apiRouter.HandleFunc("/tunnel/{id}", s.getTunnel).Methods("GET")
+	apiRouter.HandleFunc("/tunnel", s.listTunnels).Methods("GET")
 
 	apiRouter.HandleFunc("/reverse_tunnels", s.handleWebCreateReverseTunnel).Methods("POST")
 
@@ -49,7 +49,7 @@ func (s *Service) createTunnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// we always generate keys for normal tunnels because we are initiating an outbound connection to the customer
+	// we always generate keys for normal tunnel because we are initiating an outbound connection to the customer
 	keys, err := ssh.GenerateKeyPair()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

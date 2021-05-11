@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 )
 
 var ErrTunnelNotFound = errors.New("tunnel not found")
@@ -11,15 +11,15 @@ var ErrTunnelNotFound = errors.New("tunnel not found")
 type Tunnels interface {
 	Create(
 		ctx context.Context,
-		tunnel models.Tunnel,
-	) (*models.Tunnel, error)
+		tunnel tunnel.NormalTunnel,
+	) (*tunnel.NormalTunnel, error)
 	Get(
 		ctx context.Context,
 		id string,
-	) (*models.Tunnel, error)
+	) (*tunnel.NormalTunnel, error)
 	List(
 		ctx context.Context,
-	) ([]models.Tunnel, error)
+	) ([]tunnel.NormalTunnel, error)
 }
 
 var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
@@ -27,13 +27,13 @@ var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
 type ReverseTunnels interface {
 	Create(
 		ctx context.Context,
-		reverseTunnel models.ReverseTunnel,
-	) (*models.ReverseTunnel, error)
+		reverseTunnel tunnel.ReverseTunnel,
+	) (*tunnel.ReverseTunnel, error)
 	Get(
 		ctx context.Context,
 		id int,
-	) (*models.ReverseTunnel, error)
+	) (*tunnel.ReverseTunnel, error)
 	List(
 		ctx context.Context,
-	) ([]models.ReverseTunnel, error)
+	) ([]tunnel.ReverseTunnel, error)
 }

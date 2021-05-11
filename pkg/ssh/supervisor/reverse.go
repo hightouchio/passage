@@ -2,7 +2,7 @@ package supervisor
 
 import (
 	"fmt"
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 	"time"
 
 	"github.com/apex/log"
@@ -15,13 +15,13 @@ const reverseSupervisorRetryDuration = time.Second
 type ReverseSupervisor struct {
 	bindHost      string
 	hostKey       []byte
-	reverseTunnel models.ReverseTunnel
+	reverseTunnel tunnel.ReverseTunnel
 }
 
 func NewReverseSupervisor(
 	bindHost string,
 	hostKey []byte,
-	reverseTunnel models.ReverseTunnel,
+	reverseTunnel tunnel.ReverseTunnel,
 ) *ReverseSupervisor {
 	return &ReverseSupervisor{
 		bindHost:      bindHost,

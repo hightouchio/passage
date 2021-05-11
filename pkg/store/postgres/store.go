@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"github.com/hightouchio/passage/pkg/models"
+	"github.com/hightouchio/passage/tunnel"
 
 	"github.com/hightouchio/passage/pkg/store"
 	"github.com/pkg/errors"
@@ -30,8 +30,8 @@ func NewTunnels(db *sql.DB) *Tunnels {
 
 func (t *Tunnels) Create(
 	ctx context.Context,
-	tunnel models.Tunnel,
-) (*models.Tunnel, error) {
+	tunnel tunnel.NormalTunnel,
+) (*tunnel.NormalTunnel, error) {
 	if _, err := t.db.ExecContext(
 		ctx,
 		createTunnel,
@@ -51,7 +51,7 @@ func (t *Tunnels) Create(
 func (t *Tunnels) Get(
 	ctx context.Context,
 	id string,
-) (*models.Tunnel, error) {
+) (*tunnel.NormalTunnel, error) {
 	row := t.db.QueryRowContext(ctx, getTunnel, id)
 
 	tunnel, err := t.scanTunnel(row)
@@ -66,14 +66,14 @@ func (t *Tunnels) Get(
 
 func (t *Tunnels) List(
 	ctx context.Context,
-) ([]models.Tunnel, error) {
+) ([]tunnel.NormalTunnel, error) {
 	rows, err := t.db.QueryContext(ctx, listTunnels)
 	if err != nil {
-		return nil, errors.Wrap(err, "query tunnels")
+		return nil, errors.Wrap(err, "query tunnel")
 	}
 	defer rows.Close()
 
-	tunnels := make([]models.Tunnel, 0)
+	tunnels := make([]tunnel.NormalTunnel, 0)
 	for rows.Next() {
 		tunnel, err := t.scanTunnel(rows)
 		if err != nil {
@@ -89,8 +89,8 @@ func (t *Tunnels) List(
 	return tunnels, nil
 }
 
-func (t *Tunnels) scanTunnel(scanner scanner) (*models.Tunnel, error) {
-	var tunnel models.Tunnel
+func (t *Tunnels) scanTunnel(scanner scanner) (*tunnel.NormalTunnel, error) {
+	var tunnel tunnel.NormalTunnel
 	if err := scanner.Scan(
 		&tunnel.ID,
 		&tunnel.CreatedAt,
@@ -117,7 +117,7 @@ func NewReverseTunnels(db *sql.DB) *ReverseTunnels {
 	}
 }
 
-func (t *ReverseTunnels) Create(ctx context.Context, reverseTunnel models.ReverseTunnel) (*models.ReverseTunnel, error) {
+func (t *ReverseTunnels) Create(ctx context.Context, reverseTunnel tunnel.ReverseTunnel) (*tunnel.ReverseTunnel, error) {
 	result, err := t.db.QueryContext(ctx, createReverseTunnel, reverseTunnel.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not insert reverse tunnel")
@@ -132,7 +132,7 @@ func (t *ReverseTunnels) Create(ctx context.Context, reverseTunnel models.Revers
 	return t.Get(ctx, recordID)
 }
 
-func (t *ReverseTunnels) Get(ctx context.Context, id int) (*models.ReverseTunnel, error) {
+func (t *ReverseTunnels) Get(ctx context.Context, id int) (*tunnel.ReverseTunnel, error) {
 	row := t.db.QueryRowContext(ctx, getReverseTunnel, id)
 
 	reverseTunnel, err := t.scanReverseTunnel(row)
@@ -145,14 +145,14 @@ func (t *ReverseTunnels) Get(ctx context.Context, id int) (*models.ReverseTunnel
 	return reverseTunnel, nil
 }
 
-func (t *ReverseTunnels) List(ctx context.Context) ([]models.ReverseTunnel, error) {
+func (t *ReverseTunnels) List(ctx context.Context) ([]tunnel.ReverseTunnel, error) {
 	rows, err := t.db.QueryContext(ctx, listReverseTunnels)
 	if err != nil {
-		return nil, errors.Wrap(err, "query reverse tunnels")
+		return nil, errors.Wrap(err, "query reverse tunnel")
 	}
 	defer rows.Close()
 
-	reverseTunnels := make([]models.ReverseTunnel, 0)
+	reverseTunnels := make([]tunnel.ReverseTunnel, 0)
 	for rows.Next() {
 		reverseTunnel, err := t.scanReverseTunnel(rows)
 		if err != nil {
@@ -168,8 +168,8 @@ func (t *ReverseTunnels) List(ctx context.Context) ([]models.ReverseTunnel, erro
 	return reverseTunnels, nil
 }
 
-func (t *ReverseTunnels) scanReverseTunnel(scanner scanner) (*models.ReverseTunnel, error) {
-	var reverseTunnel models.ReverseTunnel
+func (t *ReverseTunnels) scanReverseTunnel(scanner scanner) (*tunnel.ReverseTunnel, error) {
+	var reverseTunnel tunnel.ReverseTunnel
 	if err := scanner.Scan(
 		&reverseTunnel.ID,
 		&reverseTunnel.CreatedAt,

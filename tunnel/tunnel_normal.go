@@ -1,8 +1,8 @@
-package models
+package tunnel
 
 import "time"
 
-type Tunnel struct {
+type NormalTunnel struct {
 	ID              string    `json:"id"`
 	CreatedAt       time.Time `json:"createdAt"`
 	PublicKey       string    `json:"publicKey"`
@@ -12,12 +12,4 @@ type Tunnel struct {
 	ServerPort      uint32    `json:"serverPort"`
 	ServiceEndpoint string    `json:"serviceEndpoint"`
 	ServicePort     uint32    `json:"servicePort"`
-}
-
-type ReverseTunnel struct {
-	ID         int       `json:"id"`
-	CreatedAt  time.Time `json:"createdAt"`
-	PublicKey  string    `json:"publicKey"`
-	Port       uint32    `json:"port"`
-	SSHPort    uint32    `json:"sshPort"`
 }
