@@ -1,3 +1,13 @@
 package tunnel
 
-type Tunnel interface {}
+import "context"
+
+type Tunnel interface {
+	GetID() int
+	Start(context.Context, SSHOptions) error
+}
+
+type SSHOptions struct {
+	BindHost string
+	HostKey  []byte
+}

@@ -2,15 +2,26 @@ package tunnel
 
 import (
 	"context"
-	"github.com/hightouchio/passage/pkg/ssh"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
+	"time"
 )
 
 type Server struct {
-	HostKey []byte
-
 	SQL sqlClient
+
+	reverseTunnels *Manager
+}
+
+const managerRefreshDuration = 1 * time.Second
+const supervisorRetryDuration = 1 * time.Second
+
+func NewServer(sql sqlClient, options SSHOptions) Server {
+	return Server{
+		SQL: sql,
+
+		reverseTunnels: newManager(createReverseTunnelListFunc(sql.ListReverseTunnels), options, managerRefreshDuration, supervisorRetryDuration),
+	}
 }
 
 type sqlClient interface {
@@ -29,16 +40,16 @@ type NewReverseTunnelResponse struct {
 
 func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelRequest) (*NewReverseTunnelResponse, error) {
 	// check if we need to generate a new keypair or can just use what the customer provided
-	var keys ssh.KeyPair
+	var keys KeyPair
 	if req.PublicKey != "" {
-		if !ssh.IsValidPublicKey(req.PublicKey) {
+		if !IsValidPublicKey(req.PublicKey) {
 			return nil, errors.New("invalid public key")
 		}
 
-		keys = ssh.KeyPair{PublicKey: req.PublicKey}
+		keys = KeyPair{PublicKey: req.PublicKey}
 	} else {
 		var err error
-		keys, err = ssh.GenerateKeyPair()
+		keys, err = GenerateKeyPair()
 		if err != nil {
 			return nil, errors.New("could not generate key pair")
 		}

@@ -81,10 +81,10 @@ func main() {
 
 	router := mux.NewRouter()
 
-	server := tunnel.Server{
-		SQL: postgres.NewClient(db),
-		HostKey: hostKey,
-	}
+	server := tunnel.NewServer(postgres.NewClient(db), tunnel.SSHOptions{
+		BindHost: *bindHost,
+		HostKey:  hostKey,
+	})
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
 	//worker := worker.NewWorker(

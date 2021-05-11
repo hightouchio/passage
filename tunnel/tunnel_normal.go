@@ -13,3 +13,7 @@ type NormalTunnel struct {
 	ServiceEndpoint string    `json:"serviceEndpoint"`
 	ServicePort     uint32    `json:"servicePort"`
 }
+
+func (t NormalTunnel) Start() error {
+	return nil
+}
