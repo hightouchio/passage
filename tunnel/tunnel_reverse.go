@@ -13,7 +13,6 @@ import (
 type ReverseTunnel struct {
 	ID        int       `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
-	PublicKey string    `json:"publicKey"`
 	SSHDPort  uint32    `json:"sshPort"`
 	Port      uint32    `json:"port"`
 }
@@ -50,15 +49,9 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		},
 	}
 
-	// compare incoming connection key to the key authorized for this tunnel configuration
-	// TODO: check the key from the database in realtime
+	// integrate public key auth
 	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(t.PublicKey))
-		if err != nil {
-			return false
-		}
-
-		return ssh.KeysEqual(incomingKey, authorizedKey)
+		return t.isAuthorizedKey(ctx, incomingKey)
 	})); err != nil {
 		return err
 	}
@@ -66,6 +59,19 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	log.WithField("ssh_port", t.SSHDPort).Info("started reverse tunnel")
 
 	return sshServer.ListenAndServe()
+}
+
+// compare incoming connection key to the key authorized for this tunnel configuration
+// TODO: check the key from the database in realtime
+func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, key ssh.PublicKey) bool {
+	return true
+
+	// authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(t.PublicKey))
+	// if err != nil {
+	// 	return false
+	// }
+
+	// return ssh.KeysEqual(key, authorizedKey)
 }
 
 func (t ReverseTunnel) GetID() int {
