@@ -42,8 +42,7 @@ CREATE TABLE IF NOT EXISTS passage.keys(
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
     key_type    passage.key_type NOT NULL,
-    public_key  VARCHAR,
-    private_key VARCHAR,
+    contents    VARCHAR,
 
     PRIMARY KEY(id)
 );
@@ -55,7 +54,7 @@ CREATE TABLE IF NOT EXISTS passage.key_authorizations(
     tunnel_type passage.tunnel_type NOT NULL,
     tunnel_id   INT NOT NULL,
 
-    UNIQUE(tunnel_type, tunnel_id),
+    UNIQUE(key_id, tunnel_type, tunnel_id),
     CONSTRAINT fk_key FOREIGN KEY (key_id) REFERENCES passage.keys(id)
 );
 

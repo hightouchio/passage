@@ -29,7 +29,7 @@ func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int
 }
 
 const getReverseTunnelAuthorizedKeys = `
-SELECT passage.keys.public_key FROM passage.keys
+SELECT passage.keys.contents FROM passage.keys
 JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id 
 JOIN passage.reverse_tunnels ON passage.key_authorizations.tunnel_id=passage.reverse_tunnels.id AND passage.key_authorizations.tunnel_type='reverse'
 WHERE passage.keys.key_type='public' AND passage.reverse_tunnels.id=$1;

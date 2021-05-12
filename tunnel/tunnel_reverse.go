@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"github.com/apex/log"
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
@@ -43,7 +42,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	sshServer := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", t.SSHDPort),
 		Handler: func(s ssh.Session) {
-			log.Debug("reverse tunnel handler triggered")
+			t.Logger().Info("new session")
 			select {}
 		},
 		RequestHandlers: map[string]ssh.RequestHandler{
@@ -62,10 +61,18 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 	// integrate public key auth
 	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
+		log := t.Logger().WithField("key_type", incomingKey.Type())
+
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
-			t.Logger().WithError(err).Error("could not get authorized keys")
+			log.WithError(err).Error("could not authorize key")
 			return false
+		}
+
+		if ok {
+			log.Debug("accepted public key")
+		} else {
+			log.Debug("rejected public key")
 		}
 
 		return ok
@@ -73,7 +80,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return err
 	}
 
-	log.WithField("ssh_port", t.SSHDPort).Info("started reverse tunnel")
+	t.Logger().WithField("ssh_port", t.SSHDPort).Info("started reverse tunnel")
 
 	return sshServer.ListenAndServe()
 }
@@ -82,7 +89,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
 	authorizedKeys, err := t.services.sql.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
 	if err != nil {
-		return false, errors.Wrap(err, "database error")
+		return false, errors.Wrap(err, "could not get keys from db")
 	}
 
 	// check all authorized keys configured for this tunnel

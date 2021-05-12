@@ -3,8 +3,8 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"github.com/apex/log"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
 	"io"
@@ -46,7 +46,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		go func() {
 			defer localConn.Close()
 			if err := t.handleConn(localConn, options); err != nil {
-				log.WithError(err).Error("handle ssh client connection")
+				logrus.WithError(err).Error("handle ssh client connection")
 				listener.Close()
 			}
 		}()

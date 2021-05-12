@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"github.com/apex/log"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -61,6 +60,9 @@ var (
 func main() {
 	kingpin.Parse()
 
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{})
+
 	db, err := sql.Open("postgres", *postgresUri)
 	if err != nil {
 		logrus.WithError(err).Fatal("connect to postgres")
@@ -89,13 +91,13 @@ func main() {
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
 	if !*disableNormal {
-		log.Debug("starting normal tunnels")
+		logrus.Debug("starting normal tunnels")
 		server.StartNormalTunnels()
 		defer server.StopNormalTunnels()
 	}
 
 	if !*disableReverse {
-		log.Debug("starting reverse tunnels")
+		logrus.Debug("starting reverse tunnels")
 		server.StartReverseTunnels()
 		defer server.StopReverseTunnels()
 	}
@@ -105,8 +107,8 @@ func main() {
 		Handler: router,
 	}
 
-	log.WithField("bindAddr", *addr).Info("starting http server")
+	logrus.WithField("bindAddr", *addr).Debug("starting http server")
 	if err := httpServer.ListenAndServe(); err != nil {
-		log.WithError(err).Fatal("http server shutdown")
+		logrus.WithError(err).Fatal("http server shutdown")
 	}
 }

@@ -2,7 +2,7 @@ package tunnel
 
 import (
 	"context"
-	"github.com/apex/log"
+	"github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -23,7 +23,7 @@ func (s Supervisor) Start() {
 			ctx := context.Background()
 
 			if err := s.Tunnel.Start(ctx, s.SSHOptions); err != nil {
-				log.WithError(err).Error("could not start server")
+				logrus.WithError(err).Error("could not start server")
 			}
 		}
 	}
