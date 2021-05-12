@@ -18,9 +18,10 @@ type sqlClient interface {
 	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id int) (postgres.ReverseTunnel, error)
 	ListReverseTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
-	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]string, error)
+	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
 
 	ListNormalTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
+	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
 }
 
 const managerRefreshDuration = 1 * time.Second

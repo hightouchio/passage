@@ -23,7 +23,7 @@ type ReverseTunnel struct {
 // reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type reverseTunnelServices struct {
 	sql interface {
-		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]string, error)
+		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
 	}
 }
 
@@ -93,10 +93,10 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	}
 
 	// check all authorized keys configured for this tunnel
-	for i, key := range authorizedKeys {
-		authorizedKey, comment, _, _, err := gossh.ParseAuthorizedKey([]byte(key))
+	for _, key := range authorizedKeys {
+		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(key.Contents))
 		if err != nil {
-			return false, errors.Errorf("could not parse key %d with comment %s", i, comment)
+			return false, errors.Wrapf(err, "could not parse key %d", key.ID)
 		}
 
 		if ssh.KeysEqual(testKey, authorizedKey) {

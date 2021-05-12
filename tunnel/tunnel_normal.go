@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
@@ -28,6 +29,7 @@ type NormalTunnel struct {
 // normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type normalTunnelServices struct {
 	sql interface {
+		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
 	}
 }
 
@@ -43,11 +45,16 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	for {
 		localConn, err := listener.Accept()
 		if err != nil {
-			return err
+			// TODO: Question for Josh
+			return errors.Wrap(err, "could not accept")
 		}
+
+		connCtx := context.Background() // new context for each connection
+
 		go func() {
 			defer localConn.Close()
-			if err := t.handleConn(localConn, options); err != nil {
+
+			if err := t.handleConn(connCtx, localConn, options); err != nil {
 				t.Logger().WithError(err).Error("error handling client connection")
 				listener.Close()
 			}
@@ -55,8 +62,12 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 }
 
-func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
-	auth, err := t.generateAuthMethod()
+func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn, options SSHOptions) error {
+	// generate the authent
+	auth, err := t.generateAuthMethod(ctx)
+	if err != nil {
+		return errors.Wrap(err, "could not generate auth methods")
+	}
 
 	t.Logger().WithFields(logrus.Fields{
 		"hostname": t.ServerEndpoint,
@@ -79,7 +90,7 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 
 	t.Logger().WithFields(logrus.Fields{
 		"hostname": t.ServiceEndpoint,
-		"port": t.ServicePort,
+		"port":     t.ServicePort,
 	}).Debug("dialing tunneled service")
 
 	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceEndpoint, t.ServicePort))
@@ -104,18 +115,25 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 	return g.Wait()
 }
 
-func (t NormalTunnel) generateAuthMethod() ([]ssh.AuthMethod, error) {
-	return []ssh.AuthMethod{}, nil
+// generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library
+func (t NormalTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod, error) {
+	// get private keys from database
+	keys, err := t.services.sql.GetNormalTunnelPrivateKeys(ctx, t.ID)
+	if err != nil {
+		return []ssh.AuthMethod{}, errors.Wrap(err, "could not get keys from db")
+	}
 
-	// TODO: Re-enable when we wire up the keys
-	//signer, err := ssh.ParsePrivateKey([]byte(t.PrivateKey))
-	//if err != nil {
-	//	return []ssh.AuthMethod{}, err
-	//}
-	//
-	//return []ssh.AuthMethod{
-	//	ssh.PublicKeys(signer),
-	//}, nil
+	// parse private keys and prepare for SSH
+	authMethods := make([]ssh.AuthMethod, len(keys))
+	for i, key := range keys {
+		signer, err := ssh.ParsePrivateKey([]byte(key.Contents))
+		if err != nil {
+			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not parse key %d", key.ID)
+		}
+		authMethods[i] = ssh.PublicKeys(signer)
+	}
+
+	return authMethods, nil
 }
 
 func (t NormalTunnel) getTunnelConnection(server string, remote string, config ssh.ClientConfig) (net.Conn, error) {
