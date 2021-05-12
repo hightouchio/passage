@@ -1,6 +1,9 @@
 package postgres
 
-import "database/sql"
+import (
+	"database/sql"
+	"github.com/pkg/errors"
+)
 
 type Client struct {
 	db *sql.DB
@@ -13,3 +16,5 @@ func NewClient(db *sql.DB) Client {
 type scanner interface {
 	Scan(...interface{}) error
 }
+
+var ErrTunnelNotFound = errors.New("tunnel not found")
