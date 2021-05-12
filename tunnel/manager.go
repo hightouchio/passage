@@ -2,8 +2,8 @@ package tunnel
 
 import (
 	"context"
-	"github.com/apex/log"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
 )
@@ -85,7 +85,7 @@ func (m *Manager) startDatabaseWorker() {
 		select {
 		case <-ticker.C:
 			if err := m.refreshTunnels(context.Background()); err != nil {
-				log.WithError(err).Error("could not refresh tunnels from DB")
+				logrus.WithError(err).Error("could not refresh tunnels from DB")
 			}
 		}
 	}
