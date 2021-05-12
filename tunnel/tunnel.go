@@ -7,12 +7,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ConnectionDetails describes how the SaaS will use the tunnel
-type ConnectionDetails struct {
-	Host string `json:"host"`
-	Port uint32 `json:"port"`
-}
-
 type Tunnel interface {
 	GetID() uuid.UUID
 	Start(context.Context, SSHOptions) error
@@ -24,13 +18,19 @@ type SSHOptions struct {
 	HostKey  []byte
 }
 
+// ConnectionDetails describes how the SaaS will use the tunnel
+type ConnectionDetails struct {
+	Host string `json:"host"`
+	Port uint32 `json:"port"`
+}
+
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
 
 // getTunnel finds whichever tunnel type matches the UUID
-func (s Server) getTunnel(ctx context.Context, id uuid.UUID) (Tunnel, TunnelType, error) {
+func getTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, TunnelType, error) {
 	// reverse funnel first
-	reverseTunnel, err := s.SQL.GetReverseTunnel(ctx, id)
+	reverseTunnel, err := sql.GetReverseTunnel(ctx, id)
 	if err == nil {
 		return reverseTunnelFromSQL(reverseTunnel), "reverse", nil
 	} else if err != postgres.ErrTunnelNotFound {
@@ -39,7 +39,7 @@ func (s Server) getTunnel(ctx context.Context, id uuid.UUID) (Tunnel, TunnelType
 	}
 
 	// normal tunnel next
-	normalTunnel, err := s.SQL.GetNormalTunnel(ctx, id)
+	normalTunnel, err := sql.GetNormalTunnel(ctx, id)
 	if err == nil {
 		return normalTunnelFromSQL(normalTunnel), "normal", nil
 	} else if err != postgres.ErrTunnelNotFound {
