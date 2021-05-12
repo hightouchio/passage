@@ -1,6 +1,5 @@
 - Should detect when a tunnel is removed
 - Make sure host-key-file is being properly set via ECS
-- Try to find a way to make the client blind to whether its a normal or reverse proxy. It shouldn't matter.
 - Encrypt private keys.
 - Datadog integration
 
@@ -9,3 +8,4 @@
 - Re-enable authentication for normal tunnels
 - Dynamic user (defaults to hightouch still)
 - Better logging
+- Try to find a way to make the client blind to whether its a normal or reverse proxy. It shouldn't matter.
