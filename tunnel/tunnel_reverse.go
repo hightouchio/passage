@@ -80,7 +80,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return err
 	}
 
-	t.Logger().WithField("ssh_port", t.SSHDPort).Info("started reverse tunnel")
+	t.Logger().WithField("ssh_port", t.SSHDPort).Info("started tunnel")
 
 	return sshServer.ListenAndServe()
 }
