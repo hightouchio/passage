@@ -5,6 +5,7 @@ DROP SCHEMA IF EXISTS passage CASCADE;
 BEGIN;
 
 CREATE SCHEMA passage;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA passage;
 
 CREATE SEQUENCE IF NOT EXISTS passage.sshd_ports AS INTEGER MINVALUE 49152 MAXVALUE 57343;
 CREATE SEQUENCE IF NOT EXISTS passage.tunnel_ports AS INTEGER MINVALUE 57344 MAXVALUE 65535;
@@ -13,8 +14,8 @@ CREATE TYPE passage.key_type AS ENUM('private', 'public');
 CREATE TYPE passage.tunnel_type AS ENUM('normal', 'reverse');
 
 CREATE TABLE IF NOT EXISTS passage.tunnels(
-    id          INT GENERATED ALWAYS AS IDENTITY,
-    created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    id                  UUID DEFAULT passage.uuid_generate_v4(),
+    created_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     tunnel_port         INT DEFAULT nextval('passage.tunnel_ports'),
     ssh_user            VARCHAR NOT NULL DEFAULT 'hightouch',
     ssh_hostname        VARCHAR NOT NULL,
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS passage.tunnels(
 );
 
 CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
-    id          INT GENERATED ALWAYS AS IDENTITY,
+    id          UUID DEFAULT passage.uuid_generate_v4(),
     created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
     sshd_port       INT DEFAULT nextval('passage.sshd_ports') UNIQUE,
@@ -52,10 +53,9 @@ CREATE TABLE IF NOT EXISTS passage.key_authorizations(
 
     key_id      INT NOT NULL,
     tunnel_type passage.tunnel_type NOT NULL,
-    tunnel_id   INT NOT NULL,
+    tunnel_id   UUID NOT NULL,
 
     UNIQUE(key_id, tunnel_type, tunnel_id),
     CONSTRAINT fk_key FOREIGN KEY (key_id) REFERENCES passage.keys(id)
 );
-
 COMMIT;
