@@ -17,10 +17,10 @@ var name = "passage"
 
 var (
 	httpAddr = kingpin.
-		Flag("http-addr", "").
-		Envar("HTTP_ADDR").
-		Default(":8080").
-		String()
+			Flag("http-addr", "").
+			Envar("HTTP_ADDR").
+			Default(":8080").
+			String()
 
 	postgresUri = kingpin.
 			Flag("pg-uri", "").
