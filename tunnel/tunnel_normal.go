@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -14,7 +15,7 @@ import (
 )
 
 type NormalTunnel struct {
-	ID        int       `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
 	TunnelPort      uint32 `json:"port"`
@@ -30,7 +31,7 @@ type NormalTunnel struct {
 // normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type normalTunnelServices struct {
 	sql interface {
-		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
+		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 }
 
@@ -154,11 +155,11 @@ func (t NormalTunnel) getTunnelConnection(server string, remote string, config s
 func (t NormalTunnel) Logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
 		"tunnel_type": "normal",
-		"tunnel_id":   t.ID,
+		"tunnel_id":   t.ID.String(),
 	})
 }
 
-func (t NormalTunnel) GetID() int {
+func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
 }
 

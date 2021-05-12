@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -12,15 +13,15 @@ type Key struct {
 	Contents string
 }
 
-func (c Client) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID int) ([]Key, error) {
+func (c Client) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
 	return c.getKeysForTunnel(ctx, getNormalTunnelPrivateKeys, tunnelID)
 }
 
-func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]Key, error) {
+func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
 	return c.getKeysForTunnel(ctx, getReverseTunnelAuthorizedKeys, tunnelID)
 }
 
-func (c Client) getKeysForTunnel(ctx context.Context, query string, tunnelID int) ([]Key, error) {
+func (c Client) getKeysForTunnel(ctx context.Context, query string, tunnelID uuid.UUID) ([]Key, error) {
 	rows, err := c.db.QueryContext(ctx, query, tunnelID)
 	if err != nil {
 		if err == sql.ErrNoRows {

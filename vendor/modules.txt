@@ -11,6 +11,9 @@ github.com/anmitsu/go-shlex
 # github.com/gliderlabs/ssh v0.3.1
 ## explicit
 github.com/gliderlabs/ssh
+# github.com/google/uuid v1.2.0
+## explicit
+github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux

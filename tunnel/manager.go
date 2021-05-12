@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sync"
@@ -21,8 +22,8 @@ type Manager struct {
 	RefreshDuration         time.Duration
 	SupervisorRetryDuration time.Duration
 
-	tunnels     map[int]Tunnel
-	supervisors map[int]Supervisor
+	tunnels     map[uuid.UUID]Tunnel
+	supervisors map[uuid.UUID]Supervisor
 
 	lock sync.Mutex
 	once sync.Once
@@ -36,8 +37,8 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, super
 		RefreshDuration:         refreshDuration,
 		SupervisorRetryDuration: supervisorRetryDuration,
 
-		tunnels:     make(map[int]Tunnel),
-		supervisors: make(map[int]Supervisor),
+		tunnels:     make(map[uuid.UUID]Tunnel),
+		supervisors: make(map[uuid.UUID]Supervisor),
 	}
 }
 
@@ -101,7 +102,7 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.tunnels = make(map[int]Tunnel)
+	m.tunnels = make(map[uuid.UUID]Tunnel)
 	for i, tunnel := range tunnels {
 		m.tunnels[tunnel.GetID()] = tunnels[i]
 	}

@@ -2,13 +2,14 @@ package postgres
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
 type NormalTunnel struct {
-	ID        int       `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
 	TunnelPort uint32 `json:"tunnelPort"`

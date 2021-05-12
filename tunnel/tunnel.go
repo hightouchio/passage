@@ -2,10 +2,11 @@ package tunnel
 
 import (
 	"context"
+	"github.com/google/uuid"
 )
 
 type Tunnel interface {
-	GetID() int
+	GetID() uuid.UUID
 	Start(context.Context, SSHOptions) error
 }
 
