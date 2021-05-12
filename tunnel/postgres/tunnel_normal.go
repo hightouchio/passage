@@ -7,47 +7,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-//func (t NormalTunnels) Create(ctx context.Context, tunnel tunnel.NormalTunnel) (*tunnel.NormalTunnel, error) {
-//	if _, err := t.db.ExecContext(
-//		ctx,
-//		createTunnel,
-//		tunnel.ID,
-//		tunnel.PublicKey,
-//		tunnel.PrivateKey,
-//		tunnel.Port,
-//		tunnel.ServiceEndpoint,
-//		tunnel.BindPort,
-//	); err != nil {
-//		return nil, err
-//	}
-//
-//	return t.Get(ctx, tunnel.ID)
-//}
-//
-//func (t *Tunnels) Get(
-//	ctx context.Context,
-//	id string,
-//) (*tunnel.NormalTunnel, error) {
-//	row := t.db.QueryRowContext(ctx, getTunnel, id)
-//
-//	tunnel, err := t.scanTunnel(row)
-//	if err == sql.ErrNoRows {
-//		return nil, ErrTunnelNotFound
-//	} else if err != nil {
-//		return nil, err
-//	}
-//
-//	return tunnel, nil
-//}
-
 type NormalTunnel struct {
 	ID        int       `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	TunnelPort      uint32 `json:"tunnelPort"`
-	ServerEndpoint  string `json:"serverEndpoint"`
-	ServerPort      uint32 `json:"serverPort"`
-	ServiceEndpoint string `json:"serviceEndpoint"`
+	TunnelPort uint32 `json:"tunnelPort"`
+
+	SSHUser         string `json:"sshUser"`
+	SSHHostname     string `json:"sshHostname"`
+	SSHPort         uint32 `json:"sshPort"`
+	ServiceHostname string `json:"serviceHostname"`
 	ServicePort     uint32 `json:"servicePort"`
 }
 
@@ -80,9 +49,10 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 		&tunnel.ID,
 		&tunnel.CreatedAt,
 		&tunnel.TunnelPort,
-		&tunnel.ServerEndpoint,
-		&tunnel.ServerPort,
-		&tunnel.ServiceEndpoint,
+		&tunnel.SSHUser,
+		&tunnel.SSHHostname,
+		&tunnel.SSHPort,
+		&tunnel.ServiceHostname,
 		&tunnel.ServicePort,
 	); err != nil {
 		return NormalTunnel{}, err
@@ -93,18 +63,18 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 var ErrNormalTunnelNotFound = errors.New("tunnel not found")
 
 const createTunnel = `
-INSERT INTO passage.tunnels (server_endpoint, server_port, service_endpoint, service_port)
+INSERT INTO passage.tunnels (ssh_hostname, ssh_port, service_hostname, service_port)
 VALUES ($1, $2, $3, $4)
 RETURNING id
 `
 
 const getTunnel = `
-SELECT id, created_at, tunnel_port, server_endpoint, server_port, service_endpoint, service_port
+SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
 FROM passage.tunnels
 WHERE id=$1
 `
 
 const listNormalTunnels = `
-SELECT id, created_at, tunnel_port, server_endpoint, server_port, service_endpoint, service_port
+SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
 FROM passage.tunnels
 `

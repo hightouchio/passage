@@ -18,9 +18,10 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 
 	TunnelPort      uint32 `json:"port"`
-	ServerEndpoint  string `json:"serverEndpoint"`
-	ServerPort      uint32 `json:"serverPort"`
-	ServiceEndpoint string `json:"serviceEndpoint"`
+	SSHUser         string `json:"sshUser"`
+	SSHHostname     string `json:"sshHostname"`
+	SSHPort         uint32 `json:"sshPort"`
+	ServiceHostname string `json:"serviceHostname"`
 	ServicePort     uint32 `json:"servicePort"`
 
 	services normalTunnelServices
@@ -54,7 +55,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		go func() {
 			defer localConn.Close()
 
-			if err := t.handleConn(connCtx, localConn, options); err != nil {
+			if err := t.handleConn(connCtx, localConn); err != nil {
 				t.Logger().WithError(err).Error("error handling client connection")
 				listener.Close()
 			}
@@ -62,7 +63,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 }
 
-func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn, options SSHOptions) error {
+func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error {
 	// generate the authent
 	auth, err := t.generateAuthMethod(ctx)
 	if err != nil {
@@ -70,15 +71,15 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn, option
 	}
 
 	t.Logger().WithFields(logrus.Fields{
-		"hostname": t.ServerEndpoint,
-		"port":     t.ServerPort,
+		"hostname": t.SSHHostname,
+		"port":     t.SSHPort,
 	}).Debug("dialing remote ssh server")
 
 	serverConn, err := ssh.Dial(
 		"tcp",
-		fmt.Sprintf("%s:%d", t.ServerEndpoint, t.ServerPort),
+		fmt.Sprintf("%s:%d", t.SSHHostname, t.SSHPort),
 		&ssh.ClientConfig{
-			User:            options.User,
+			User:            t.SSHUser,
 			Auth:            auth,
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
@@ -89,11 +90,11 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn, option
 	defer serverConn.Close()
 
 	t.Logger().WithFields(logrus.Fields{
-		"hostname": t.ServiceEndpoint,
+		"hostname": t.ServiceHostname,
 		"port":     t.ServicePort,
 	}).Debug("dialing tunneled service")
 
-	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceEndpoint, t.ServicePort))
+	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHostname, t.ServicePort))
 	if err != nil {
 		return err
 	}
@@ -187,9 +188,10 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		ID:              record.ID,
 		CreatedAt:       record.CreatedAt,
 		TunnelPort:      record.TunnelPort,
-		ServerEndpoint:  record.ServerEndpoint,
-		ServerPort:      record.ServerPort,
-		ServiceEndpoint: record.ServiceEndpoint,
+		SSHUser:         record.SSHUser,
+		SSHHostname:     record.SSHHostname,
+		SSHPort:         record.SSHPort,
+		ServiceHostname: record.ServiceHostname,
 		ServicePort:     record.ServicePort,
 	}
 }

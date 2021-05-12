@@ -39,11 +39,6 @@ var (
 			Envar("HOST_KEY_PATH").
 			String()
 
-	sshUser = kingpin.
-		Flag("ssh-user", "").
-		Envar("SSH_USER").
-		String()
-
 	disableNormal = kingpin.
 			Flag("disable-normal", "").
 			Envar("DISABLE_NORMAL").
@@ -86,7 +81,6 @@ func main() {
 	server := tunnel.NewServer(postgres.NewClient(db), tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
-		User:     *sshUser,
 	})
 	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 

@@ -15,11 +15,11 @@ CREATE TYPE passage.tunnel_type AS ENUM('normal', 'reverse');
 CREATE TABLE IF NOT EXISTS passage.tunnels(
     id          INT GENERATED ALWAYS AS IDENTITY,
     created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-
     tunnel_port         INT DEFAULT nextval('passage.tunnel_ports'),
-    server_endpoint     TEXT NOT NULL,
-    server_port         INTEGER NOT NULL,
-    service_endpoint    TEXT NOT NULL,
+    ssh_user            VARCHAR NOT NULL DEFAULT 'hightouch',
+    ssh_hostname        VARCHAR NOT NULL,
+    ssh_port            INTEGER NOT NULL,
+    service_hostname    VARCHAR NOT NULL,
     service_port        INTEGER NOT NULL,
 
     PRIMARY KEY(id)
