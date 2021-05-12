@@ -32,6 +32,8 @@ type normalTunnelServices struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
+	t.Logger().WithField("tunnel_port", t.TunnelPort).Info("starting tunnel")
+
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return err
@@ -46,7 +48,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		go func() {
 			defer localConn.Close()
 			if err := t.handleConn(localConn, options); err != nil {
-				logrus.WithError(err).Error("handle ssh client connection")
+				t.Logger().WithError(err).Error("error handling client connection")
 				listener.Close()
 			}
 		}()
@@ -55,6 +57,11 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 	auth, err := t.generateAuthMethod()
+
+	t.Logger().WithFields(logrus.Fields{
+		"hostname": t.ServerEndpoint,
+		"port":     t.ServerPort,
+	}).Debug("dialing remote ssh server")
 
 	serverConn, err := ssh.Dial(
 		"tcp",
@@ -69,6 +76,11 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 		return err
 	}
 	defer serverConn.Close()
+
+	t.Logger().WithFields(logrus.Fields{
+		"hostname": t.ServiceEndpoint,
+		"port": t.ServicePort,
+	}).Debug("dialing tunneled service")
 
 	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceEndpoint, t.ServicePort))
 	if err != nil {
@@ -86,6 +98,8 @@ func (t NormalTunnel) handleConn(localConn net.Conn, options SSHOptions) error {
 		_, err := io.Copy(localConn, remoteConn)
 		return err
 	})
+
+	t.Logger().Info("started normal tunnel")
 
 	return g.Wait()
 }
@@ -116,6 +130,13 @@ func (t NormalTunnel) getTunnelConnection(server string, remote string, config s
 	}
 
 	return remoteConn, nil
+}
+
+func (t NormalTunnel) Logger() *logrus.Entry {
+	return logrus.WithFields(logrus.Fields{
+		"tunnel_type": "normal",
+		"tunnel_id":   t.ID,
+	})
 }
 
 func (t NormalTunnel) GetID() int {
