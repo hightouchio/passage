@@ -16,9 +16,9 @@ var version = "dev"
 var name = "passage"
 
 var (
-	addr = kingpin.
-		Flag("addr", "").
-		Envar("ADDR").
+	httpAddr = kingpin.
+		Flag("http-addr", "").
+		Envar("HTTP_ADDR").
 		Default(":8080").
 		String()
 
@@ -97,11 +97,11 @@ func main() {
 	}
 
 	httpServer := &http.Server{
-		Addr:    *addr,
+		Addr:    *httpAddr,
 		Handler: router,
 	}
 
-	logrus.WithField("bindAddr", *addr).Debug("starting http server")
+	logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
 	if err := httpServer.ListenAndServe(); err != nil {
 		logrus.WithError(err).Fatal("http server shutdown")
 	}
