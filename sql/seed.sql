@@ -18,7 +18,7 @@ COMMIT;
 
 -- set up normal tunnels
 BEGIN;
-INSERT INTO passage.tunnels (server_endpoint, server_port, service_endpoint, service_port) VALUES
+INSERT INTO passage.tunnels (ssh_hostname, ssh_port, service_hostname, service_port) VALUES
     ('localhost', '23456', 'localhost', '3000')
 ;
 INSERT INTO passage.keys (key_type, contents) VALUES
