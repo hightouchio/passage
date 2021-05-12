@@ -8,22 +8,16 @@ github.com/alecthomas/units
 # github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 ## explicit
 github.com/anmitsu/go-shlex
-# github.com/apex/log v1.9.0
-## explicit
-github.com/apex/log
-# github.com/deviceplane/deviceplane v0.0.0-20200827052250-9ea53e653b89
-## explicit
 # github.com/gliderlabs/ssh v0.3.1
 ## explicit
 github.com/gliderlabs/ssh
-# github.com/gorilla/handlers v1.5.1
-## explicit
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
+## explicit
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/kr/pty v1.1.3
+# github.com/kr/pretty v0.2.0
 ## explicit
 # github.com/lib/pq v1.9.0
 ## explicit
@@ -33,8 +27,6 @@ github.com/lib/pq/scram
 # github.com/pkg/errors v0.8.1
 ## explicit
 github.com/pkg/errors
-# github.com/segmentio/ksuid v1.0.3
-## explicit
 # github.com/sirupsen/logrus v1.4.2
 ## explicit
 github.com/sirupsen/logrus
@@ -55,8 +47,13 @@ golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 ## explicit
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20191010194322-b09406accb47
+## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 ## explicit
 gopkg.in/alecthomas/kingpin.v2
+# gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
+## explicit
+# gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c
+## explicit
