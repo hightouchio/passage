@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"time"
@@ -16,12 +17,12 @@ type Server struct {
 
 type sqlClient interface {
 	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
-	GetReverseTunnel(ctx context.Context, id int) (postgres.ReverseTunnel, error)
+	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
 	ListReverseTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
-	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
+	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	ListNormalTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
-	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
+	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 }
 
 const managerRefreshDuration = 1 * time.Second
@@ -60,8 +61,8 @@ type NewReverseTunnelRequest struct {
 	PublicKey string `json:"publicKey"`
 }
 type NewReverseTunnelResponse struct {
-	ID         int     `json:"id"`
-	PrivateKey *string `json:"privateKeyBase64,omitempty"`
+	ID         uuid.UUID `json:"id"`
+	PrivateKey *string   `json:"privateKeyBase64,omitempty"`
 }
 
 func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelRequest) (*NewReverseTunnelResponse, error) {

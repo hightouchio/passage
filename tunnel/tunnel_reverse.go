@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -12,7 +13,7 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID        int       `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	SSHDPort  uint32    `json:"sshPort"`
 	Port      uint32    `json:"port"`
@@ -23,7 +24,7 @@ type ReverseTunnel struct {
 // reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type reverseTunnelServices struct {
 	sql interface {
-		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID int) ([]postgres.Key, error)
+		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 }
 
@@ -110,11 +111,11 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 func (t ReverseTunnel) Logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
 		"tunnel_type": "reverse",
-		"tunnel_id":   t.ID,
+		"tunnel_id":   t.ID.String(),
 	})
 }
 
-func (t ReverseTunnel) GetID() int {
+func (t ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
 }
 

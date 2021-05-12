@@ -3,12 +3,13 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"time"
 )
 
 type ReverseTunnel struct {
-	ID         int
+	ID         uuid.UUID
 	CreatedAt  time.Time
 	TunnelPort uint32
 	SSHDPort   uint32
@@ -21,7 +22,7 @@ func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (
 	}
 	result.Next()
 
-	var recordID int
+	var recordID uuid.UUID
 	if err = result.Scan(&recordID); err != nil {
 		return ReverseTunnel{}, errors.Wrap(err, "could not scan id")
 	}
@@ -52,7 +53,7 @@ func (c Client) ListReverseTunnels(ctx context.Context) ([]ReverseTunnel, error)
 	return reverseTunnels, nil
 }
 
-func (c Client) GetReverseTunnel(ctx context.Context, id int) (ReverseTunnel, error) {
+func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunnel, error) {
 	row := c.db.QueryRowContext(ctx, getReverseTunnel, id)
 
 	reverseTunnel, err := scanReverseTunnel(row)
