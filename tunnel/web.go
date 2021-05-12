@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -17,16 +18,9 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 }
 
 func (s Server) handleWebGetConnectionDetails(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	tunnelID, ok := vars["tunnelID"]
-	if !ok {
-		http.Error(w, "no ID specified", http.StatusBadRequest)
-		return
-	}
-
-	id, err := uuid.Parse(tunnelID)
-	if err != nil {
-		http.Error(w, "must be a valid UUID", http.StatusBadRequest)
+	var id uuid.UUID
+	if err := getTunnelID(r, &id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -58,6 +52,21 @@ func (s Server) handleWebNewReverseTunnel(w http.ResponseWriter, r *http.Request
 	}
 
 	respond(w, response)
+}
+
+func getTunnelID(r *http.Request, id *uuid.UUID) error {
+	tunnelID, ok := mux.Vars(r)["tunnelID"]
+	if !ok {
+		return errors.New("no id specified")
+	}
+
+	var err error
+	*id, err = uuid.Parse(tunnelID)
+	if err != nil {
+		return errors.New("could not parse id (must be valid UUID v4)")
+	}
+
+	return nil
 }
 
 func read(r *http.Request, req interface{}) error {
