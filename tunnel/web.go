@@ -2,12 +2,46 @@ package tunnel
 
 import (
 	"encoding/json"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/tunnel/postgres"
 	"net/http"
 )
 
 func (s Server) ConfigureWebRoutes(router *mux.Router) {
-	router.HandleFunc("/reverse_tunnels", s.handleWebNewReverseTunnel).Methods(http.MethodPost)
+	router.HandleFunc("/tunnel/reverse", s.handleWebNewReverseTunnel).Methods(http.MethodPost)
+	//router.HandleFunc("/tunnel/normal", nil).Methods(http.MethodPost)
+
+	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
+	tunnelRouter.HandleFunc("/connection", s.handleWebGetConnectionDetails).Methods(http.MethodGet)
+}
+
+func (s Server) handleWebGetConnectionDetails(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tunnelID, ok := vars["tunnelID"]
+	if !ok {
+		http.Error(w, "no ID specified", http.StatusBadRequest)
+		return
+	}
+
+	id, err := uuid.Parse(tunnelID)
+	if err != nil {
+		http.Error(w, "must be a valid UUID", http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.GetConnectionDetails(r.Context(), GetConnectionDetailsRequest{id})
+	if err != nil {
+		switch err {
+		case postgres.ErrTunnelNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	respond(w, res)
 }
 
 func (s Server) handleWebNewReverseTunnel(w http.ResponseWriter, r *http.Request) {
@@ -24,32 +58,6 @@ func (s Server) handleWebNewReverseTunnel(w http.ResponseWriter, r *http.Request
 	}
 
 	respond(w, response)
-}
-
-func (s Server) handleWebGetReverseTunnel(w http.ResponseWriter, r *http.Request) {
-	//vars := mux.Vars(r)
-	//id := vars["id"]
-	//
-	//tunnel, err := s.tunnels.Get(r.Context(), id)
-	//if err != nil {
-	//	http.Error(w, err.Error(), http.StatusInternalServerError)
-	//	return
-	//}
-	//
-	//respond(w, tunnel)
-}
-
-func (s Server) handleWebListReverseTunnels(w http.ResponseWriter, r *http.Request) {
-	//vars := mux.Vars(r)
-	//id := vars["id"]
-	//
-	//tunnel, err := s.tunnels.Get(r.Context(), id)
-	//if err != nil {
-	//	http.Error(w, err.Error(), http.StatusInternalServerError)
-	//	return
-	//}
-	//
-	//respond(w, tunnel)
 }
 
 func read(r *http.Request, req interface{}) error {

@@ -152,6 +152,13 @@ func (t NormalTunnel) getTunnelConnection(server string, remote string, config s
 	return remoteConn, nil
 }
 
+func (t NormalTunnel) GetConnectionDetails() ConnectionDetails {
+	return ConnectionDetails{
+		Host: "localhost", // TODO: need to get current server public IP
+		Port: t.TunnelPort,
+	}
+}
+
 func (t NormalTunnel) Logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
 		"tunnel_type": "normal",

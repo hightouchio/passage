@@ -18,7 +18,7 @@ type ReverseTunnel struct {
 func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (ReverseTunnel, error) {
 	result, err := c.db.QueryContext(ctx, createReverseTunnel)
 	if err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not insert reverse tunnel")
+		return ReverseTunnel{}, errors.Wrap(err, "could not insert")
 	}
 	result.Next()
 
@@ -30,10 +30,23 @@ func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (
 	return c.GetReverseTunnel(ctx, recordID)
 }
 
+func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunnel, error) {
+	row := c.db.QueryRowContext(ctx, getReverseTunnel, id)
+
+	reverseTunnel, err := scanReverseTunnel(row)
+	if err == sql.ErrNoRows {
+		return ReverseTunnel{}, ErrTunnelNotFound
+	} else if err != nil {
+		return ReverseTunnel{}, errors.Wrap(err, "could not fetch")
+	}
+
+	return reverseTunnel, nil
+}
+
 func (c Client) ListReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
 	rows, err := c.db.QueryContext(ctx, listReverseTunnels)
 	if err != nil {
-		return nil, errors.Wrap(err, "query reverse tunnel")
+		return nil, errors.Wrap(err, "could not list")
 	}
 	defer rows.Close()
 
@@ -53,19 +66,6 @@ func (c Client) ListReverseTunnels(ctx context.Context) ([]ReverseTunnel, error)
 	return reverseTunnels, nil
 }
 
-func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunnel, error) {
-	row := c.db.QueryRowContext(ctx, getReverseTunnel, id)
-
-	reverseTunnel, err := scanReverseTunnel(row)
-	if err == sql.ErrNoRows {
-		return ReverseTunnel{}, ErrReverseTunnelNotFound
-	} else if err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not get reverse tunnel")
-	}
-
-	return reverseTunnel, nil
-}
-
 func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 	var reverseTunnel ReverseTunnel
 	if err := scanner.Scan(
@@ -78,8 +78,6 @@ func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 	}
 	return reverseTunnel, nil
 }
-
-var ErrReverseTunnelNotFound = errors.New("reverse tunnel not found")
 
 const createReverseTunnel = `
 INSERT INTO passage.reverse_tunnels DEFAULT VALUES

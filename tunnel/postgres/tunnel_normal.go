@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"github.com/google/uuid"
 	"time"
 
@@ -19,6 +20,34 @@ type NormalTunnel struct {
 	SSHPort         uint32 `json:"sshPort"`
 	ServiceHostname string `json:"serviceHostname"`
 	ServicePort     uint32 `json:"servicePort"`
+}
+
+func (c Client) CreateNormalTunnel(ctx context.Context, tunnel NormalTunnel) (NormalTunnel, error) {
+	result, err := c.db.QueryContext(ctx, createNormalTunnel, tunnel.SSHHostname, tunnel.SSHPort, tunnel.ServiceHostname, tunnel.ServicePort)
+	if err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not insert")
+	}
+	result.Next()
+
+	var recordID uuid.UUID
+	if err = result.Scan(&recordID); err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not scan id")
+	}
+
+	return c.GetNormalTunnel(ctx, recordID)
+}
+
+func (c Client) GetNormalTunnel(ctx context.Context, id uuid.UUID) (NormalTunnel, error) {
+	row := c.db.QueryRowContext(ctx, getNormalTunnel, id)
+
+	normalTunnel, err := scanNormalTunnel(row)
+	if err == sql.ErrNoRows {
+		return NormalTunnel{}, ErrTunnelNotFound
+	} else if err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not fetch")
+	}
+
+	return normalTunnel, nil
 }
 
 func (c Client) ListNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
@@ -61,15 +90,13 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 	return tunnel, nil
 }
 
-var ErrNormalTunnelNotFound = errors.New("tunnel not found")
-
-const createTunnel = `
+const createNormalTunnel = `
 INSERT INTO passage.tunnels (ssh_hostname, ssh_port, service_hostname, service_port)
 VALUES ($1, $2, $3, $4)
 RETURNING id
 `
 
-const getTunnel = `
+const getNormalTunnel = `
 SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
 FROM passage.tunnels
 WHERE id=$1

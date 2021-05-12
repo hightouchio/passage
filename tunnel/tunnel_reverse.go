@@ -13,10 +13,10 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"createdAt"`
-	SSHDPort  uint32    `json:"sshPort"`
-	Port      uint32    `json:"port"`
+	ID         uuid.UUID `json:"id"`
+	CreatedAt  time.Time `json:"createdAt"`
+	SSHDPort   uint32    `json:"sshPort"`
+	TunnelPort uint32    `json:"tunnelPort"`
 
 	services reverseTunnelServices
 }
@@ -56,7 +56,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		},
 		HostSigners: hostSigners,
 		ReversePortForwardingCallback: func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-			return bindHost == options.BindHost && bindPort == t.Port
+			return bindHost == options.BindHost && bindPort == t.TunnelPort
 		},
 	}
 
@@ -108,6 +108,13 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	return false, nil
 }
 
+func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {
+	return ConnectionDetails{
+		Host: "localhost", // TODO: need to get current server public IP
+		Port: t.TunnelPort,
+	}
+}
+
 func (t ReverseTunnel) Logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
 		"tunnel_type": "reverse",
@@ -142,9 +149,9 @@ func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postg
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
 func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 	return ReverseTunnel{
-		ID:        record.ID,
-		CreatedAt: record.CreatedAt,
-		Port:      record.TunnelPort,
-		SSHDPort:  record.SSHDPort,
+		ID:         record.ID,
+		CreatedAt:  record.CreatedAt,
+		TunnelPort: record.TunnelPort,
+		SSHDPort:   record.SSHDPort,
 	}
 }
