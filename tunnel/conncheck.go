@@ -35,7 +35,7 @@ type CheckTunnelResponse struct {
 func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
 	s.Stats.Incr("passage.tunnelStatusChecks", nil, 1)
 
-	details, err := s.GetConnectionDetails(ctx, GetConnectionDetailsRequest{ID: req.ID})
+	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}

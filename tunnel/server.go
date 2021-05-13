@@ -66,17 +66,18 @@ func (s Server) StartReverseTunnels() {
 func (s Server) StopReverseTunnels() {
 }
 
-type GetConnectionDetailsRequest struct {
+type GetTunnelRequest struct {
 	ID uuid.UUID
 }
 
-type GetConnectionDetailsResponse struct {
-	ConnectionDetails
+type GetTunnelResponse struct {
 	TunnelType `json:"type"`
+	Tunnel     `json:"tunnel"`
+	ConnectionDetails `json:"connection"`
 }
 
-// GetConnectionDetails returns the connection details for the tunnel, so Hightouch can connect using it
-func (s Server) GetConnectionDetails(ctx context.Context, req GetConnectionDetailsRequest) (*GetConnectionDetailsResponse, error) {
+// GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
+func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelResponse, error) {
 	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
 	if err == postgres.ErrTunnelNotFound {
 		return nil, postgres.ErrTunnelNotFound
@@ -84,8 +85,9 @@ func (s Server) GetConnectionDetails(ctx context.Context, req GetConnectionDetai
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
-	return &GetConnectionDetailsResponse{
+	return &GetTunnelResponse{
 		TunnelType:        tunnelType,
+		Tunnel:            tunnel,
 		ConnectionDetails: tunnel.GetConnectionDetails(),
 	}, nil
 }
