@@ -28,7 +28,6 @@ type NormalTunnel struct {
 	services normalTunnelServices
 }
 
-
 // normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type normalTunnelServices struct {
 	sql interface {
