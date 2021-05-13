@@ -28,6 +28,10 @@ type NormalTunnel struct {
 	services normalTunnelServices
 }
 
+func (t NormalTunnel) Test(ctx context.Context) (bool, error) {
+	panic("implement me")
+}
+
 // normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type normalTunnelServices struct {
 	sql interface {
@@ -36,7 +40,7 @@ type normalTunnelServices struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
-	t.Logger().WithField("tunnel_port", t.TunnelPort).Info("starting tunnel")
+	t.logger().WithField("tunnel_port", t.TunnelPort).Info("starting tunnel")
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
@@ -52,13 +56,12 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		}
 
 		connCtx := context.Background() // new context for each connection
-
 		go func() {
 			defer localConn.Close()
 
 			if err := t.handleConn(connCtx, localConn); err != nil {
-				t.Logger().WithError(err).Error("error handling client connection")
-				listener.Close()
+				t.logger().WithError(err).Error("error handling client connection")
+				localConn.Write([]byte(errors.Wrap(err, "error").Error()))
 			}
 		}()
 	}
@@ -71,7 +74,7 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 		return errors.Wrap(err, "could not generate auth methods")
 	}
 
-	t.Logger().WithFields(logrus.Fields{
+	t.logger().WithFields(logrus.Fields{
 		"hostname": t.SSHHostname,
 		"port":     t.SSHPort,
 	}).Debug("dialing remote ssh server")
@@ -90,7 +93,7 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 	}
 	defer serverConn.Close()
 
-	t.Logger().WithFields(logrus.Fields{
+	t.logger().WithFields(logrus.Fields{
 		"hostname": t.ServiceHostname,
 		"port":     t.ServicePort,
 	}).Debug("dialing tunneled service")
@@ -112,7 +115,7 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 		return err
 	})
 
-	t.Logger().Info("started normal tunnel")
+	t.logger().Info("started normal tunnel")
 
 	return g.Wait()
 }
@@ -159,17 +162,6 @@ func (t NormalTunnel) GetConnectionDetails() ConnectionDetails {
 	}
 }
 
-func (t NormalTunnel) Logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
-		"tunnel_type": "normal",
-		"tunnel_id":   t.ID.String(),
-	})
-}
-
-func (t NormalTunnel) GetID() uuid.UUID {
-	return t.ID
-}
-
 // createNormalTunnelListFunc wraps our Postgres list function in something that converts the records into Normal structs so they can be passed to Manager which accepts the Tunnel interface
 func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.NormalTunnel, error), services normalTunnelServices) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
@@ -202,4 +194,15 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		ServiceHostname: record.ServiceHostname,
 		ServicePort:     record.ServicePort,
 	}
+}
+
+func (t NormalTunnel) GetID() uuid.UUID {
+	return t.ID
+}
+
+func (t NormalTunnel) logger() *logrus.Entry {
+	return logrus.WithFields(logrus.Fields{
+		"tunnel_type": "normal",
+		"tunnel_id":   t.ID.String(),
+	})
 }

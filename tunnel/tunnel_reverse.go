@@ -43,7 +43,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	sshServer := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", t.SSHDPort),
 		Handler: func(s ssh.Session) {
-			t.Logger().Info("new session")
+			t.logger().Info("new session")
 			select {}
 		},
 		RequestHandlers: map[string]ssh.RequestHandler{
@@ -62,7 +62,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 	// integrate public key auth
 	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		log := t.Logger().WithField("key_type", incomingKey.Type())
+		log := t.logger().WithField("key_type", incomingKey.Type())
 
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
@@ -81,7 +81,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return err
 	}
 
-	t.Logger().WithField("ssh_port", t.SSHDPort).Info("started tunnel")
+	t.logger().WithField("ssh_port", t.SSHDPort).Info("started tunnel")
 
 	return sshServer.ListenAndServe()
 }
@@ -115,17 +115,6 @@ func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {
 	}
 }
 
-func (t ReverseTunnel) Logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
-		"tunnel_type": "reverse",
-		"tunnel_id":   t.ID.String(),
-	})
-}
-
-func (t ReverseTunnel) GetID() uuid.UUID {
-	return t.ID
-}
-
 // createReverseTunnelListFunc wraps our Postgres list function in something that converts the records into ReverseTunnel structs so they can be passed to Manager which accepts the Tunnel interface
 func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.ReverseTunnel, error), services reverseTunnelServices) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
@@ -154,4 +143,15 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		TunnelPort: record.TunnelPort,
 		SSHDPort:   record.SSHDPort,
 	}
+}
+
+func (t ReverseTunnel) GetID() uuid.UUID {
+	return t.ID
+}
+
+func (t ReverseTunnel) logger() *logrus.Entry {
+	return logrus.WithFields(logrus.Fields{
+		"tunnel_type": "reverse",
+		"tunnel_id":   t.ID.String(),
+	})
 }
