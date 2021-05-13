@@ -23,7 +23,7 @@ type Manager struct {
 	SupervisorRetryDuration time.Duration
 
 	tunnels     map[uuid.UUID]Tunnel
-	supervisors map[uuid.UUID]Supervisor
+	supervisors map[uuid.UUID]*Supervisor
 
 	lock sync.Mutex
 	once sync.Once
@@ -38,56 +38,66 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, super
 		SupervisorRetryDuration: supervisorRetryDuration,
 
 		tunnels:     make(map[uuid.UUID]Tunnel),
-		supervisors: make(map[uuid.UUID]Supervisor),
+		supervisors: make(map[uuid.UUID]*Supervisor),
 	}
 }
 
-func (m *Manager) Start() {
-	go m.startDatabaseWorker()
-	go m.startSupervisorWorker()
+func (m *Manager) Start(ctx context.Context) {
+	go m.startDatabaseWorker(ctx)
+	go m.startSupervisorWorker(ctx)
 }
 
-func (m *Manager) startSupervisorWorker() {
+func (m *Manager) startSupervisorWorker(ctx context.Context) {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			m.refreshSupervisors()
+			m.refreshSupervisors(ctx)
+
+		case <-ctx.Done():
+			return
 		}
 	}
 }
 
-func (m *Manager) refreshSupervisors() {
+func (m *Manager) refreshSupervisors(ctx context.Context) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, ok := m.supervisors[tunnelID]; !ok {
-			s := Supervisor{
-				Tunnel:        tunnel,
-				SSHOptions:    m.SSHOptions,
-				RetryDuration: m.SupervisorRetryDuration,
-			}
-			go s.Start()
-			// TODO: Implement cancellation
+			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.SupervisorRetryDuration)
+			go supervisor.Start(ctx)
+			m.supervisors[tunnelID] = supervisor
+		}
+	}
 
-			m.supervisors[tunnelID] = s
+	// shut down old supervisors
+	for tunnelID, supervisor := range m.supervisors {
+		// if this supervisor's tunnel ID no longer appears in the list of tunnels
+		if _, ok := m.tunnels[tunnelID]; !ok {
+			supervisor.Stop()
+			delete(m.supervisors, tunnelID)
 		}
 	}
 }
 
-func (m *Manager) startDatabaseWorker() {
+func (m *Manager) startDatabaseWorker(ctx context.Context) {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := m.refreshTunnels(context.Background()); err != nil {
+			if err := m.refreshTunnels(ctx); err != nil {
 				logrus.WithError(err).Error("could not refresh tunnels from DB")
 			}
+
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -102,6 +112,7 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	// write new tunnels
 	m.tunnels = make(map[uuid.UUID]Tunnel)
 	for i, tunnel := range tunnels {
 		m.tunnels[tunnel.GetID()] = tunnels[i]

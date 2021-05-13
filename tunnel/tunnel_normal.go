@@ -35,49 +35,85 @@ type normalTunnelServices struct {
 	}
 }
 
-func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
-	t.logger().WithField("tunnel_port", t.TunnelPort).Info("starting tunnel")
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
-
-	for {
-		localConn, err := listener.Accept()
-		if err != nil {
-			// TODO: Question for Josh
-			return errors.Wrap(err, "could not accept")
-		}
-
-		connCtx := context.Background() // new context for each connection
-		go func() {
-			defer localConn.Close()
-
-			if err := t.handleConn(connCtx, localConn); err != nil {
-				t.logger().WithError(err).Error("error handling client connection")
-				localConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-			}
-		}()
+func isContextCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
 	}
 }
 
-func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error {
-	// generate the authent
+func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// open tunnel listener
+	t.logger().WithField("tunnel_port", t.TunnelPort).Debug("start tunnel listener")
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
+	if err != nil {
+		return errors.Wrap(err, "listen")
+	}
+	defer func() {
+		t.logger().Debug("stop tunnel listener")
+		listener.Close()
+	}()
+
+	// accept incoming conns and serve them up
+	incomingConns := make(chan net.Conn)
+	go func() {
+		for {
+			select {
+			default:
+				conn, err := listener.Accept()
+				if isContextCancelled(ctx) {
+					break
+				}
+
+				switch err {
+				case net.ErrClosed:
+					return
+				default:
+					t.logger().WithError(err).Error("tunnel connection accept error")
+					break
+				}
+				incomingConns <- conn
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case tunnelConn := <-incomingConns:
+			if err := t.handleTunnelConnection(ctx, tunnelConn); err != nil {
+				t.logger().WithError(err).Error("tunnel error")
+				tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+			}
+			tunnelConn.Close()
+
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, tunnelConn net.Conn) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// generate our authentication strategy
 	auth, err := t.generateAuthMethod(ctx)
 	if err != nil {
-		return errors.Wrap(err, "could not generate auth methods")
+		return errors.Wrap(err, "generate auth method")
 	}
 
-	t.logger().WithFields(logrus.Fields{
-		"hostname": t.SSHHost,
-		"port":     t.SSHPort,
-	}).Debug("dialing remote ssh server")
-
-	serverConn, err := ssh.Dial(
-		"tcp",
-		fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
+	// connect to remote ssh server
+	t.logger().WithFields(logrus.Fields{"host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
+	sshConn, err := ssh.Dial(
+		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
 			User:            t.SSHUser,
 			Auth:            auth,
@@ -85,35 +121,35 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 		},
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "dial ssh")
 	}
-	defer serverConn.Close()
+	defer sshConn.Close()
 
-	t.logger().WithFields(logrus.Fields{
-		"hostname": t.ServiceHost,
-		"port":     t.ServicePort,
-	}).Debug("dialing tunneled service")
-
-	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
+	// connect to upstream service
+	t.logger().WithFields(logrus.Fields{"host": t.ServiceHost, "port": t.ServicePort}).Debug("dial upstream service")
+	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
+		return errors.Wrap(err, "dial upstream service")
+	}
+	defer serviceConn.Close()
+
+	// tunnel traffic between both connections
+	errs := make(chan error)
+	go func() {
+		g := new(errgroup.Group)
+		g.Go(func() error { _, err := io.Copy(serviceConn, tunnelConn); return err })
+		g.Go(func() error { _, err := io.Copy(tunnelConn, serviceConn); return err })
+		errs <- g.Wait()
+	}()
+
+	// wait for an error or connection completion
+	select {
+	case <-ctx.Done():
+		t.logger().Debug("ordered shutdown")
+		return nil
+	case err := <-errs:
 		return err
 	}
-	defer remoteConn.Close()
-
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		_, err := io.Copy(remoteConn, localConn)
-		return err
-	})
-
-	g.Go(func() error {
-		_, err := io.Copy(localConn, remoteConn)
-		return err
-	})
-
-	t.logger().Info("started normal tunnel")
-
-	return g.Wait()
 }
 
 // generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library

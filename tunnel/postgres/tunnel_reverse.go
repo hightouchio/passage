@@ -92,5 +92,5 @@ WHERE id=$1
 
 const listReverseTunnels = `
 SELECT id, created_at, tunnel_port, sshd_port
-FROM passage.reverse_tunnels
+FROM passage.reverse_tunnels WHERE enabled=true
 `

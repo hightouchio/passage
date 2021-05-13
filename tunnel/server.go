@@ -52,18 +52,12 @@ func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) 
 	}
 }
 
-func (s Server) StartNormalTunnels() {
-	s.normalTunnels.Start()
+func (s Server) StartNormalTunnels(ctx context.Context) {
+	s.normalTunnels.Start(ctx)
 }
 
-func (s Server) StopNormalTunnels() {
-}
-
-func (s Server) StartReverseTunnels() {
-	s.reverseTunnels.Start()
-}
-
-func (s Server) StopReverseTunnels() {
+func (s Server) StartReverseTunnels(ctx context.Context) {
+	s.reverseTunnels.Start(ctx)
 }
 
 type GetTunnelRequest struct {
@@ -71,8 +65,8 @@ type GetTunnelRequest struct {
 }
 
 type GetTunnelResponse struct {
-	TunnelType `json:"type"`
-	Tunnel     `json:"tunnel"`
+	TunnelType        `json:"type"`
+	Tunnel            `json:"tunnel"`
 	ConnectionDetails `json:"connection"`
 }
 

@@ -8,8 +8,9 @@ import (
 )
 
 type Tunnel interface {
-	GetID() uuid.UUID
 	Start(context.Context, SSHOptions) error
+
+	GetID() uuid.UUID
 	GetConnectionDetails() ConnectionDetails
 }
 
