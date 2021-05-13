@@ -17,7 +17,7 @@ const (
 	conncheckTimeout          = 10 * time.Second
 	conncheckDialTimeout      = 1 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
-	conncheckReadMaxBytes     = 1024
+	conncheckReadMaxBytes     = 256
 
 	conncheckErrorPrefix = "passage-error"
 )
