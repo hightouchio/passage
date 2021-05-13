@@ -1,6 +1,9 @@
 -- set up reverse tunnels
 SET search_path='passage';
 
+-- important for MacOS
+ALTER SEQUENCE sshd_port RESTART 49500;
+
 BEGIN;
 INSERT INTO reverse_tunnels (sshd_port) VALUES
     (49500), (49501), (49502)
