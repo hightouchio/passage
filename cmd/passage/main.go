@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel"
@@ -9,7 +10,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -35,9 +35,10 @@ var (
 			Default("localhost").
 			String()
 
-	hostKeyPath = kingpin.
-			Flag("host-key-path", "").
-			Envar("HOST_KEY_PATH").
+	hostKeyEncoded = kingpin.
+			Flag("host-key", "Base64 encoded").
+			Envar("HOST_KEY").
+			Required().
 			String()
 
 	disableNormal = kingpin.
@@ -76,16 +77,9 @@ func main() {
 		return
 	}
 
-	// read host key from disk
-	hostKey, err := ioutil.ReadFile(*hostKeyPath)
-	if err != nil {
-		logrus.WithError(err).Fatal("read host key")
-		return
-	}
-
 	// initialize statsd client
 	var statsClient statsd.ClientInterface
-	if statsdAddr != nil {
+	if *statsdAddr != "" {
 		var err error
 		statsClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
@@ -95,9 +89,16 @@ func main() {
 	} else {
 		statsClient = &statsd.NoOpClient{}
 	}
-
 	router := mux.NewRouter()
 
+	// decode host key from base64
+	hostKey, err := base64.StdEncoding.DecodeString(*hostKeyEncoded)
+	if err != nil {
+		logrus.WithError(err).Fatal("could not decode host key")
+		return
+	}
+
+	// configur tunnel server
 	server := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
