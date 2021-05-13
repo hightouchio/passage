@@ -141,20 +141,6 @@ func (t NormalTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod,
 	return authMethods, nil
 }
 
-func (t NormalTunnel) getTunnelConnection(server string, remote string, config ssh.ClientConfig) (net.Conn, error) {
-	serverConn, err := ssh.Dial("tcp", server, &config)
-	if err != nil {
-		return nil, err
-	}
-
-	remoteConn, err := serverConn.Dial("tcp", remote)
-	if err != nil {
-		return nil, err
-	}
-
-	return remoteConn, nil
-}
-
 func (t NormalTunnel) GetConnectionDetails() ConnectionDetails {
 	return ConnectionDetails{
 		Host: "localhost", // TODO: need to get current server public IP
