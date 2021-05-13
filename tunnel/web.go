@@ -14,7 +14,8 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 	//router.HandleFunc("/tunnel/normal", nil).Methods(http.MethodPost)
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
-	tunnelRouter.HandleFunc("/connection", s.handleWebGetConnectionDetails).Methods(http.MethodGet)
+	tunnelRouter.HandleFunc("", s.handleWebGetConnectionDetails).Methods(http.MethodGet)
+	tunnelRouter.HandleFunc("/check", s.handleWebCheckTunnel).Methods(http.MethodGet)
 }
 
 func (s Server) handleWebGetConnectionDetails(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +26,27 @@ func (s Server) handleWebGetConnectionDetails(w http.ResponseWriter, r *http.Req
 	}
 
 	res, err := s.GetConnectionDetails(r.Context(), GetConnectionDetailsRequest{id})
+	if err != nil {
+		switch err {
+		case postgres.ErrTunnelNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	respond(w, res)
+}
+
+func (s Server) handleWebCheckTunnel(w http.ResponseWriter, r *http.Request) {
+	var id uuid.UUID
+	if err := getTunnelID(r, &id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := s.CheckTunnel(r.Context(), CheckTunnelRequest{id})
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
