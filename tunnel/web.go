@@ -23,14 +23,14 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
-	var request GetConnectionDetailsRequest
+	var request GetTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	response, err := s.GetConnectionDetails(r.Context(), request)
-	defer log.Request(logger, "tunnel:GetConnectionDetails", request, response, err)
+	response, err := s.GetTunnel(r.Context(), request)
+	defer log.Request(logger, "tunnel:Get", request, response, err)
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
