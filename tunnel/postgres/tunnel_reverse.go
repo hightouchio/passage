@@ -11,8 +11,8 @@ import (
 type ReverseTunnel struct {
 	ID         uuid.UUID
 	CreatedAt  time.Time
-	TunnelPort uint32
-	SSHDPort   uint32
+	TunnelPort int
+	SSHDPort   int
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (ReverseTunnel, error) {

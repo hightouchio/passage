@@ -18,19 +18,16 @@ type NormalTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	TunnelPort      uint32 `json:"port"`
-	SSHUser         string `json:"sshUser"`
-	SSHHostname     string `json:"sshHostname"`
-	SSHPort         uint32 `json:"sshPort"`
-	ServiceHostname string `json:"serviceHostname"`
-	ServicePort     uint32 `json:"servicePort"`
+	TunnelPort  int    `json:"port"`
+	SSHUser     string `json:"sshUser"`
+	SSHHost     string `json:"sshHost"`
+	SSHPort     int    `json:"sshPort"`
+	ServiceHost string `json:"serviceHost"`
+	ServicePort int    `json:"servicePort"`
 
 	services normalTunnelServices
 }
 
-func (t NormalTunnel) Test(ctx context.Context) (bool, error) {
-	panic("implement me")
-}
 
 // normalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type normalTunnelServices struct {
@@ -75,13 +72,13 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 	}
 
 	t.logger().WithFields(logrus.Fields{
-		"hostname": t.SSHHostname,
+		"hostname": t.SSHHost,
 		"port":     t.SSHPort,
 	}).Debug("dialing remote ssh server")
 
 	serverConn, err := ssh.Dial(
 		"tcp",
-		fmt.Sprintf("%s:%d", t.SSHHostname, t.SSHPort),
+		fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
 			User:            t.SSHUser,
 			Auth:            auth,
@@ -94,11 +91,11 @@ func (t NormalTunnel) handleConn(ctx context.Context, localConn net.Conn) error 
 	defer serverConn.Close()
 
 	t.logger().WithFields(logrus.Fields{
-		"hostname": t.ServiceHostname,
+		"hostname": t.ServiceHost,
 		"port":     t.ServicePort,
 	}).Debug("dialing tunneled service")
 
-	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHostname, t.ServicePort))
+	remoteConn, err := serverConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
 		return err
 	}
@@ -168,17 +165,28 @@ func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgr
 	}
 }
 
+// sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
+func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
+	return postgres.NormalTunnel{
+		SSHUser:     tunnel.SSHUser,
+		SSHHost:     tunnel.SSHHost,
+		SSHPort:     tunnel.SSHPort,
+		ServiceHost: tunnel.ServiceHost,
+		ServicePort: tunnel.ServicePort,
+	}
+}
+
 // convert a SQL DB representation of a postgres.NormalTunnel into the primary NormalTunnel struct
 func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 	return NormalTunnel{
-		ID:              record.ID,
-		CreatedAt:       record.CreatedAt,
-		TunnelPort:      record.TunnelPort,
-		SSHUser:         record.SSHUser,
-		SSHHostname:     record.SSHHostname,
-		SSHPort:         record.SSHPort,
-		ServiceHostname: record.ServiceHostname,
-		ServicePort:     record.ServicePort,
+		ID:          record.ID,
+		CreatedAt:   record.CreatedAt,
+		TunnelPort:  record.TunnelPort,
+		SSHUser:     record.SSHUser,
+		SSHHost:     record.SSHHost,
+		SSHPort:     record.SSHPort,
+		ServiceHost: record.ServiceHost,
+		ServicePort: record.ServicePort,
 	}
 }
 

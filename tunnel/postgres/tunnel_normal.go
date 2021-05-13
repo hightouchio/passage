@@ -13,17 +13,17 @@ type NormalTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 
-	TunnelPort uint32 `json:"tunnelPort"`
+	TunnelPort int `json:"tunnelPort"`
 
-	SSHUser         string `json:"sshUser"`
-	SSHHostname     string `json:"sshHostname"`
-	SSHPort         uint32 `json:"sshPort"`
-	ServiceHostname string `json:"serviceHostname"`
-	ServicePort     uint32 `json:"servicePort"`
+	SSHUser     string `json:"sshUser"`
+	SSHHost     string `json:"sshHost"`
+	SSHPort     int    `json:"sshPort"`
+	ServiceHost string `json:"serviceHost"`
+	ServicePort int    `json:"servicePort"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, tunnel NormalTunnel) (NormalTunnel, error) {
-	result, err := c.db.QueryContext(ctx, createNormalTunnel, tunnel.SSHHostname, tunnel.SSHPort, tunnel.ServiceHostname, tunnel.ServicePort)
+	result, err := c.db.QueryContext(ctx, createNormalTunnel, tunnel.SSHHost, tunnel.SSHPort, tunnel.ServiceHost, tunnel.ServicePort)
 	if err != nil {
 		return NormalTunnel{}, errors.Wrap(err, "could not insert")
 	}
@@ -80,9 +80,9 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 		&tunnel.CreatedAt,
 		&tunnel.TunnelPort,
 		&tunnel.SSHUser,
-		&tunnel.SSHHostname,
+		&tunnel.SSHHost,
 		&tunnel.SSHPort,
-		&tunnel.ServiceHostname,
+		&tunnel.ServiceHost,
 		&tunnel.ServicePort,
 	); err != nil {
 		return NormalTunnel{}, err

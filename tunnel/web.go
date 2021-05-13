@@ -11,8 +11,9 @@ import (
 )
 
 func (s Server) ConfigureWebRoutes(router *mux.Router) {
-	router.HandleFunc("/tunnel/reverse", s.handleWebNewReverseTunnel).Methods(http.MethodPost)
-	//router.HandleFunc("/tunnel/normal", nil).Methods(http.MethodPost)
+	// create tunnel
+	router.HandleFunc("/tunnel/normal", s.handleWebCreateNormalTunnel).Methods(http.MethodPost)
+	router.HandleFunc("/tunnel/reverse", s.handleWebCreateReverseTunnel).Methods(http.MethodPost)
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
 	tunnelRouter.HandleFunc("", s.handleWebTunnelGet).Methods(http.MethodGet)
@@ -68,17 +69,37 @@ func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebNewReverseTunnel(w http.ResponseWriter, r *http.Request) {
+func (s Server) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
-	var request NewReverseTunnelRequest
+	var request CreateNormalTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	response, err := s.NewReverseTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:NewReverse", response, request, err)
+	response, err := s.CreateNormalTunnel(r.Context(), request)
+	defer log.Request(logger, "tunnel:CreateNormal", response, request, err)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, response)
+}
+
+func (s Server) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
+	logger := log.GetLogger(r.Context())
+
+	var request CreateReverseTunnelRequest
+	if err := read(r, &request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response, err := s.CreateReverseTunnel(r.Context(), request)
+	defer log.Request(logger, "tunnel:CreateReverse", response, request, err)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
