@@ -33,6 +33,8 @@ type CheckTunnelResponse struct {
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
 func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
+	s.Stats.Incr("passage.tunnelStatusChecks", nil, 1)
+
 	details, err := s.GetConnectionDetails(ctx, GetConnectionDetailsRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
