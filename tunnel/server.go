@@ -74,7 +74,7 @@ type GetConnectionDetailsResponse struct {
 
 // GetConnectionDetails returns the connection details for the tunnel, so Hightouch can connect using it
 func (s Server) GetConnectionDetails(ctx context.Context, req GetConnectionDetailsRequest) (*GetConnectionDetailsResponse, error) {
-	tunnel, tunnelType, err := getTunnel(ctx, s.SQL, req.ID)
+	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
 	if err == postgres.ErrTunnelNotFound {
 		return nil, postgres.ErrTunnelNotFound
 	} else if err != nil {

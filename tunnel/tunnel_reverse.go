@@ -15,8 +15,8 @@ import (
 type ReverseTunnel struct {
 	ID         uuid.UUID `json:"id"`
 	CreatedAt  time.Time `json:"createdAt"`
-	SSHDPort   uint32    `json:"sshPort"`
-	TunnelPort uint32    `json:"tunnelPort"`
+	SSHDPort   int       `json:"sshPort"`
+	TunnelPort int       `json:"tunnelPort"`
 
 	services reverseTunnelServices
 }
@@ -56,7 +56,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		},
 		HostSigners: hostSigners,
 		ReversePortForwardingCallback: func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-			return bindHost == options.BindHost && bindPort == t.TunnelPort
+			return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
 		},
 	}
 
