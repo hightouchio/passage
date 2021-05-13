@@ -4,5 +4,6 @@
     "sshPort": 23456,
     "serviceHost": "127.0.0.1",
     "servicePort": 3000
-  }
+  },
+  "createKeyPair": true
 }

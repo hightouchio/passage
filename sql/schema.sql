@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
 );
 
 CREATE TABLE IF NOT EXISTS passage.keys(
-    id INT GENERATED ALWAYS AS IDENTITY,
+    id UUID DEFAULT passage.uuid_generate_v4(),
 
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS passage.keys(
 CREATE TABLE IF NOT EXISTS passage.key_authorizations(
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
-    key_id      INT NOT NULL,
+    key_id      UUID NOT NULL,
     tunnel_type passage.tunnel_type NOT NULL,
     tunnel_id   UUID NOT NULL,
 
