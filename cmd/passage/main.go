@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -50,6 +51,11 @@ var (
 			Envar("DISABLE_REVERSE").
 			Default("false").
 			Bool()
+
+	statsdAddr = kingpin.
+			Flag("statsd-addr", "").
+			Envar("STATSD_ADDR").
+			String()
 )
 
 func main() {
@@ -58,6 +64,7 @@ func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(&logrus.TextFormatter{})
 
+	// connect to postgres
 	db, err := sql.Open("postgres", *postgresUri)
 	if err != nil {
 		logrus.WithError(err).Fatal("connect to postgres")
@@ -76,9 +83,22 @@ func main() {
 		return
 	}
 
+	// initialize statsd client
+	var statsClient statsd.ClientInterface
+	if statsdAddr != nil {
+		var err error
+		statsClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
+		if err != nil {
+			logrus.WithError(err).Fatal("error initializing stated client")
+			return
+		}
+	} else {
+		statsClient = &statsd.NoOpClient{}
+	}
+
 	router := mux.NewRouter()
 
-	server := tunnel.NewServer(postgres.NewClient(db), tunnel.SSHOptions{
+	server := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
 	})
