@@ -66,17 +66,11 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 			select {
 			default:
 				conn, err := listener.Accept()
-				if isContextCancelled(ctx) {
-					break
-				}
-
-				switch err {
-				case net.ErrClosed:
-					return
-				default:
+				if err != nil && !isContextCancelled(ctx) {
 					t.logger().WithError(err).Error("tunnel connection accept error")
 					break
 				}
+
 				incomingConns <- conn
 
 			case <-ctx.Done():
@@ -111,7 +105,7 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, tunnelConn net
 	}
 
 	// connect to remote ssh server
-	t.logger().WithFields(logrus.Fields{"host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
+	t.logger().WithFields(logrus.Fields{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
 	sshConn, err := ssh.Dial(
 		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
