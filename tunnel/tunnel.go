@@ -33,7 +33,7 @@ type NewTunnelResponse struct {
 
 type CreateNormalTunnelRequest struct {
 	NormalTunnel `json:"tunnel"`
-	Keys []string `json:"keys"`
+	Keys         []int `json:"keys"`
 }
 
 func (r CreateNormalTunnelRequest) Validate() error {
@@ -67,14 +67,19 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 		return nil, errors.Wrap(err, "could not insert")
 	}
 
-	// TODO: add keys
+	// add keys
+	for _, keyID := range request.Keys {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "normal", record.ID, keyID); err != nil {
+			return nil, errors.Wrapf(err, "could not add key %d", keyID)
+		}
+	}
 
 	return &NewTunnelResponse{normalTunnelFromSQL(record)}, nil
 }
 
 type CreateReverseTunnelRequest struct {
 	NormalTunnel `json:"tunnel"`
-	Keys []string `json:"keys"`
+	Keys         []int `json:"keys"`
 }
 
 func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*NewTunnelResponse, error) {
@@ -83,6 +88,13 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 	record, err := s.SQL.CreateReverseTunnel(ctx, tunnelData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not insert")
+	}
+
+	// add keys
+	for _, keyID := range request.Keys {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "reverse", record.ID, keyID); err != nil {
+			return nil, errors.Wrapf(err, "could not add key %d", keyID)
+		}
 	}
 
 	return &NewTunnelResponse{reverseTunnelFromSQL(record)}, nil
@@ -110,4 +122,3 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 
 	return nil, "", postgres.ErrTunnelNotFound
 }
-

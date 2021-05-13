@@ -13,9 +13,23 @@ type Key struct {
 	Contents string
 }
 
+const getNormalTunnelPrivateKeys = `
+SELECT passage.keys.id, passage.keys.key_type, passage.keys.contents FROM passage.keys
+JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
+JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type='normal'
+WHERE passage.keys.key_type='private' AND passage.tunnels.id=$1;
+`
+
 func (c Client) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
 	return c.getKeysForTunnel(ctx, getNormalTunnelPrivateKeys, tunnelID)
 }
+
+const getReverseTunnelAuthorizedKeys = `
+SELECT passage.keys.id, passage.keys.key_type, passage.keys.contents FROM passage.keys
+JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
+JOIN passage.reverse_tunnels ON passage.key_authorizations.tunnel_id=passage.reverse_tunnels.id AND passage.key_authorizations.tunnel_type='reverse'
+WHERE passage.keys.key_type='public' AND passage.reverse_tunnels.id=$1;
+`
 
 func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
 	return c.getKeysForTunnel(ctx, getReverseTunnelAuthorizedKeys, tunnelID)
@@ -55,16 +69,13 @@ func scanKey(scan scanner) (Key, error) {
 	return key, nil
 }
 
-const getNormalTunnelPrivateKeys = `
-SELECT passage.keys.id, passage.keys.key_type, passage.keys.contents FROM passage.keys
-JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
-JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type='normal'
-WHERE passage.keys.key_type='private' AND passage.tunnels.id=$1;
+const authorizeKeyForTunnel = `
+INSERT INTO passage.key_authorizations (tunnel_type, tunnel_id, key_id) VALUES ($1, $2, $3);
 `
 
-const getReverseTunnelAuthorizedKeys = `
-SELECT passage.keys.id, passage.keys.key_type, passage.keys.contents FROM passage.keys
-JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
-JOIN passage.reverse_tunnels ON passage.key_authorizations.tunnel_id=passage.reverse_tunnels.id AND passage.key_authorizations.tunnel_type='reverse'
-WHERE passage.keys.key_type='public' AND passage.reverse_tunnels.id=$1;
-`
+func (c Client) AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID int) error {
+	if _, err := c.db.ExecContext(ctx, authorizeKeyForTunnel, tunnelType, tunnelID, keyID); err != nil {
+		return err
+	}
+	return nil
+}
