@@ -101,11 +101,15 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 
 type CreateReverseTunnelRequest struct {
 	ReverseTunnel `json:"tunnel"`
+
 	Keys          []uuid.UUID `json:"keys"`
+	CreateKeyPair bool        `json:"createKeyPair"`
 }
 
 type CreateReverseTunnelResponse struct {
 	Tunnel `json:"tunnel"`
+
+	PrivateKey *string `json:"privateKeyBase64,omitempty"`
 }
 
 func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
@@ -123,7 +127,24 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 		}
 	}
 
-	response := &CreateReverseTunnelResponse{reverseTunnelFromSQL(record)}
+	response := &CreateReverseTunnelResponse{Tunnel: reverseTunnelFromSQL(record)}
+
+	// if requested, we will generate a keypair and return the public key to the user
+	if request.CreateKeyPair {
+		keyPair, err := GenerateKeyPair()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not generate keypair")
+		}
+
+		// add to DB and attach to tunnel
+		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "reverse", record.ID, "public", keyPair.PublicKey); err != nil {
+			return nil, errors.Wrap(err, "could not add public key to tunnel")
+		}
+
+		// return the public key to the user
+		b64 := keyPair.Base64PrivateKey()
+		response.PrivateKey = &b64
+	}
 
 	return response, nil
 }
