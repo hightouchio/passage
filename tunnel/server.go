@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
@@ -10,6 +11,8 @@ import (
 
 type Server struct {
 	SQL sqlClient
+
+	Stats statsd.ClientInterface
 
 	normalTunnels  *Manager
 	reverseTunnels *Manager
@@ -30,9 +33,10 @@ type sqlClient interface {
 const managerRefreshDuration = 1 * time.Second
 const supervisorRetryDuration = 1 * time.Second
 
-func NewServer(sql sqlClient, options SSHOptions) Server {
+func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) Server {
 	return Server{
-		SQL: sql,
+		SQL:   sql,
+		Stats: stats,
 
 		reverseTunnels: newManager(
 			createReverseTunnelListFunc(sql.ListReverseTunnels, reverseTunnelServices{sql}),

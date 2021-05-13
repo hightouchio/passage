@@ -1,3 +1,10 @@
+# github.com/DataDog/datadog-go v4.7.0+incompatible
+## explicit
+github.com/DataDog/datadog-go/statsd
+# github.com/Microsoft/go-winio v0.5.0
+## explicit
+github.com/Microsoft/go-winio
+github.com/Microsoft/go-winio/pkg/guid
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 ## explicit
 github.com/alecthomas/template
@@ -19,7 +26,6 @@ github.com/google/uuid
 github.com/gorilla/mux
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 ## explicit
-github.com/konsorten/go-windows-terminal-sequences
 # github.com/kr/pretty v0.2.0
 ## explicit
 # github.com/lib/pq v1.9.0
@@ -27,12 +33,14 @@ github.com/konsorten/go-windows-terminal-sequences
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
-# github.com/pkg/errors v0.8.1
+# github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
+# github.com/stretchr/objx v0.1.1
+## explicit
 # github.com/stretchr/testify v1.6.1
 ## explicit
 # golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
@@ -49,10 +57,11 @@ golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 ## explicit
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20191010194322-b09406accb47
-## explicit
+# golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
 golang.org/x/sys/cpu
+golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
+golang.org/x/sys/windows
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 ## explicit
 gopkg.in/alecthomas/kingpin.v2
