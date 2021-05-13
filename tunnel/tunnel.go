@@ -27,13 +27,11 @@ type ConnectionDetails struct {
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
 
-type NewTunnelResponse struct {
-	Tunnel Tunnel `json:"tunnel"`
-}
-
 type CreateNormalTunnelRequest struct {
 	NormalTunnel `json:"tunnel"`
-	Keys         []int `json:"keys"`
+
+	CreateKeyPair bool        `json:"createKeyPair"`
+	Keys          []uuid.UUID `json:"keys"`
 }
 
 func (r CreateNormalTunnelRequest) Validate() error {
@@ -56,7 +54,13 @@ func (r CreateNormalTunnelRequest) Validate() error {
 	return re
 }
 
-func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelRequest) (*NewTunnelResponse, error) {
+type CreateNormalTunnelResponse struct {
+	Tunnel `json:"tunnel"`
+
+	PublicKey *string `json:"publicKey,omitempty"`
+}
+
+func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelRequest) (*CreateNormalTunnelResponse, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
@@ -74,15 +78,37 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 		}
 	}
 
-	return &NewTunnelResponse{normalTunnelFromSQL(record)}, nil
+	response := &CreateNormalTunnelResponse{Tunnel: normalTunnelFromSQL(record)}
+
+	// if requested, we will generate a keypair and return the public key to the user
+	if request.CreateKeyPair {
+		keyPair, err := GenerateKeyPair()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not generate keypair")
+		}
+
+		// add to DB and attach to tunnel
+		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "normal", record.ID, "private", keyPair.PrivateKey); err != nil {
+			return nil, errors.Wrap(err, "could not add private key to tunnel")
+		}
+
+		// return the public key to the user
+		response.PublicKey = &keyPair.PublicKey
+	}
+
+	return response, nil
 }
 
 type CreateReverseTunnelRequest struct {
-	NormalTunnel `json:"tunnel"`
-	Keys         []int `json:"keys"`
+	ReverseTunnel `json:"tunnel"`
+	Keys          []uuid.UUID `json:"keys"`
 }
 
-func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*NewTunnelResponse, error) {
+type CreateReverseTunnelResponse struct {
+	Tunnel `json:"tunnel"`
+}
+
+func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
 	var tunnelData postgres.ReverseTunnel
 
 	record, err := s.SQL.CreateReverseTunnel(ctx, tunnelData)
@@ -97,7 +123,9 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 		}
 	}
 
-	return &NewTunnelResponse{reverseTunnelFromSQL(record)}, nil
+	response := &CreateReverseTunnelResponse{reverseTunnelFromSQL(record)}
+
+	return response, nil
 }
 
 // findTunnel finds whichever tunnel type matches the UUID
