@@ -61,7 +61,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 
 			if err := t.handleConn(connCtx, localConn); err != nil {
 				t.logger().WithError(err).Error("error handling client connection")
-				localConn.Write([]byte(errors.Wrap(err, "error").Error()))
+				localConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
 			}
 		}()
 	}

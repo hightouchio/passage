@@ -18,6 +18,8 @@ const (
 	conncheckDialTimeout      = 1 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
 	conncheckReadMaxBytes     = 1024
+
+	conncheckErrorPrefix = "passage-error"
 )
 
 type CheckTunnelRequest struct {
@@ -88,7 +90,7 @@ func waitForTunnelError(ctx context.Context, reader io.ReadCloser, duration time
 
 		// check if the bytes we read were an error
 		message := string(data)
-		if strings.HasPrefix(message, "error") {
+		if strings.HasPrefix(message, conncheckErrorPrefix) {
 			done <- errors.New(message)
 			return
 		}
