@@ -19,6 +19,8 @@ type ReverseTunnel struct {
 	TunnelPort int       `json:"tunnelPort"`
 
 	services reverseTunnelServices
+
+	done chan bool
 }
 
 // reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
@@ -29,6 +31,7 @@ type reverseTunnelServices struct {
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
+	t.done = make(chan bool)
 	var hostSigners []ssh.Signer
 
 	if len(options.HostKey) != 0 {
@@ -43,7 +46,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	sshServer := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", t.SSHDPort),
 		Handler: func(s ssh.Session) {
-			t.logger().Info("new session")
+			t.logger().WithField("remote_addr", s.RemoteAddr().String()).Debug("new session")
 			select {}
 		},
 		RequestHandlers: map[string]ssh.RequestHandler{
@@ -59,6 +62,11 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 			return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
 		},
 	}
+	go func() {
+		<-t.done
+		t.logger().Debug("closing ssh server")
+		sshServer.Close()
+	}()
 
 	// integrate public key auth
 	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
@@ -70,19 +78,13 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 			return false
 		}
 
-		if ok {
-			log.Debug("accepted public key")
-		} else {
-			log.Debug("rejected public key")
-		}
-
+		log.WithField("success", ok).Debug("public key auth attempt")
 		return ok
 	})); err != nil {
 		return err
 	}
 
-	t.logger().WithField("ssh_port", t.SSHDPort).Info("started tunnel")
-
+	t.logger().WithField("ssh_port", t.SSHDPort).Debug("starting ssh server")
 	return sshServer.ListenAndServe()
 }
 
@@ -106,6 +108,12 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	}
 
 	return false, nil
+}
+
+// Stop
+func (t ReverseTunnel) Stop(ctx context.Context) error {
+	close(t.done)
+	return nil
 }
 
 func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {

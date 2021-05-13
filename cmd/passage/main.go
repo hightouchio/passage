@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"github.com/DataDog/datadog-go/statsd"
@@ -60,6 +61,9 @@ var (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	kingpin.Parse()
 
 	logrus.SetLevel(logrus.DebugLevel)
@@ -107,14 +111,12 @@ func main() {
 
 	if !*disableNormal {
 		logrus.Debug("starting normal tunnels")
-		server.StartNormalTunnels()
-		defer server.StopNormalTunnels()
+		server.StartNormalTunnels(ctx)
 	}
 
 	if !*disableReverse {
 		logrus.Debug("starting reverse tunnels")
-		server.StartReverseTunnels()
-		defer server.StopReverseTunnels()
+		server.StartReverseTunnels(ctx)
 	}
 
 	httpServer := &http.Server{

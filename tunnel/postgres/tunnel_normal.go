@@ -105,4 +105,5 @@ WHERE id=$1
 const listNormalTunnels = `
 SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
 FROM passage.tunnels
+WHERE enabled=true
 `
