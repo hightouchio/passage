@@ -19,8 +19,6 @@ type ReverseTunnel struct {
 	TunnelPort int       `json:"tunnelPort"`
 
 	services reverseTunnelServices
-
-	done chan bool
 }
 
 // reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
@@ -31,45 +29,70 @@ type reverseTunnelServices struct {
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
-	t.done = make(chan bool)
-	var hostSigners []ssh.Signer
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	if len(options.HostKey) != 0 {
-		hostSigner, err := gossh.ParsePrivateKey(options.HostKey)
-		if err != nil {
-			return err
-		}
-		hostSigners = []ssh.Signer{hostSigner}
+	sshd, err := t.newSSHServer(options)
+	if err != nil {
+		return errors.Wrap(err, "init sshd")
+	}
+	defer func() {
+		t.logger().Debug("start sshd")
+		sshd.Close()
+	}()
+
+	errs := make(chan error)
+	go func() {
+		t.logger().WithField("port", t.SSHDPort).Debug("start sshd")
+		errs <- sshd.ListenAndServe()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil
+
+	case err := <-errs:
+		return err
 	}
 
-	forwardHandler := &ssh.ForwardedTCPHandler{}
-	sshServer := &ssh.Server{
+}
+
+func (t ReverseTunnel) newSSHServer(options SSHOptions) (*ssh.Server, error) {
+	server := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", t.SSHDPort),
-		Handler: func(s ssh.Session) {
-			t.logger().WithField("remote_addr", s.RemoteAddr().String()).Debug("new session")
-			select {}
-		},
-		RequestHandlers: map[string]ssh.RequestHandler{
-			"tcpip-forward":        forwardHandler.HandleSSHRequest,
-			"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
-		},
 		ChannelHandlers: map[string]ssh.ChannelHandler{
 			"session":      ssh.DefaultSessionHandler,
 			"direct-tcpip": ssh.DirectTCPIPHandler,
 		},
-		HostSigners: hostSigners,
-		ReversePortForwardingCallback: func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-			return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
-		},
 	}
-	go func() {
-		<-t.done
-		t.logger().Debug("closing ssh server")
-		sshServer.Close()
-	}()
+
+	// add request handlers
+	forwardHandler := &ssh.ForwardedTCPHandler{}
+	server.RequestHandlers = map[string]ssh.RequestHandler{
+		"tcpip-forward":        forwardHandler.HandleSSHRequest,
+		"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
+	}
+
+	// request session handler
+	server.Handler = func(s ssh.Session) {
+		t.logger().WithField("remote_addr", s.RemoteAddr().String()).Debug("new session")
+		select {}
+	}
+
+	// get the server-side Host Key signers
+	hostSigners, err := options.GetHostSigners()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get host signers")
+	}
+	server.HostSigners = hostSigners
+
+	// validate port forwarding
+	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
+		return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
+	}
 
 	// integrate public key auth
-	if err := sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
+	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		log := t.logger().WithField("key_type", incomingKey.Type())
 
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
@@ -81,11 +104,10 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		log.WithField("success", ok).Debug("public key auth attempt")
 		return ok
 	})); err != nil {
-		return err
+		return nil, err
 	}
 
-	t.logger().WithField("ssh_port", t.SSHDPort).Debug("starting ssh server")
-	return sshServer.ListenAndServe()
+	return server, nil
 }
 
 // compare incoming connection key to the key authorized for this tunnel configuration
