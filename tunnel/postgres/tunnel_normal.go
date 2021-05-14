@@ -50,8 +50,8 @@ func (c Client) GetNormalTunnel(ctx context.Context, id uuid.UUID) (NormalTunnel
 	return normalTunnel, nil
 }
 
-func (c Client) ListNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
-	rows, err := c.db.QueryContext(ctx, listNormalTunnels)
+func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, error) {
+	rows, err := c.db.QueryContext(ctx, listNormalActiveTunnels)
 	if err != nil {
 		return nil, errors.Wrap(err, "query tunnel")
 	}
@@ -91,19 +91,20 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 }
 
 const createNormalTunnel = `
-INSERT INTO passage.tunnels (ssh_hostname, ssh_port, service_hostname, service_port)
+INSERT INTO passage.tunnels (ssh_host, ssh_port, service_host, service_port)
 VALUES ($1, $2, $3, $4)
 RETURNING id
 `
 
 const getNormalTunnel = `
-SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
+SELECT id, created_at, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
 FROM passage.tunnels
 WHERE id=$1
 `
 
-const listNormalTunnels = `
-SELECT id, created_at, tunnel_port, ssh_user, ssh_hostname, ssh_port, service_hostname, service_port
+const listNormalActiveTunnels = `
+SELECT id, created_at, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
 FROM passage.tunnels
 WHERE enabled=true
+;
 `

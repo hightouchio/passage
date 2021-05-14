@@ -110,10 +110,13 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	return false, nil
 }
 
-// Stop
-func (t ReverseTunnel) Stop(ctx context.Context) error {
-	close(t.done)
-	return nil
+func (t ReverseTunnel) Equal(v interface{}) bool {
+	t2, ok := v.(ReverseTunnel)
+	if !ok {
+		return false
+	}
+
+	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
 }
 
 func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {

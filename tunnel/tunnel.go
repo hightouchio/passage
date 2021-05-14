@@ -12,6 +12,8 @@ type Tunnel interface {
 
 	GetID() uuid.UUID
 	GetConnectionDetails() ConnectionDetails
+
+	Equal(interface{}) bool
 }
 
 type SSHOptions struct {
