@@ -194,6 +194,21 @@ func createNormalTunnelListFunc(postgresList func(ctx context.Context) ([]postgr
 	}
 }
 
+func (t NormalTunnel) Equal(v interface{}) bool {
+	t2, ok := v.(NormalTunnel)
+	if !ok {
+		return false
+	}
+
+	return t.ID == t2.ID &&
+		t.SSHUser == t2.SSHUser &&
+		t.SSHHost == t2.SSHHost &&
+		t.SSHPort == t2.SSHPort &&
+		t.TunnelPort == t2.TunnelPort &&
+		t.ServiceHost == t2.ServiceHost &&
+		t.ServicePort == t2.ServicePort
+}
+
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
 func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 	return postgres.NormalTunnel{

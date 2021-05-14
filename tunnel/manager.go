@@ -22,7 +22,7 @@ type Manager struct {
 	RefreshDuration         time.Duration
 	SupervisorRetryDuration time.Duration
 
-	tunnels     map[uuid.UUID]Tunnel
+	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
 
 	lock sync.Mutex
@@ -37,7 +37,7 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, super
 		RefreshDuration:         refreshDuration,
 		SupervisorRetryDuration: supervisorRetryDuration,
 
-		tunnels:     make(map[uuid.UUID]Tunnel),
+		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
 	}
 }
@@ -66,21 +66,21 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	// start new supervisors
-	for tunnelID, tunnel := range m.tunnels {
-		if _, ok := m.supervisors[tunnelID]; !ok {
-			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.SupervisorRetryDuration)
-			go supervisor.Start(ctx)
-			m.supervisors[tunnelID] = supervisor
+	// shut down supervisors or supervisors that need a restart
+	for tunnelID, supervisor := range m.supervisors {
+		tunnel, stillExists := m.tunnels[tunnelID]
+		if !stillExists || tunnel.needsRestart {
+			supervisor.Stop()
+			delete(m.supervisors, tunnelID)
 		}
 	}
 
-	// shut down old supervisors
-	for tunnelID, supervisor := range m.supervisors {
-		// if this supervisor's tunnel ID no longer appears in the list of tunnels
-		if _, ok := m.tunnels[tunnelID]; !ok {
-			supervisor.Stop()
-			delete(m.supervisors, tunnelID)
+	// start new supervisors
+	for tunnelID, tunnel := range m.tunnels {
+		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
+			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.SupervisorRetryDuration)
+			go supervisor.Start(ctx)
+			m.supervisors[tunnelID] = supervisor
 		}
 	}
 }
@@ -102,6 +102,12 @@ func (m *Manager) startDatabaseWorker(ctx context.Context) {
 	}
 }
 
+// runningTunnel is useful because it has more stateful information about the tunnel such as whether or not it needs to restart
+type runningTunnel struct {
+	Tunnel
+	needsRestart bool
+}
+
 // refreshTunnels calls out to the list func and swaps out the in-memory tunnel representation with the new data that we received
 func (m *Manager) refreshTunnels(ctx context.Context) error {
 	tunnels, err := m.ListFunc(ctx)
@@ -112,11 +118,19 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	// write new tunnels
-	m.tunnels = make(map[uuid.UUID]Tunnel)
-	for i, tunnel := range tunnels {
-		m.tunnels[tunnel.GetID()] = tunnels[i]
+	oldTunnels := m.tunnels
+	newTunnels := make(map[uuid.UUID]runningTunnel, len(tunnels))
+
+	for _, newTunnel := range tunnels {
+		oldTunnel, oldExists := oldTunnels[newTunnel.GetID()]
+
+		newTunnels[newTunnel.GetID()] = runningTunnel{
+			Tunnel:       newTunnel,
+			needsRestart: oldExists && !newTunnel.Equal(oldTunnel.Tunnel), // see if the critical fields have changed
+		}
 	}
+
+	m.tunnels = newTunnels
 
 	return nil
 }

@@ -43,8 +43,8 @@ func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunn
 	return reverseTunnel, nil
 }
 
-func (c Client) ListReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
-	rows, err := c.db.QueryContext(ctx, listReverseTunnels)
+func (c Client) ListReverseActiveTunnels(ctx context.Context) ([]ReverseTunnel, error) {
+	rows, err := c.db.QueryContext(ctx, listReverseActiveTunnels)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not list")
 	}
@@ -90,7 +90,7 @@ FROM passage.reverse_tunnels
 WHERE id=$1
 `
 
-const listReverseTunnels = `
+const listReverseActiveTunnels = `
 SELECT id, created_at, tunnel_port, sshd_port
 FROM passage.reverse_tunnels WHERE enabled=true
 `

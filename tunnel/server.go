@@ -21,12 +21,12 @@ type Server struct {
 type sqlClient interface {
 	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
-	ListReverseTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
+	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
 	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	CreateNormalTunnel(ctx context.Context, data postgres.NormalTunnel) (postgres.NormalTunnel, error)
 	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.NormalTunnel, error)
-	ListNormalTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
+	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
 	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	AddKeyAndAttachToTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyType string, contents string) error
@@ -42,11 +42,11 @@ func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) 
 		Stats: stats,
 
 		reverseTunnels: newManager(
-			createReverseTunnelListFunc(sql.ListReverseTunnels, reverseTunnelServices{sql}),
+			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
 			options, managerRefreshDuration, supervisorRetryDuration,
 		),
 		normalTunnels: newManager(
-			createNormalTunnelListFunc(sql.ListNormalTunnels, normalTunnelServices{sql}),
+			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
 			options, managerRefreshDuration, supervisorRetryDuration,
 		),
 	}
