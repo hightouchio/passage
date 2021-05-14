@@ -40,7 +40,7 @@ func (s *Supervisor) Start(ctx context.Context) {
 
 			default:
 				<-ticker.C
-				s.logger().Info("starting tunnel'")
+				s.logger().Info("starting tunnel")
 				if err := s.Tunnel.Start(ctx, s.SSHOptions); err != nil {
 					s.logger().Error(errors.Wrap(err, "start tunnel"))
 				}

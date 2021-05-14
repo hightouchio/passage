@@ -16,11 +16,6 @@ type Tunnel interface {
 	Equal(interface{}) bool
 }
 
-type SSHOptions struct {
-	BindHost string
-	HostKey  []byte
-}
-
 // ConnectionDetails describes how the SaaS will use the tunnel
 type ConnectionDetails struct {
 	Host string `json:"host"`
