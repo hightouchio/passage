@@ -15,6 +15,8 @@ github.com/alecthomas/units
 # github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 ## explicit
 github.com/anmitsu/go-shlex
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
 # github.com/gliderlabs/ssh v0.3.1
 ## explicit
 github.com/gliderlabs/ssh
@@ -36,6 +38,8 @@ github.com/lib/pq/scram
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
 # github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
@@ -43,6 +47,7 @@ github.com/sirupsen/logrus
 ## explicit
 # github.com/stretchr/testify v1.6.1
 ## explicit
+github.com/stretchr/testify/assert
 # golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
 ## explicit
 golang.org/x/crypto/blowfish
@@ -69,3 +74,4 @@ gopkg.in/alecthomas/kingpin.v2
 ## explicit
 # gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c
 ## explicit
+gopkg.in/yaml.v3

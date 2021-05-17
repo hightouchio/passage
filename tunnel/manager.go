@@ -43,17 +43,20 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, super
 }
 
 func (m *Manager) Start(ctx context.Context) {
-	go m.startDatabaseWorker(ctx)
-	go m.startSupervisorWorker(ctx)
+	go m.startWorker(ctx)
 }
 
-func (m *Manager) startSupervisorWorker(ctx context.Context) {
+func (m *Manager) startWorker(ctx context.Context) {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
+			if err := m.refreshTunnels(ctx); err != nil {
+				logrus.WithError(err).Error("could not refresh tunnels from DB")
+				continue
+			}
 			m.refreshSupervisors(ctx)
 
 		case <-ctx.Done():
@@ -81,23 +84,6 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.SupervisorRetryDuration)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
-		}
-	}
-}
-
-func (m *Manager) startDatabaseWorker(ctx context.Context) {
-	ticker := time.NewTicker(m.RefreshDuration)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := m.refreshTunnels(ctx); err != nil {
-				logrus.WithError(err).Error("could not refresh tunnels from DB")
-			}
-
-		case <-ctx.Done():
-			return
 		}
 	}
 }
