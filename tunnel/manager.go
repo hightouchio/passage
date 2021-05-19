@@ -19,8 +19,8 @@ type Manager struct {
 	// SSHOptions are the config options for the SSH server that we start up
 	SSHOptions
 
-	RefreshDuration         time.Duration
-	SupervisorRetryDuration time.Duration
+	RefreshDuration       time.Duration
+	TunnelRestartInterval time.Duration
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
@@ -29,13 +29,13 @@ type Manager struct {
 	once sync.Once
 }
 
-func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, supervisorRetryDuration time.Duration) *Manager {
+func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
 		ListFunc: listFunc,
 
-		SSHOptions:              sshOptions,
-		RefreshDuration:         refreshDuration,
-		SupervisorRetryDuration: supervisorRetryDuration,
+		SSHOptions:            sshOptions,
+		RefreshDuration:       refreshDuration,
+		TunnelRestartInterval: tunnelRestartInterval,
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
@@ -81,7 +81,7 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.SupervisorRetryDuration)
+			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.TunnelRestartInterval)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}
