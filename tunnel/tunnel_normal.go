@@ -48,6 +48,30 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// generate our authentication strategy
+	auth, err := t.generateAuthMethod(ctx)
+	if err != nil {
+		return errors.Wrap(err, "generate auth method")
+	}
+
+	// connect to remote SSH server
+	t.logger().WithFields(logrus.Fields{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
+	sshConn, err := ssh.Dial(
+		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
+		&ssh.ClientConfig{
+			User:            t.SSHUser,
+			Auth:            auth,
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "dial ssh")
+	}
+	defer func() {
+		t.logger().Debug("stop ssh connection")
+		sshConn.Close()
+	}()
+
 	// open tunnel listener
 	t.logger().WithField("tunnel_port", t.TunnelPort).Debug("start tunnel listener")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
@@ -70,7 +94,6 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 					t.logger().WithError(err).Error("tunnel connection accept error")
 					break
 				}
-
 				incomingConns <- conn
 
 			case <-ctx.Done():
@@ -82,11 +105,12 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	for {
 		select {
 		case tunnelConn := <-incomingConns:
-			if err := t.handleTunnelConnection(ctx, tunnelConn); err != nil {
-				t.logger().WithError(err).Error("tunnel error")
-				tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-			}
-			tunnelConn.Close()
+			go func() {
+				if err := t.handleTunnelConnection(ctx, sshConn, tunnelConn); err != nil {
+					t.logger().WithError(err).Error("tunnel error")
+					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+				}
+			}()
 
 		case <-ctx.Done():
 			return nil
@@ -94,30 +118,9 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 }
 
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, tunnelConn net.Conn) error {
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// generate our authentication strategy
-	auth, err := t.generateAuthMethod(ctx)
-	if err != nil {
-		return errors.Wrap(err, "generate auth method")
-	}
-
-	// connect to remote ssh server
-	t.logger().WithFields(logrus.Fields{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
-	sshConn, err := ssh.Dial(
-		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
-		&ssh.ClientConfig{
-			User:            t.SSHUser,
-			Auth:            auth,
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "dial ssh")
-	}
-	defer sshConn.Close()
 
 	// connect to upstream service
 	t.logger().WithFields(logrus.Fields{"host": t.ServiceHost, "port": t.ServicePort}).Debug("dial upstream service")
@@ -127,7 +130,6 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, tunnelConn net
 	}
 	defer serviceConn.Close()
 
-	// tunnel traffic between both connections
 	errs := make(chan error)
 	go func() {
 		g := new(errgroup.Group)

@@ -34,7 +34,7 @@ type sqlClient interface {
 }
 
 const managerRefreshDuration = 1 * time.Second
-const supervisorRetryDuration = 1 * time.Second
+const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
 func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) Server {
 	return Server{
@@ -43,11 +43,11 @@ func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) 
 
 		reverseTunnels: newManager(
 			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
-			options, managerRefreshDuration, supervisorRetryDuration,
+			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 		normalTunnels: newManager(
 			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
-			options, managerRefreshDuration, supervisorRetryDuration,
+			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 	}
 }
