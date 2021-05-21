@@ -17,8 +17,9 @@ import (
 type NormalTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
+	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int    `json:"port"`
+	TunnelPort  int    `json:"tunnelPort"`
 	SSHUser     string `json:"sshUser"`
 	SSHHost     string `json:"sshHost"`
 	SSHPort     int    `json:"sshPort"`
@@ -227,6 +228,7 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 	return NormalTunnel{
 		ID:          record.ID,
 		CreatedAt:   record.CreatedAt,
+		Enabled:     record.Enabled,
 		TunnelPort:  record.TunnelPort,
 		SSHUser:     record.SSHUser,
 		SSHHost:     record.SSHHost,

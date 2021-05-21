@@ -1,3 +1,5 @@
+- Upgrade Go 1.16
+  - Use [signal.Notify](https://millhouse.dev/posts/graceful-shutdowns-in-golang-with-signal-notify-context) 
 - Add CI
 - Should detect when a tunnel is removed
 - Encrypt private keys.

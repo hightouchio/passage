@@ -13,10 +13,12 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID         uuid.UUID `json:"id"`
-	CreatedAt  time.Time `json:"createdAt"`
-	SSHDPort   int       `json:"sshPort"`
-	TunnelPort int       `json:"tunnelPort"`
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	Enabled   bool      `json:"enabled"`
+
+	SSHDPort   int `json:"sshdPort"`
+	TunnelPort int `json:"tunnelPort"`
 
 	services reverseTunnelServices
 }
@@ -173,6 +175,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 	return ReverseTunnel{
 		ID:         record.ID,
 		CreatedAt:  record.CreatedAt,
+		Enabled:    record.Enabled,
 		TunnelPort: record.TunnelPort,
 		SSHDPort:   record.SSHDPort,
 	}

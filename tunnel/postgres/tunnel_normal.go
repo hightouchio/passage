@@ -10,16 +10,16 @@ import (
 )
 
 type NormalTunnel struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID        uuid.UUID
+	CreatedAt time.Time
+	Enabled   bool
 
-	TunnelPort int `json:"tunnelPort"`
-
-	SSHUser     string `json:"sshUser"`
-	SSHHost     string `json:"sshHost"`
-	SSHPort     int    `json:"sshPort"`
-	ServiceHost string `json:"serviceHost"`
-	ServicePort int    `json:"servicePort"`
+	TunnelPort  int
+	SSHUser     string
+	SSHHost     string
+	SSHPort     int
+	ServiceHost string
+	ServicePort int
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, tunnel NormalTunnel) (NormalTunnel, error) {
@@ -78,6 +78,7 @@ func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
 	if err := scanner.Scan(
 		&tunnel.ID,
 		&tunnel.CreatedAt,
+		&tunnel.Enabled,
 		&tunnel.TunnelPort,
 		&tunnel.SSHUser,
 		&tunnel.SSHHost,
@@ -97,13 +98,13 @@ RETURNING id
 `
 
 const getNormalTunnel = `
-SELECT id, created_at, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
+SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
 FROM passage.tunnels
 WHERE id=$1
 `
 
 const listNormalActiveTunnels = `
-SELECT id, created_at, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
+SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
 FROM passage.tunnels
 WHERE enabled=true
 ;
