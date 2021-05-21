@@ -11,6 +11,7 @@ import (
 type ReverseTunnel struct {
 	ID         uuid.UUID
 	CreatedAt  time.Time
+	Enabled    bool
 	TunnelPort int
 	SSHDPort   int
 }
@@ -71,6 +72,7 @@ func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
 	if err := scanner.Scan(
 		&reverseTunnel.ID,
 		&reverseTunnel.CreatedAt,
+		&reverseTunnel.Enabled,
 		&reverseTunnel.TunnelPort,
 		&reverseTunnel.SSHDPort,
 	); err != nil {
@@ -85,12 +87,12 @@ RETURNING id
 `
 
 const getReverseTunnel = `
-SELECT id, created_at, tunnel_port, sshd_port
+SELECT id, created_at, enabled, tunnel_port, sshd_port
 FROM passage.reverse_tunnels
 WHERE id=$1
 `
 
 const listReverseActiveTunnels = `
-SELECT id, created_at, tunnel_port, sshd_port
+SELECT id, created_at, enabled, tunnel_port, sshd_port
 FROM passage.reverse_tunnels WHERE enabled=true
 `
