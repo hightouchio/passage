@@ -1,7 +1,9 @@
-FROM golang:1.16
+FROM golang:1.16 AS builder
 ARG version
+
 WORKDIR /app
 COPY ./ ./
+
 RUN GOOS=linux CGO_ENABLED=0 go build \
   -mod vendor \
   -ldflags "-X main.version=$version" \
@@ -9,5 +11,5 @@ RUN GOOS=linux CGO_ENABLED=0 go build \
   ./cmd/passage
 
 FROM scratch
-COPY --from=0 /app/passage /bin/passage
+COPY --from=builder /app/passage /bin/passage
 ENTRYPOINT ["/bin/passage"]

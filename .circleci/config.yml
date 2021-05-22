@@ -2,25 +2,57 @@
 version: 2.1
 jobs:
   build:
-    working_directory: ~/repo
-    docker:
-      - image: circleci/golang:1.15.8
+    machine: # executor type
+      image: ubuntu-2004:202010-01 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
+      docker_layer_caching: true
+
+    environment:
+      image_base: passage
+
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - go-mod-v4-{{ checksum "go.sum" }}
+
       - run:
-          name: Install Dependencies
-          command: go mod download
-      - save_cache:
-          key: go-mod-v4-{{ checksum "go.sum" }}
-          paths:
-            - "/go/pkg/mod"
+          name: Set build environment variables
+          command: |
+            echo "export BUILD_TAG=${image_base}:sha.$(echo $CIRCLE_SHA1 | cut -c1-7)" >> $BASH_ENV
+
+      - run:
+          name: Build test image
+          command: |
+            docker build --target builder --tag build-image .
+
       - run:
           name: Run tests
           command: |
-            mkdir -p /tmp/test-reports
-            gotestsum --junitfile /tmp/test-reports/unit-tests.xml
-      - store_test_results:
-          path: /tmp/test-reports
+            docker run --rm build-image go test -v ./...
+
+      - run:
+          name: Build deployment image
+          command: |
+            docker build --tag $BUILD_TAG .
+
+      - run:
+          name: Push image
+          command: |
+            export IMAGES_TO_PUSH=($BUILD_TAG)
+
+            if [ -n "$CIRCLE_BRANCH" ]; then
+              BRANCH_TAG=${image_base}:branch.${CIRCLE_BRANCH}
+              docker tag "${BUILD_TAG}" "${BRANCH_TAG}"
+              IMAGES_TO_PUSH+=("${BRANCH_TAG}")
+            fi
+
+            if [ -n "$CIRCLE_TAG" ]; then
+              TAG_TAG=${image_base}:tag.${CIRCLE_TAG}
+              docker tag "${BUILD_TAG}" "${TAG_TAG}"
+              IMAGES_TO_PUSH+=("${TAG_TAG}")
+            fi
+
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ECR_ACCOUNT_URL
+
+            for image_id in "${IMAGES_TO_PUSH[@]}"; do
+              echo "Deploying ${image_id}"
+              docker tag $image_id $AWS_ECR_ACCOUNT_URL/$image_id
+              docker push $AWS_ECR_ACCOUNT_URL/$image_id
+            done
