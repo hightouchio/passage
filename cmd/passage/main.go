@@ -12,7 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 )

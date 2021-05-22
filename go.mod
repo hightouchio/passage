@@ -1,6 +1,6 @@
 module github.com/hightouchio/passage
 
-go 1.14
+go 1.16
 
 require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
@@ -11,7 +11,6 @@ require (
 	github.com/gliderlabs/ssh v0.3.1
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
-	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/lib/pq v1.9.0
 	github.com/pkg/errors v0.9.1
