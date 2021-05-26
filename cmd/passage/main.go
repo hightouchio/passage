@@ -13,6 +13,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -44,17 +45,11 @@ var (
 			Required().
 			String()
 
-	disableNormal = kingpin.
-			Flag("disable-normal", "").
-			Envar("DISABLE_NORMAL").
-			Default("false").
-			Bool()
-
-	disableReverse = kingpin.
-			Flag("disable-reverse", "").
-			Envar("DISABLE_REVERSE").
-			Default("false").
-			Bool()
+	runServicesStr = kingpin.
+		Flag("services", "Services to run").
+		Envar("SERVICES").
+		Default("api,normal,reverse").
+		String()
 
 	statsdAddr = kingpin.
 			Flag("statsd-addr", "").
@@ -62,11 +57,14 @@ var (
 			String()
 )
 
+func init() {
+	kingpin.Parse()
+}
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	kingpin.Parse()
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(&logrus.TextFormatter{})
 
@@ -94,7 +92,6 @@ func main() {
 	} else {
 		statsClient = &statsd.NoOpClient{}
 	}
-	router := mux.NewRouter()
 
 	// decode host key from base64
 	hostKey, err := base64.StdEncoding.DecodeString(*hostKeyEncoded)
@@ -103,30 +100,56 @@ func main() {
 		return
 	}
 
-	// configur tunnel server
+	// configure tunnel server
 	server := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
 	})
-	server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
-	if !*disableNormal {
+	if shouldRunService("normal") {
 		logrus.Debug("starting normal tunnels")
-		server.StartNormalTunnels(ctx)
+		go server.StartNormalTunnels(ctx)
 	}
 
-	if !*disableReverse {
+	if shouldRunService("reverse") {
 		logrus.Debug("starting reverse tunnels")
-		server.StartReverseTunnels(ctx)
+		go server.StartReverseTunnels(ctx)
 	}
 
-	httpServer := &http.Server{
-		Addr:    *httpAddr,
-		Handler: router,
+	if shouldRunService("api") {
+		router := mux.NewRouter()
+		server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
+		httpServer := &http.Server{Addr: *httpAddr, Handler: router}
+
+		go func() {
+			logrus.WithField("http_addr", *httpAddr).Debug("starting api server")
+			if err := httpServer.ListenAndServe(); err != nil {
+				logrus.WithError(err).Fatal("http server shutdown")
+			}
+		}()
+
+		go func() {
+			<-ctx.Done()
+			httpServer.Shutdown(context.Background())
+		}()
 	}
 
-	logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
-	if err := httpServer.ListenAndServe(); err != nil {
-		logrus.WithError(err).Fatal("http server shutdown")
+	<-ctx.Done()
+}
+
+var runServices []string
+func init() {
+	runServices = strings.Split(*runServicesStr, ",")
+	if len(runServices) == 0 || runServices[0] == "" {
+		logrus.Fatal("must specify services to run")
 	}
+}
+
+func shouldRunService(service string) bool {
+	for _, s := range runServices {
+		if s == service {
+			return true
+		}
+	}
+	return false
 }
