@@ -43,7 +43,7 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunne
 }
 
 func (m *Manager) Start(ctx context.Context) {
-	go m.startWorker(ctx)
+	m.startWorker(ctx)
 }
 
 func (m *Manager) startWorker(ctx context.Context) {
