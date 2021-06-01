@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel"
@@ -12,8 +13,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"net/http"
+	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 )
 
@@ -25,12 +26,6 @@ var (
 			Flag("http-addr", "").
 			Envar("HTTP_ADDR").
 			Default(":8080").
-			String()
-
-	postgresUri = kingpin.
-			Flag("pg-uri", "").
-			Envar("PG_URI").
-			Default("postgres://postgres:postgres@localhost:5432/passage?sslmode=disable").
 			String()
 
 	bindHost = kingpin.
@@ -46,10 +41,10 @@ var (
 			String()
 
 	runServicesStr = kingpin.
-		Flag("services", "Services to run").
-		Envar("SERVICES").
-		Default("api,normal,reverse").
-		String()
+			Flag("services", "Services to run").
+			Envar("SERVICES").
+			Default("api,normal,reverse").
+			String()
 
 	statsdAddr = kingpin.
 			Flag("statsd-addr", "").
@@ -69,7 +64,7 @@ func main() {
 	logrus.SetFormatter(&logrus.TextFormatter{})
 
 	// connect to postgres
-	db, err := sql.Open("postgres", *postgresUri)
+	db, err := sql.Open("postgres", getPostgresConnString())
 	if err != nil {
 		logrus.WithError(err).Fatal("connect to postgres")
 		return
@@ -152,4 +147,28 @@ func shouldRunService(service string) bool {
 		}
 	}
 	return false
+}
+
+func getPostgresConnString() string {
+	if os.Getenv("PG_URI") != "" {
+		return os.Getenv("PG_URI")
+	}
+
+	return formatConnString(map[string]string{
+		"host":     os.Getenv("PGHOST"),
+		"port":     os.Getenv("PGPORT"),
+		"user":     os.Getenv("PGUSER"),
+		"password": os.Getenv("PGPASSWORD"),
+		"dbname":   os.Getenv("PGDBNAME"),
+	})
+}
+
+func formatConnString(mapping map[string]string) string {
+	var r string
+	for key, val := range mapping {
+		if val != "" {
+			r = r + " " + fmt.Sprintf("%s=%s", key, val)
+		}
+	}
+	return r
 }
