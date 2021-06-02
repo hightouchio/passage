@@ -141,6 +141,7 @@ func healthcheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var runServices []string
+
 func init() {
 	runServices = strings.Split(*runServicesStr, ",")
 	if len(runServices) == 0 || runServices[0] == "" {
