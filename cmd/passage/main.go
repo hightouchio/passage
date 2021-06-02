@@ -114,6 +114,8 @@ func main() {
 
 	if shouldRunService("api") {
 		router := mux.NewRouter()
+		router.HandleFunc("/healthcheck", healthcheckHandler)
+
 		server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 		httpServer := &http.Server{Addr: *httpAddr, Handler: router}
 
@@ -131,6 +133,11 @@ func main() {
 	}
 
 	<-ctx.Done()
+}
+
+// basic healthcheck for now
+func healthcheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 var runServices []string
