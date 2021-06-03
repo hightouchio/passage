@@ -91,6 +91,12 @@ func (t ReverseTunnel) newSSHServer(options SSHOptions) (*ssh.Server, error) {
 
 	// validate port forwarding
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
+		t.logger().WithFields(logrus.Fields{
+			"request_bind_host": bindHost,
+			"request_bind_port": bindPort,
+			"config_bind_host":  options.BindHost,
+			"config_bind_port":  t.TunnelPort,
+		}).Debug("port forward request")
 		return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
 	}
 
