@@ -26,7 +26,7 @@ type ConnectionDetails struct {
 type TunnelType string
 
 type CreateNormalTunnelRequest struct {
-	NormalTunnel `json:"tunnel"`
+	NormalTunnel
 
 	CreateKeyPair bool        `json:"createKeyPair"`
 	Keys          []uuid.UUID `json:"keys"`
@@ -36,9 +36,6 @@ func (r CreateNormalTunnelRequest) Validate() error {
 	re := newRequestErrors()
 	if r.SSHHost == "" {
 		re.addError("sshHost is required")
-	}
-	if r.SSHPort == 0 {
-		re.addError("sshPort is required")
 	}
 	if r.ServiceHost == "" {
 		re.addError("serviceHost is required")
@@ -58,9 +55,16 @@ type CreateNormalTunnelResponse struct {
 	PublicKey *string `json:"publicKey,omitempty"`
 }
 
+const defaultSSHPort = 22
+
 func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelRequest) (*CreateNormalTunnelResponse, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
+	}
+
+	// set default SSH port
+	if request.SSHPort == 0 {
+		request.SSHPort = defaultSSHPort
 	}
 
 	// insert into DB
@@ -98,7 +102,7 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 }
 
 type CreateReverseTunnelRequest struct {
-	ReverseTunnel `json:"tunnel"`
+	ReverseTunnel
 
 	Keys          []uuid.UUID `json:"keys"`
 	CreateKeyPair bool        `json:"createKeyPair"`
