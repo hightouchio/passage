@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	gossh "golang.org/x/crypto/ssh"
+	"os"
 	"time"
 )
 
@@ -145,7 +146,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 
 func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {
 	return ConnectionDetails{
-		Host: "localhost", // TODO: need to get current server public IP
+		Host: os.Getenv("TUNNEL_HOST_REVERSE"), // TODO: need to get current server public IP
 		Port: t.TunnelPort,
 	}
 }

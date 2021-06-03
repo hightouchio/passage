@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"io"
 	"net"
+	"os"
 	"time"
 )
 
@@ -172,7 +173,7 @@ func (t NormalTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod,
 
 func (t NormalTunnel) GetConnectionDetails() ConnectionDetails {
 	return ConnectionDetails{
-		Host: "localhost", // TODO: need to get current server public IP
+		Host: os.Getenv("TUNNEL_HOST_NORMAL"), // TODO: need to get current server public IP
 		Port: t.TunnelPort,
 	}
 }
