@@ -56,8 +56,16 @@ func (s Server) StartNormalTunnels(ctx context.Context) {
 	s.normalTunnels.Start(ctx)
 }
 
+func (s Server) CheckNormalTunnels(ctx context.Context) error {
+	return s.normalTunnels.Check(ctx)
+}
+
 func (s Server) StartReverseTunnels(ctx context.Context) {
 	s.reverseTunnels.Start(ctx)
+}
+
+func (s Server) CheckReverseTunnels(ctx context.Context) error {
+	return s.reverseTunnels.Check(ctx)
 }
 
 type GetTunnelRequest struct {

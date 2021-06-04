@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,9 @@ type Manager struct {
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
+
+	// lastRefresh records when the last successful refresh took place. indicating that nothing is frozen
+	lastRefresh time.Time
 
 	lock sync.Mutex
 	once sync.Once
@@ -58,6 +62,7 @@ func (m *Manager) startWorker(ctx context.Context) {
 				continue
 			}
 			m.refreshSupervisors(ctx)
+			m.lastRefresh = time.Now()
 
 		case <-ctx.Done():
 			return
@@ -117,6 +122,17 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 	}
 
 	m.tunnels = newTunnels
+
+	return nil
+}
+
+// Check performs a healthcheck on the manager
+func (m *Manager) Check(ctx context.Context) error {
+	maxDelay := m.RefreshDuration * 2
+	secondsSinceLastRefresh := time.Now().Sub(m.lastRefresh)
+	if maxDelay > secondsSinceLastRefresh {
+		return fmt.Errorf("manager has not refreshed in %0.2f seconds", secondsSinceLastRefresh.Seconds())
+	}
 
 	return nil
 }

@@ -58,6 +58,6 @@ func (s *Supervisor) Stop() {
 
 func (s Supervisor) logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
-		"tunnel_id": s.Tunnel,
+		"tunnel_id": s.Tunnel.GetID().String(),
 	})
 }

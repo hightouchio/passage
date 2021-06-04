@@ -64,6 +64,8 @@ func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(&logrus.TextFormatter{})
 
+	healthchecks := newHealthcheckManager()
+
 	// connect to postgres
 	db, err := sql.Open("postgres", getPostgresConnString())
 	if err != nil {
@@ -75,6 +77,7 @@ func main() {
 		logrus.WithError(err).Fatal("ping postgres")
 		return
 	}
+	healthchecks.AddCheck("postgres", db.PingContext)
 
 	// initialize statsd client
 	var statsClient statsd.ClientInterface
@@ -96,48 +99,46 @@ func main() {
 		return
 	}
 
+	// configure web server
+	router := mux.NewRouter()
+	router.Handle("/healthcheck", healthchecks)
+
 	// configure tunnel server
-	server := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
+	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
 	})
 
 	if shouldRunService("normal") {
 		logrus.Debug("starting normal tunnels")
-		go server.StartNormalTunnels(ctx)
+		go tunnelServer.StartNormalTunnels(ctx)
+		healthchecks.AddCheck("normal_tunnels", tunnelServer.CheckNormalTunnels)
 	}
 
 	if shouldRunService("reverse") {
 		logrus.Debug("starting reverse tunnels")
-		go server.StartReverseTunnels(ctx)
+		go tunnelServer.StartReverseTunnels(ctx)
+		healthchecks.AddCheck("reverse_tunnels", tunnelServer.CheckReverseTunnels)
 	}
 
 	if shouldRunService("api") {
-		router := mux.NewRouter()
-		router.HandleFunc("/healthcheck", healthcheckHandler)
-
-		server.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
-		httpServer := &http.Server{Addr: *httpAddr, Handler: router}
-
-		go func() {
-			logrus.WithField("http_addr", *httpAddr).Debug("starting api server")
-			if err := httpServer.ListenAndServe(); err != nil {
-				logrus.WithError(err).Fatal("http server shutdown")
-			}
-		}()
-
-		go func() {
-			<-ctx.Done()
-			httpServer.Shutdown(context.Background())
-		}()
+		tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 	}
 
-	<-ctx.Done()
-}
+	// start HTTP server
+	httpServer := &http.Server{Addr: *httpAddr, Handler: router}
+	go func() {
+		logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
+		if err := httpServer.ListenAndServe(); err != nil {
+			logrus.WithError(err).Fatal("http server shutdown")
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		httpServer.Shutdown(context.Background())
+	}()
 
-// basic healthcheck for now
-func healthcheckHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+	<-ctx.Done()
 }
 
 var runServices []string
