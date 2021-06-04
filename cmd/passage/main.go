@@ -169,6 +169,7 @@ func getPostgresConnString() string {
 		"user":     os.Getenv("PGUSER"),
 		"password": os.Getenv("PGPASSWORD"),
 		"dbname":   os.Getenv("PGDBNAME"),
+		"sslmode":  os.Getenv("PGSSLMODE"),
 	})
 }
 
