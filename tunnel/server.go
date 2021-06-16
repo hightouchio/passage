@@ -2,11 +2,12 @@ package tunnel
 
 import (
 	"context"
+	"time"
+
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
-	"time"
 )
 
 type Server struct {
@@ -92,42 +93,4 @@ func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnel
 		Tunnel:            tunnel,
 		ConnectionDetails: tunnel.GetConnectionDetails(),
 	}, nil
-}
-
-type NewReverseTunnelRequest struct {
-	PublicKey string `json:"publicKey"`
-}
-type NewReverseTunnelResponse struct {
-	ID         uuid.UUID `json:"id"`
-	PrivateKey *string   `json:"privateKeyBase64,omitempty"`
-}
-
-func (s Server) NewReverseTunnel(ctx context.Context, req NewReverseTunnelRequest) (*NewReverseTunnelResponse, error) {
-	// check if we need to generate a new keypair or can just use what the customer provided
-	var keys KeyPair
-	if req.PublicKey != "" {
-		if !IsValidPublicKey(req.PublicKey) {
-			return nil, errors.New("invalid public key")
-		}
-		keys = KeyPair{PublicKey: req.PublicKey}
-	} else {
-		var err error
-		keys, err = GenerateKeyPair()
-		if err != nil {
-			return nil, errors.New("could not generate key pair")
-		}
-	}
-
-	tunnel, err := s.SQL.CreateReverseTunnel(ctx, postgres.ReverseTunnel{})
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create reverse tunnel")
-	}
-
-	response := &NewReverseTunnelResponse{ID: tunnel.ID}
-	// attach private key if necessary
-	if keys.PrivateKey != "" {
-		b64 := keys.Base64PrivateKey()
-		response.PrivateKey = &b64
-	}
-	return response, nil
 }

@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
@@ -52,7 +53,8 @@ func (r CreateNormalTunnelRequest) Validate() error {
 type CreateNormalTunnelResponse struct {
 	Tunnel `json:"tunnel"`
 
-	PublicKey *string `json:"publicKey,omitempty"`
+	PublicKey         *string `json:"publicKey,omitempty"`
+	ConnectionDetails `json:"connection,omitempty"`
 }
 
 const defaultSSHPort = 22
@@ -80,7 +82,8 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 		}
 	}
 
-	response := &CreateNormalTunnelResponse{Tunnel: normalTunnelFromSQL(record)}
+	tunnel := normalTunnelFromSQL(record)
+	response := &CreateNormalTunnelResponse{Tunnel: tunnel, ConnectionDetails: tunnel.GetConnectionDetails()}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
@@ -111,7 +114,8 @@ type CreateReverseTunnelRequest struct {
 type CreateReverseTunnelResponse struct {
 	Tunnel `json:"tunnel"`
 
-	PrivateKey *string `json:"privateKeyBase64,omitempty"`
+	PrivateKey        *string `json:"privateKeyBase64,omitempty"`
+	ConnectionDetails `json:"connection,omitempty"`
 }
 
 func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
@@ -129,7 +133,8 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 		}
 	}
 
-	response := &CreateReverseTunnelResponse{Tunnel: reverseTunnelFromSQL(record)}
+	tunnel := reverseTunnelFromSQL(record)
+	response := &CreateReverseTunnelResponse{Tunnel: tunnel, ConnectionDetails: tunnel.GetConnectionDetails()}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {

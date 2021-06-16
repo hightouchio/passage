@@ -3,16 +3,17 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
+	"os"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
-	"io"
-	"net"
-	"os"
-	"time"
 )
 
 type NormalTunnel struct {

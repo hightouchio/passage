@@ -3,14 +3,15 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	gossh "golang.org/x/crypto/ssh"
-	"os"
-	"time"
 )
 
 type ReverseTunnel struct {
