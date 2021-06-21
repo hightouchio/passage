@@ -41,7 +41,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return errors.Wrap(err, "init sshd")
 	}
 	defer func() {
-		t.logger().Debug("start sshd")
+		t.logger().Debug("stop sshd")
 		sshd.Close()
 	}()
 
