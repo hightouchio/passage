@@ -5,6 +5,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel"
@@ -12,11 +18,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"net/http"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
 var version = "dev"
@@ -123,20 +124,20 @@ func main() {
 
 	if shouldRunService("api") {
 		tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
-	}
 
-	// start HTTP server
-	httpServer := &http.Server{Addr: *httpAddr, Handler: router}
-	go func() {
-		logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
-		if err := httpServer.ListenAndServe(); err != nil {
-			logrus.WithError(err).Fatal("http server shutdown")
-		}
-	}()
-	go func() {
-		<-ctx.Done()
-		httpServer.Shutdown(context.Background())
-	}()
+		// start HTTP server
+		httpServer := &http.Server{Addr: *httpAddr, Handler: router}
+		go func() {
+			logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
+			if err := httpServer.ListenAndServe(); err != nil {
+				logrus.WithError(err).Fatal("http server shutdown")
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			httpServer.Shutdown(context.Background())
+		}()
+	}
 
 	<-ctx.Done()
 }
