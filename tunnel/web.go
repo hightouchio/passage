@@ -18,6 +18,7 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
 	tunnelRouter.HandleFunc("", s.handleWebTunnelGet).Methods(http.MethodGet)
 	tunnelRouter.HandleFunc("/check", s.handleWebTunnelCheck).Methods(http.MethodGet)
+	tunnelRouter.HandleFunc("", s.handleWebTunnelDelete).Methods(http.MethodDelete)
 }
 
 func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +68,29 @@ func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, response)
+}
+
+func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
+	logger := log.GetLogger(r.Context())
+
+	var request DeleteTunnelRequest
+	if err := getTunnelID(r, &request.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response, err := s.DeleteTunnel(r.Context(), request)
+	defer log.Request(logger, "tunnel:Delete", request, response, err)
+
+	if err != nil {
+		switch err {
+		case postgres.ErrTunnelNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
 }
 
 func (s Server) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Request) {

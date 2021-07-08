@@ -30,6 +30,8 @@ type sqlClient interface {
 	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
 	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
+	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
+
 	AddKeyAndAttachToTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyType string, contents string) error
 	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
 }
@@ -93,4 +95,23 @@ func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnel
 		Tunnel:            tunnel,
 		ConnectionDetails: tunnel.GetConnectionDetails(),
 	}, nil
+}
+
+type DeleteTunnelRequest struct {
+	ID uuid.UUID
+}
+
+type DeleteTunnelResponse struct {
+}
+
+// DeleteTunnel returns the connection details for the tunnel, so Hightouch can connect using it
+func (s Server) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*DeleteTunnelResponse, error) {
+	err := s.SQL.DeleteTunnel(ctx, req.ID)
+	if err == postgres.ErrTunnelNotFound {
+		return nil, postgres.ErrTunnelNotFound
+	} else if err != nil {
+		return nil, errors.Wrap(err, "error deleting tunnel")
+	}
+
+	return &DeleteTunnelResponse{}, nil
 }
