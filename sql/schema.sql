@@ -5,7 +5,6 @@ DROP SCHEMA IF EXISTS passage CASCADE;
 BEGIN;
 
 CREATE SCHEMA passage;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA passage;
 
 CREATE SEQUENCE IF NOT EXISTS passage.sshd_ports AS INTEGER MINVALUE 49152 MAXVALUE 57343;
 CREATE SEQUENCE IF NOT EXISTS passage.tunnel_ports AS INTEGER MINVALUE 57344 MAXVALUE 65535;
@@ -14,7 +13,7 @@ CREATE TYPE passage.key_type AS ENUM('private', 'public');
 CREATE TYPE passage.tunnel_type AS ENUM('normal', 'reverse');
 
 CREATE TABLE IF NOT EXISTS passage.tunnels(
-    id                  UUID DEFAULT passage.uuid_generate_v4(),
+    id                  UUID DEFAULT uuid_generate_v4(),
     created_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     enabled             BOOLEAN NOT NULL DEFAULT true,
 
@@ -29,7 +28,7 @@ CREATE TABLE IF NOT EXISTS passage.tunnels(
 );
 
 CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
-    id          UUID DEFAULT passage.uuid_generate_v4(),
+    id          UUID DEFAULT uuid_generate_v4(),
     created_at  TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     enabled     BOOLEAN NOT NULL DEFAULT true,
 
@@ -41,7 +40,7 @@ CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
 );
 
 CREATE TABLE IF NOT EXISTS passage.keys(
-    id UUID DEFAULT passage.uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
 
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
