@@ -15,7 +15,7 @@ import (
 
 const (
 	conncheckTimeout          = 10 * time.Second
-	conncheckDialTimeout      = 1 * time.Second
+	conncheckDialTimeout      = 5 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
 	conncheckReadMaxBytes     = 256
 
