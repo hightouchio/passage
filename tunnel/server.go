@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/stats"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
@@ -13,7 +13,7 @@ import (
 type Server struct {
 	SQL sqlClient
 
-	Stats statsd.ClientInterface
+	Stats stats.Stats
 
 	normalTunnels  *Manager
 	reverseTunnels *Manager
@@ -41,7 +41,7 @@ type sqlClient interface {
 const managerRefreshDuration = 1 * time.Second
 const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
-func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) Server {
+func NewServer(sql sqlClient, stats stats.Stats, options SSHOptions) Server {
 	return Server{
 		SQL:   sql,
 		Stats: stats,
@@ -58,18 +58,22 @@ func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) 
 }
 
 func (s Server) StartNormalTunnels(ctx context.Context) {
+	s.Stats.SimpleEvent("startNormal")
 	s.normalTunnels.Start(ctx)
 }
 
 func (s Server) CheckNormalTunnels(ctx context.Context) error {
+	s.Stats.SimpleEvent("checkNormal")
 	return s.normalTunnels.Check(ctx)
 }
 
 func (s Server) StartReverseTunnels(ctx context.Context) {
+	s.Stats.SimpleEvent("startReverse")
 	s.reverseTunnels.Start(ctx)
 }
 
 func (s Server) CheckReverseTunnels(ctx context.Context) error {
+	s.Stats.SimpleEvent("checkReverse")
 	return s.reverseTunnels.Check(ctx)
 }
 
