@@ -1,15 +1,15 @@
 package postgres
 
 import (
-	"database/sql"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
 type Client struct {
-	db *sql.DB
+	db *sqlx.DB
 }
 
-func NewClient(db *sql.DB) Client {
+func NewClient(db *sqlx.DB) Client {
 	return Client{db}
 }
 

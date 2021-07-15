@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"github.com/jmoiron/sqlx"
 	"net/http"
 	"os"
 	"os/signal"
@@ -68,7 +68,7 @@ func main() {
 	healthchecks := newHealthcheckManager()
 
 	// connect to postgres
-	db, err := sql.Open("postgres", getPostgresConnString())
+	db, err := sqlx.Connect("postgres", getPostgresConnString())
 	if err != nil {
 		logrus.WithError(err).Fatal("connect to postgres")
 		return
