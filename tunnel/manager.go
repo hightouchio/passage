@@ -99,6 +99,8 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 			m.supervisors[tunnelID] = supervisor
 		}
 	}
+
+	m.Stats.Gauge("runningCount", float64(len(m.supervisors)), nil, 1)
 }
 
 // runningTunnel is useful because it has more stateful information about the tunnel such as whether or not it needs to restart
