@@ -135,9 +135,8 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 			}()
 
 		case <-statsTicker.C:
-			n := atomic.LoadInt32(&activeConnections)
-			fmt.Printf("conns: %d\n", n)
-			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(n), nil, 1)
+			// explicit tunnelId tag here, so it appears on the metric
+			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-ctx.Done():
 			return nil
