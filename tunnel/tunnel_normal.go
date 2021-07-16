@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,6 +107,9 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		}
 	}()
 
+	statsTicker := time.NewTicker(1 * time.Second)
+	defer statsTicker.Stop()
+	var activeConnections int32
 	for {
 		select {
 		case tunnelConn := <-incomingConns:
@@ -114,6 +118,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 				stats.GetStats(ctx).SimpleEvent("accept")
 				stats.GetStats(ctx).Incr("accept", nil, 1)
 
+				atomic.AddInt32(&activeConnections, 1)
 				if err := t.handleTunnelConnection(ctx, sshConn, tunnelConn); err != nil {
 					stats.GetStats(ctx).Event(stats.Event{
 						Event: statsd.Event{
@@ -126,7 +131,11 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 				} else {
 					stats.GetStats(ctx).SimpleEvent("close")
 				}
+				atomic.AddInt32(&activeConnections, -1)
 			}()
+
+		case <-statsTicker.C:
+			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-ctx.Done():
 			return nil
