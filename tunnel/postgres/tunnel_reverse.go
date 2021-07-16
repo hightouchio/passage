@@ -10,16 +10,17 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID         uuid.UUID `db:"id"`
-	CreatedAt  time.Time `db:"created_at"`
-	Enabled    bool      `db:"enabled"`
-	TunnelPort int       `db:"tunnel_port"`
-	SSHDPort   int       `db:"sshd_port"`
+	ID         uuid.UUID    `db:"id"`
+	CreatedAt  time.Time    `db:"created_at"`
+	Enabled    bool         `db:"enabled"`
+	TunnelPort int          `db:"tunnel_port"`
+	SSHDPort   int          `db:"sshd_port"`
+	LastUsedAt sql.NullTime `db:"last_used_at"`
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {
 	var tunnel ReverseTunnel
-	query, args, err := sq.Insert("passage.reverse_tunnels").Suffix("RETURNING *").ToSql()
+	query, args, err := psql.Insert("passage.reverse_tunnels").Values(sq.Expr("DEFAULT")).Suffix("RETURNING *").ToSql()
 	if err != nil {
 		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}
@@ -32,7 +33,7 @@ func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (R
 
 func (c Client) UpdateReverseTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (ReverseTunnel, error) {
 	var tunnel ReverseTunnel
-	query, args, err := sq.Update("passage.reverse_tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	query, args, err := psql.Update("passage.reverse_tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
 	if err != nil {
 		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}

@@ -43,7 +43,7 @@ func (s Stats) WithEventTags(tags Tags) Stats {
 }
 
 type Event struct {
-	*statsd.Event
+	statsd.Event
 	Tags Tags
 }
 
@@ -57,23 +57,47 @@ func (s Stats) Gauge(name string, value float64, tags Tags, rate float64) {
 
 func (s Stats) SimpleEvent(title string) {
 	s.Event(Event{
-		Event: statsd.NewEvent(title, ""),
+		Event: *statsd.NewEvent(title, ""),
+	})
+}
+
+func (s Stats) ErrorEvent(title string, err error) {
+	s.Event(Event{
+		Event: statsd.Event{
+			Title:     title,
+			Text:      err.Error(),
+			AlertType: statsd.Error,
+		},
 	})
 }
 
 func (s Stats) Event(event Event) {
-	statsEvent := event.GetEvent(s.prefix, s.tags, s.eventTags)
-	s.client.Event(statsEvent)
-	logFields := logrus.Fields(s.tags)
-	logFields["status"] = event.AlertType
-	s.logger.WithFields(logFields).Log(logrus.InfoLevel, event.Title)
-}
+	tags := mergeTags([]Tags{s.tags, s.eventTags, event.Tags})
 
-func (e Event) GetEvent(prefix string, oldTags ...Tags) *statsd.Event {
-	realEvent := e.Event
-	realEvent.Title = joinPrefixes(prefix, e.Title)
-	realEvent.Tags = convertTags(mergeTags(append(oldTags, e.Tags)))
-	return realEvent
+	statsEvent := event.Event
+	statsEvent.Title = joinPrefixes(s.prefix, event.Title)
+	statsEvent.Tags = convertTags(tags)
+
+	// report stats event
+	s.client.Event(&statsEvent)
+
+	// prepare for logging
+	var level logrus.Level
+	switch statsEvent.AlertType {
+	case statsd.Error:
+		level = logrus.ErrorLevel
+	case statsd.Warning:
+		level = logrus.WarnLevel
+	default:
+		level = logrus.InfoLevel
+	}
+
+	fields := logrus.Fields(tags)
+	if statsEvent.AlertType == statsd.Error {
+		fields["error"] = statsEvent.Text
+	}
+
+	s.logger.WithFields(logrus.Fields(tags)).Log(level, statsEvent.Title)
 }
 
 func joinPrefixes(prefixes ...string) string {

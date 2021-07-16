@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"sync"
@@ -14,6 +15,8 @@ type ListFunc func(ctx context.Context) ([]Tunnel, error)
 
 // Manager keeps track of the tunnels that need to be loaded in from the database, and the tunnels that need to be started up with a supervisor
 type Manager struct {
+	Stats stats.Stats
+
 	// ListFunc is the function that will list all tunnels that should be running
 	ListFunc
 
@@ -33,8 +36,9 @@ type Manager struct {
 	once sync.Once
 }
 
-func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func newManager(stats stats.Stats, listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
+		Stats:    stats,
 		ListFunc: listFunc,
 
 		SSHOptions:            sshOptions,
@@ -47,6 +51,7 @@ func newManager(listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunne
 }
 
 func (m *Manager) Start(ctx context.Context) {
+	m.Stats.SimpleEvent("manager.start")
 	m.startWorker(ctx)
 }
 
@@ -86,7 +91,10 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			supervisor := NewSupervisor(tunnel, m.SSHOptions, m.TunnelRestartInterval)
+			st := m.Stats.WithEventTags(stats.Tags{"tunnelId": tunnelID.String()})
+			ctx = stats.InjectContext(ctx, st)
+
+			supervisor := NewSupervisor(tunnel, st, m.SSHOptions, m.TunnelRestartInterval)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}

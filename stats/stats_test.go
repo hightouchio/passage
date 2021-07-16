@@ -6,7 +6,7 @@ import (
 )
 
 func Test_joinTags(t *testing.T) {
-	tags := joinTags(
+	tags := convertTags(mergeTags([]Tags{
 		Tags{
 			"a": 1,
 			"b": 2,
@@ -19,7 +19,7 @@ func Test_joinTags(t *testing.T) {
 			"a": "world",
 			"d": 5.5,
 		},
-	)
+	}))
 
 	assert.Equal(t, tags, []string{"a:world", "b:3", "c:hello", "d:5.5"})
 }

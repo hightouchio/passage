@@ -25,7 +25,7 @@ type NormalTunnel struct {
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {
 	var tunnel NormalTunnel
-	query, args, err := sq.Insert("passage.tunnels").SetMap(map[string]interface{}{
+	query, args, err := psql.Insert("passage.tunnels").SetMap(map[string]interface{}{
 		"ssh_host":     input.SSHHost,
 		"ssh_port":     input.SSHPort,
 		"service_host": input.ServiceHost,
@@ -43,7 +43,7 @@ func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (Nor
 
 func (c Client) UpdateNormalTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (NormalTunnel, error) {
 	var tunnel NormalTunnel
-	query, args, err := sq.Update("passage.tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	query, args, err := psql.Update("passage.tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
 	if err != nil {
 		return NormalTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}

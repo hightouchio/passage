@@ -63,8 +63,28 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{})
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		logger.SetLevel(logrus.DebugLevel)
+	case "info":
+		logger.SetLevel(logrus.InfoLevel)
+	case "warning", "warn":
+		logger.SetLevel(logrus.WarnLevel)
+	case "error":
+		logger.SetLevel(logrus.ErrorLevel)
+	default:
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	switch os.Getenv("LOG_FORMAT") {
+	case "json":
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	default:
+		logger.SetFormatter(&logrus.TextFormatter{})
+	}
 
 	healthchecks := newHealthcheckManager()
 
@@ -94,7 +114,7 @@ func main() {
 		statsdClient = &statsd.NoOpClient{}
 	}
 	statsClient := stats.
-		New(statsdClient, logrus.New()).
+		New(statsdClient, logger).
 		WithPrefix("passage").
 		WithTags(stats.Tags{
 			"service": "passage",

@@ -2,7 +2,10 @@ package tunnel
 
 import (
 	"context"
+	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/stats"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
@@ -24,7 +27,7 @@ func Test_Manager_restartTunnel(t *testing.T) {
 		return t, nil
 	}
 
-	manager := newManager(listFunc, SSHOptions{}, 50*time.Millisecond, 50*time.Millisecond)
+	manager := newManager(stats.New(&statsd.NoOpClient{}, logrus.New()), listFunc, SSHOptions{}, 50*time.Millisecond, 50*time.Millisecond)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()

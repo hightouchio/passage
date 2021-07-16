@@ -3,6 +3,8 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"github.com/DataDog/datadog-go/statsd"
+	"github.com/hightouchio/passage/stats"
 	"io"
 	"net"
 	"os"
@@ -48,7 +50,8 @@ func isContextCancelled(ctx context.Context) bool {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
-	ctx, cancel := context.WithCancel(ctx)
+	st := stats.GetStats(ctx).WithPrefix("normal")
+	ctx, cancel := context.WithCancel(stats.InjectContext(ctx, st))
 	defer cancel()
 
 	// generate our authentication strategy
@@ -58,7 +61,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 
 	// connect to remote SSH server
-	t.logger().WithFields(logrus.Fields{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
+	st.WithEventTags(stats.Tags{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).SimpleEvent("ssh.dial")
 	sshConn, err := ssh.Dial(
 		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
@@ -71,18 +74,16 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return errors.Wrap(err, "dial ssh")
 	}
 	defer func() {
-		t.logger().Debug("stop ssh connection")
 		sshConn.Close()
 	}()
 
 	// open tunnel listener
-	t.logger().WithField("tunnel_port", t.TunnelPort).Debug("start tunnel listener")
+	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("startTunnelListener")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
 	defer func() {
-		t.logger().Debug("stop tunnel listener")
 		listener.Close()
 	}()
 
@@ -109,9 +110,21 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		select {
 		case tunnelConn := <-incomingConns:
 			go func() {
+				ctx := stats.InjectContext(ctx, st.WithEventTags(stats.Tags{"remoteAddr": tunnelConn.RemoteAddr().String()}).WithPrefix("tunnelConn"))
+				stats.GetStats(ctx).SimpleEvent("accept")
+				stats.GetStats(ctx).Incr("accept", nil, 1)
+
 				if err := t.handleTunnelConnection(ctx, sshConn, tunnelConn); err != nil {
-					t.logger().WithError(err).Error("tunnel error")
+					stats.GetStats(ctx).Event(stats.Event{
+						Event: statsd.Event{
+							Title:     "error",
+							Text:      err.Error(),
+							AlertType: statsd.Error,
+						},
+					})
 					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+				} else {
+					stats.GetStats(ctx).SimpleEvent("close")
 				}
 			}()
 
@@ -124,9 +137,10 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	st := stats.GetStats(ctx)
 
 	// connect to upstream service
-	t.logger().WithFields(logrus.Fields{"host": t.ServiceHost, "port": t.ServicePort}).Debug("dial upstream service")
+	st.WithEventTags(stats.Tags{"host": t.ServiceHost, "port": t.ServicePort}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
 		return errors.Wrap(err, "dial upstream service")
@@ -144,7 +158,6 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.C
 	// wait for an error or connection completion
 	select {
 	case <-ctx.Done():
-		t.logger().Debug("ordered shutdown")
 		return nil
 	case err := <-errs:
 		return err

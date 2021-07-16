@@ -41,39 +41,37 @@ type sqlClient interface {
 const managerRefreshDuration = 1 * time.Second
 const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
-func NewServer(sql sqlClient, stats stats.Stats, options SSHOptions) Server {
+func NewServer(sql sqlClient, st stats.Stats, options SSHOptions) Server {
 	return Server{
 		SQL:   sql,
-		Stats: stats,
+		Stats: st,
 
-		reverseTunnels: newManager(
-			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
+		normalTunnels: newManager(
+			st.WithTags(stats.Tags{"tunnelType": "normal"}),
+			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
-		normalTunnels: newManager(
-			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
+		reverseTunnels: newManager(
+			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
+			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 	}
 }
 
 func (s Server) StartNormalTunnels(ctx context.Context) {
-	s.Stats.SimpleEvent("startNormal")
 	s.normalTunnels.Start(ctx)
 }
 
-func (s Server) CheckNormalTunnels(ctx context.Context) error {
-	s.Stats.SimpleEvent("checkNormal")
-	return s.normalTunnels.Check(ctx)
-}
-
 func (s Server) StartReverseTunnels(ctx context.Context) {
-	s.Stats.SimpleEvent("startReverse")
 	s.reverseTunnels.Start(ctx)
 }
 
+func (s Server) CheckNormalTunnels(ctx context.Context) error {
+	return s.normalTunnels.Check(stats.InjectContext(ctx, s.Stats.WithTags(stats.Tags{"tunnelType": "normal"})))
+}
+
 func (s Server) CheckReverseTunnels(ctx context.Context) error {
-	s.Stats.SimpleEvent("checkReverse")
 	return s.reverseTunnels.Check(ctx)
 }
 
