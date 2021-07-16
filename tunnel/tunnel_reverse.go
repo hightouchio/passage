@@ -34,8 +34,8 @@ type reverseTunnelServices struct {
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
-	st := stats.GetStats(ctx).WithPrefix("reverse")
-	ctx, cancel := context.WithCancel(stats.InjectContext(ctx, st))
+	st := stats.GetStats(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	sshd, err := t.newSSHServer(ctx, options)

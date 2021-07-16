@@ -51,8 +51,8 @@ func isContextCancelled(ctx context.Context) bool {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
-	st := stats.GetStats(ctx).WithPrefix("normal")
-	ctx, cancel := context.WithCancel(stats.InjectContext(ctx, st))
+	st := stats.GetStats(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// generate our authentication strategy
@@ -79,7 +79,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}()
 
 	// open tunnel listener
-	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("startTunnelListener")
+	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("listener.start")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return errors.Wrap(err, "listen")
