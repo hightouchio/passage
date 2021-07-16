@@ -1,6 +1,9 @@
 # github.com/DataDog/datadog-go v4.7.0+incompatible
 ## explicit
 github.com/DataDog/datadog-go/statsd
+# github.com/Masterminds/squirrel v1.5.0
+## explicit
+github.com/Masterminds/squirrel
 # github.com/Microsoft/go-winio v0.5.0
 ## explicit
 github.com/Microsoft/go-winio
@@ -26,10 +29,16 @@ github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+# github.com/jmoiron/sqlx v1.3.4
 ## explicit
+github.com/jmoiron/sqlx
+github.com/jmoiron/sqlx/reflectx
 # github.com/kr/pretty v0.2.0
 ## explicit
+# github.com/lann/builder v0.0.0-20180802200727-47ae307949d0
+github.com/lann/builder
+# github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0
+github.com/lann/ps
 # github.com/lib/pq v1.9.0
 ## explicit
 github.com/lib/pq

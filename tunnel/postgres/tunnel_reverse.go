@@ -3,96 +3,79 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"time"
 )
 
 type ReverseTunnel struct {
-	ID         uuid.UUID
-	CreatedAt  time.Time
-	Enabled    bool
-	TunnelPort int
-	SSHDPort   int
+	ID         uuid.UUID    `db:"id"`
+	CreatedAt  time.Time    `db:"created_at"`
+	Enabled    bool         `db:"enabled"`
+	TunnelPort int          `db:"tunnel_port"`
+	SSHDPort   int          `db:"sshd_port"`
+	LastUsedAt sql.NullTime `db:"last_used_at"`
 }
 
-func (c Client) CreateReverseTunnel(ctx context.Context, tunnel ReverseTunnel) (ReverseTunnel, error) {
-	result, err := c.db.QueryContext(ctx, createReverseTunnel)
+func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {
+	var tunnel ReverseTunnel
+	query, args, err := psql.Insert("passage.reverse_tunnels").Values(sq.Expr("DEFAULT")).Suffix("RETURNING *").ToSql()
 	if err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not insert")
+		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}
-	result.Next()
-
-	var recordID uuid.UUID
-	if err = result.Scan(&recordID); err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not scan id")
+	result := c.db.QueryRowxContext(ctx, query, args...)
+	if err = result.StructScan(&tunnel); err != nil {
+		return ReverseTunnel{}, errors.Wrap(err, "could not scan")
 	}
+	return tunnel, nil
+}
 
-	return c.GetReverseTunnel(ctx, recordID)
+func (c Client) UpdateReverseTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (ReverseTunnel, error) {
+	var tunnel ReverseTunnel
+	query, args, err := psql.Update("passage.reverse_tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	if err != nil {
+		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
+	}
+	result := c.db.QueryRowxContext(ctx, query, args...)
+	if err := result.StructScan(&tunnel); err != nil {
+		return ReverseTunnel{}, errors.Wrap(err, "could not scan")
+	}
+	return tunnel, nil
 }
 
 func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunnel, error) {
-	row := c.db.QueryRowContext(ctx, getReverseTunnel, id)
+	var tunnel ReverseTunnel
+	result := c.db.QueryRowxContext(ctx, `SELECT * FROM passage.reverse_tunnels WHERE id=$1`, id)
 
-	reverseTunnel, err := scanReverseTunnel(row)
-	if err == sql.ErrNoRows {
+	switch err := result.StructScan(&tunnel); err {
+	case nil:
+		return tunnel, nil
+	case sql.ErrNoRows:
 		return ReverseTunnel{}, ErrTunnelNotFound
-	} else if err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not fetch")
+	default:
+		return ReverseTunnel{}, err
 	}
-
-	return reverseTunnel, nil
 }
 
 func (c Client) ListReverseActiveTunnels(ctx context.Context) ([]ReverseTunnel, error) {
-	rows, err := c.db.QueryContext(ctx, listReverseActiveTunnels)
+	rows, err := c.db.QueryxContext(ctx, `SELECT * FROM passage.reverse_tunnels WHERE enabled=true;`)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not list")
+		return nil, err
 	}
 	defer rows.Close()
 
-	reverseTunnels := make([]ReverseTunnel, 0)
+	tunnels := make([]ReverseTunnel, 0)
 	for rows.Next() {
-		reverseTunnel, err := scanReverseTunnel(rows)
-		if err != nil {
+		var tunnel ReverseTunnel
+		if err := rows.StructScan(&tunnel); err != nil {
 			return nil, err
 		}
-		reverseTunnels = append(reverseTunnels, reverseTunnel)
+		tunnels = append(tunnels, tunnel)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return reverseTunnels, nil
+	return tunnels, nil
 }
-
-func scanReverseTunnel(scanner scanner) (ReverseTunnel, error) {
-	var reverseTunnel ReverseTunnel
-	if err := scanner.Scan(
-		&reverseTunnel.ID,
-		&reverseTunnel.CreatedAt,
-		&reverseTunnel.Enabled,
-		&reverseTunnel.TunnelPort,
-		&reverseTunnel.SSHDPort,
-	); err != nil {
-		return ReverseTunnel{}, err
-	}
-	return reverseTunnel, nil
-}
-
-const createReverseTunnel = `
-INSERT INTO passage.reverse_tunnels DEFAULT VALUES
-RETURNING id
-`
-
-const getReverseTunnel = `
-SELECT id, created_at, enabled, tunnel_port, sshd_port
-FROM passage.reverse_tunnels
-WHERE id=$1
-`
-
-const listReverseActiveTunnels = `
-SELECT id, created_at, enabled, tunnel_port, sshd_port
-FROM passage.reverse_tunnels WHERE enabled=true
-`

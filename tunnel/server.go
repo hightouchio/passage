@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/stats"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
@@ -13,7 +13,7 @@ import (
 type Server struct {
 	SQL sqlClient
 
-	Stats statsd.ClientInterface
+	Stats stats.Stats
 
 	normalTunnels  *Manager
 	reverseTunnels *Manager
@@ -22,11 +22,13 @@ type Server struct {
 type sqlClient interface {
 	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
+	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
 	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	CreateNormalTunnel(ctx context.Context, data postgres.NormalTunnel) (postgres.NormalTunnel, error)
 	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.NormalTunnel, error)
+	UpdateNormalTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.NormalTunnel, error)
 	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
 	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
@@ -39,17 +41,19 @@ type sqlClient interface {
 const managerRefreshDuration = 1 * time.Second
 const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
-func NewServer(sql sqlClient, stats statsd.ClientInterface, options SSHOptions) Server {
+func NewServer(sql sqlClient, st stats.Stats, options SSHOptions) Server {
 	return Server{
 		SQL:   sql,
-		Stats: stats,
+		Stats: st,
 
-		reverseTunnels: newManager(
-			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
+		normalTunnels: newManager(
+			st.WithTags(stats.Tags{"tunnelType": "normal"}),
+			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
-		normalTunnels: newManager(
-			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
+		reverseTunnels: newManager(
+			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
+			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 	}
@@ -59,12 +63,12 @@ func (s Server) StartNormalTunnels(ctx context.Context) {
 	s.normalTunnels.Start(ctx)
 }
 
-func (s Server) CheckNormalTunnels(ctx context.Context) error {
-	return s.normalTunnels.Check(ctx)
-}
-
 func (s Server) StartReverseTunnels(ctx context.Context) {
 	s.reverseTunnels.Start(ctx)
+}
+
+func (s Server) CheckNormalTunnels(ctx context.Context) error {
+	return s.normalTunnels.Check(stats.InjectContext(ctx, s.Stats.WithTags(stats.Tags{"tunnelType": "normal"})))
 }
 
 func (s Server) CheckReverseTunnels(ctx context.Context) error {

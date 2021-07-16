@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
+	github.com/Masterminds/squirrel v1.5.0
 	github.com/Microsoft/go-winio v0.5.0 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20201120081800-1786d5ef83d4 // indirect
@@ -11,6 +12,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.1
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
+	github.com/jmoiron/sqlx v1.3.4
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/lib/pq v1.9.0
 	github.com/pkg/errors v0.9.1

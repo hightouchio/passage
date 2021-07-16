@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"github.com/hightouchio/passage/stats"
 	"os"
 	"time"
 
@@ -33,21 +34,21 @@ type reverseTunnelServices struct {
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
+	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshd, err := t.newSSHServer(options)
+	sshd, err := t.newSSHServer(ctx, options)
 	if err != nil {
 		return errors.Wrap(err, "init sshd")
 	}
 	defer func() {
-		t.logger().Debug("stop sshd")
 		sshd.Close()
 	}()
 
 	errs := make(chan error)
 	go func() {
-		t.logger().WithField("port", t.SSHDPort).Debug("start sshd")
+		st.WithEventTags(stats.Tags{"port": t.SSHDPort}).SimpleEvent("sshd.start")
 		errs <- sshd.ListenAndServe()
 	}()
 
@@ -58,10 +59,11 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	case err := <-errs:
 		return err
 	}
-
 }
 
-func (t ReverseTunnel) newSSHServer(options SSHOptions) (*ssh.Server, error) {
+func (t ReverseTunnel) newSSHServer(ctx context.Context, options SSHOptions) (*ssh.Server, error) {
+	st := stats.GetStats(ctx)
+
 	server := &ssh.Server{
 		Addr: fmt.Sprintf(":%d", t.SSHDPort),
 		ChannelHandlers: map[string]ssh.ChannelHandler{
@@ -79,8 +81,13 @@ func (t ReverseTunnel) newSSHServer(options SSHOptions) (*ssh.Server, error) {
 
 	// request session handler
 	server.Handler = func(s ssh.Session) {
-		t.logger().WithField("remote_addr", s.RemoteAddr().String()).Debug("new session")
-		select {}
+		st := st.WithEventTags(stats.Tags{"remoteAddr": s.RemoteAddr().String()})
+		st.SimpleEvent("session.start")
+		st.Incr("session.start", nil, 1)
+		select {
+		case <-s.Context().Done():
+			st.SimpleEvent("session.end")
+		}
 	}
 
 	// get the server-side Host Key signers
@@ -92,26 +99,36 @@ func (t ReverseTunnel) newSSHServer(options SSHOptions) (*ssh.Server, error) {
 
 	// validate port forwarding
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		t.logger().WithFields(logrus.Fields{
-			"request_bind_host": bindHost,
-			"request_bind_port": bindPort,
-			"config_bind_host":  options.BindHost,
-			"config_bind_port":  t.TunnelPort,
-		}).Debug("port forward request")
-		return bindHost == options.BindHost && int(bindPort) == t.TunnelPort
+		success := bindHost == options.BindHost && int(bindPort) == t.TunnelPort
+
+		st.WithEventTags(stats.Tags{
+			"sessionId":       ctx.SessionID(),
+			"remoteAddr":      ctx.RemoteAddr().String(),
+			"requestBindHost": bindHost,
+			"requestBindPort": bindPort,
+			"configBindHost":  options.BindHost,
+			"configBindPort":  t.TunnelPort,
+			"success":         success,
+		}).SimpleEvent("session.portForwardRequest")
+
+		return success
 	}
 
 	// integrate public key auth
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		log := t.logger().WithField("key_type", incomingKey.Type())
+		sessSt := st.WithEventTags(stats.Tags{
+			"sessionId":  ctx.SessionID(),
+			"remoteAddr": ctx.RemoteAddr().String(),
+			"keyType":    incomingKey.Type(),
+		})
 
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
-			log.WithError(err).Error("could not authorize key")
+			sessSt.ErrorEvent("session.authRequest.error", err)
 			return false
 		}
 
-		log.WithField("success", ok).Debug("public key auth attempt")
+		sessSt.WithTags(stats.Tags{"success": ok}).SimpleEvent("session.authRequest")
 		return ok
 	})); err != nil {
 		return nil, err

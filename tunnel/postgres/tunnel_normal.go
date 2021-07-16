@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"time"
 
@@ -10,102 +11,81 @@ import (
 )
 
 type NormalTunnel struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	Enabled   bool
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
+	Enabled   bool      `db:"enabled"`
 
-	TunnelPort  int
-	SSHUser     string
-	SSHHost     string
-	SSHPort     int
-	ServiceHost string
-	ServicePort int
+	TunnelPort  int    `db:"tunnel_port"`
+	SSHUser     string `db:"ssh_user"`
+	SSHHost     string `db:"ssh_host"`
+	SSHPort     int    `db:"ssh_port"`
+	ServiceHost string `db:"service_host"`
+	ServicePort int    `db:"service_port"`
 }
 
-func (c Client) CreateNormalTunnel(ctx context.Context, tunnel NormalTunnel) (NormalTunnel, error) {
-	result, err := c.db.QueryContext(ctx, createNormalTunnel, tunnel.SSHHost, tunnel.SSHPort, tunnel.ServiceHost, tunnel.ServicePort)
+func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {
+	var tunnel NormalTunnel
+	query, args, err := psql.Insert("passage.tunnels").SetMap(map[string]interface{}{
+		"ssh_host":     input.SSHHost,
+		"ssh_port":     input.SSHPort,
+		"service_host": input.ServiceHost,
+		"service_port": input.ServicePort,
+	}).Suffix("RETURNING *").ToSql()
 	if err != nil {
-		return NormalTunnel{}, errors.Wrap(err, "could not insert")
+		return NormalTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}
-	result.Next()
-
-	var recordID uuid.UUID
-	if err = result.Scan(&recordID); err != nil {
-		return NormalTunnel{}, errors.Wrap(err, "could not scan id")
+	result := c.db.QueryRowxContext(ctx, query, args...)
+	if err = result.StructScan(&tunnel); err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not scan")
 	}
+	return tunnel, nil
+}
 
-	return c.GetNormalTunnel(ctx, recordID)
+func (c Client) UpdateNormalTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (NormalTunnel, error) {
+	var tunnel NormalTunnel
+	query, args, err := psql.Update("passage.tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	if err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not generate SQL")
+	}
+	result := c.db.QueryRowxContext(ctx, query, args...)
+	if err := result.StructScan(&tunnel); err != nil {
+		return NormalTunnel{}, errors.Wrap(err, "could not scan")
+	}
+	return tunnel, nil
 }
 
 func (c Client) GetNormalTunnel(ctx context.Context, id uuid.UUID) (NormalTunnel, error) {
-	row := c.db.QueryRowContext(ctx, getNormalTunnel, id)
+	var tunnel NormalTunnel
+	result := c.db.QueryRowxContext(ctx, `SELECT * FROM passage.tunnels WHERE id=$1`, id)
 
-	normalTunnel, err := scanNormalTunnel(row)
-	if err == sql.ErrNoRows {
+	switch err := result.StructScan(&tunnel); err {
+	case nil:
+		return tunnel, nil
+	case sql.ErrNoRows:
 		return NormalTunnel{}, ErrTunnelNotFound
-	} else if err != nil {
-		return NormalTunnel{}, errors.Wrap(err, "could not fetch")
+	default:
+		return NormalTunnel{}, err
 	}
-
-	return normalTunnel, nil
 }
 
 func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, error) {
-	rows, err := c.db.QueryContext(ctx, listNormalActiveTunnels)
+	rows, err := c.db.QueryxContext(ctx, `SELECT * FROM passage.tunnels WHERE enabled=true;`)
 	if err != nil {
-		return nil, errors.Wrap(err, "query tunnel")
+		return nil, err
 	}
 	defer rows.Close()
 
 	tunnels := make([]NormalTunnel, 0)
 	for rows.Next() {
-		tunnel, err := scanNormalTunnel(rows)
-		if err != nil {
+		var tunnel NormalTunnel
+		if err := rows.StructScan(&tunnel); err != nil {
 			return nil, err
 		}
 		tunnels = append(tunnels, tunnel)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
 	return tunnels, nil
 }
-
-func scanNormalTunnel(scanner scanner) (NormalTunnel, error) {
-	var tunnel NormalTunnel
-	if err := scanner.Scan(
-		&tunnel.ID,
-		&tunnel.CreatedAt,
-		&tunnel.Enabled,
-		&tunnel.TunnelPort,
-		&tunnel.SSHUser,
-		&tunnel.SSHHost,
-		&tunnel.SSHPort,
-		&tunnel.ServiceHost,
-		&tunnel.ServicePort,
-	); err != nil {
-		return NormalTunnel{}, err
-	}
-	return tunnel, nil
-}
-
-const createNormalTunnel = `
-INSERT INTO passage.tunnels (ssh_host, ssh_port, service_host, service_port)
-VALUES ($1, $2, $3, $4)
-RETURNING id
-`
-
-const getNormalTunnel = `
-SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
-FROM passage.tunnels
-WHERE id=$1
-`
-
-const listNormalActiveTunnels = `
-SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port
-FROM passage.tunnels
-WHERE enabled=true
-;
-`
