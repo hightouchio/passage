@@ -31,11 +31,12 @@ func (s *Supervisor) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	s.Stats.SimpleEvent("supervisor.start")
+	initialRun := make(chan bool)
 	go func() {
 		ticker := time.NewTicker(s.Retry)
 		defer ticker.Stop()
 
+		s.Stats.SimpleEvent("supervisor.start")
 		for {
 			select {
 			case <-ctx.Done():
@@ -43,9 +44,12 @@ func (s *Supervisor) Start(ctx context.Context) {
 				return
 
 			default:
-				<-ticker.C
-				s.Stats.SimpleEvent("start")
+				select {
+				case <-ticker.C:
+				case <-initialRun:
+				}
 
+				s.Stats.SimpleEvent("start")
 				if err := s.Tunnel.Start(ctx, s.SSHOptions); err != nil {
 					s.Stats.ErrorEvent("error", err)
 				} else {
@@ -55,11 +59,11 @@ func (s *Supervisor) Start(ctx context.Context) {
 		}
 	}()
 
+	initialRun <- true
 	<-s.stop
 }
 
 func (s *Supervisor) Stop() {
-	s.Stats.SimpleEvent("stop")
 	close(s.stop)
 }
 

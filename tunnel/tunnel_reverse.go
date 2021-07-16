@@ -81,9 +81,13 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, options SSHOptions) (*s
 
 	// request session handler
 	server.Handler = func(s ssh.Session) {
-		st.WithEventTags(stats.Tags{"remoteAddr": s.RemoteAddr().String()}).SimpleEvent("session.new")
-		st.Incr("session.new", nil, 1)
-		select {}
+		st := st.WithEventTags(stats.Tags{"remoteAddr": s.RemoteAddr().String()})
+		st.SimpleEvent("session.start")
+		st.Incr("session.start", nil, 1)
+		select {
+		case <-s.Context().Done():
+			st.SimpleEvent("session.end")
+		}
 	}
 
 	// get the server-side Host Key signers
