@@ -21,5 +21,5 @@ func Test_joinTags(t *testing.T) {
 		},
 	}))
 
-	assert.Equal(t, tags, []string{"a:world", "b:3", "c:hello", "d:5.5"})
+	assert.ElementsMatch(t, tags, []string{"a:world", "b:3", "c:hello", "d:5.5"})
 }
