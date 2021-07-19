@@ -3,9 +3,12 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"github.com/hightouchio/passage/stats"
 	"io"
 	"net"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/sync/errgroup"
 )
 
 type NormalTunnel struct {
@@ -48,6 +50,7 @@ func isContextCancelled(ctx context.Context) bool {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
+	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -58,7 +61,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 
 	// connect to remote SSH server
-	t.logger().WithFields(logrus.Fields{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).Debug("dial ssh")
+	st.WithEventTags(stats.Tags{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).SimpleEvent("ssh.dial")
 	sshConn, err := ssh.Dial(
 		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
@@ -71,18 +74,16 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		return errors.Wrap(err, "dial ssh")
 	}
 	defer func() {
-		t.logger().Debug("stop ssh connection")
 		sshConn.Close()
 	}()
 
 	// open tunnel listener
-	t.logger().WithField("tunnel_port", t.TunnelPort).Debug("start tunnel listener")
+	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("listener.start")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
 	defer func() {
-		t.logger().Debug("stop tunnel listener")
 		listener.Close()
 	}()
 
@@ -105,15 +106,37 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		}
 	}()
 
+	statsTicker := time.NewTicker(1 * time.Second)
+	defer statsTicker.Stop()
+	var activeConnections int32
 	for {
 		select {
 		case tunnelConn := <-incomingConns:
 			go func() {
-				if err := t.handleTunnelConnection(ctx, sshConn, tunnelConn); err != nil {
-					t.logger().WithError(err).Error("tunnel error")
+				st := st.WithEventTags(stats.Tags{"remoteAddr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
+				ctx := stats.InjectContext(ctx, st)
+
+				st.SimpleEvent("accept")
+				st.Incr("accept", nil, 1)
+
+				atomic.AddInt32(&activeConnections, 1)
+				read, written, err := t.handleTunnelConnection(ctx, sshConn, tunnelConn)
+				atomic.AddInt32(&activeConnections, -1)
+				st.Gauge("bytesRead", float64(read), nil, 1)
+				st.Gauge("bytesWritten", float64(written), nil, 1)
+				st = st.WithEventTags(stats.Tags{"bytesRead": read, "bytesWritten": written})
+
+				if err != nil {
+					st.ErrorEvent("error", err)
 					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+					return
 				}
+				st.SimpleEvent("close")
 			}()
+
+		case <-statsTicker.C:
+			// explicit tunnelId tag here, so it appears on the metric
+			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-ctx.Done():
 			return nil
@@ -121,33 +144,40 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 }
 
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) error {
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	st := stats.GetStats(ctx)
 
 	// connect to upstream service
-	t.logger().WithFields(logrus.Fields{"host": t.ServiceHost, "port": t.ServicePort}).Debug("dial upstream service")
+	st.WithEventTags(stats.Tags{"host": t.ServiceHost, "port": t.ServicePort}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
-		return errors.Wrap(err, "dial upstream service")
+		return 0, 0, errors.Wrap(err, "dial upstream service")
 	}
 	defer serviceConn.Close()
 
-	errs := make(chan error)
+	copy := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64) error {
+		defer g.Done()
+		byteCount, err := io.Copy(dst, src)
+		*written = byteCount
+		return err
+	}
+
+	var read, written int64
 	go func() {
-		g := new(errgroup.Group)
-		g.Go(func() error { _, err := io.Copy(serviceConn, tunnelConn); return err })
-		g.Go(func() error { _, err := io.Copy(tunnelConn, serviceConn); return err })
-		errs <- g.Wait()
+		defer cancel()
+		g := new(sync.WaitGroup)
+		g.Add(2)
+		go copy(g, tunnelConn, serviceConn, &written)
+		go copy(g, serviceConn, tunnelConn, &read)
+		g.Wait()
 	}()
 
 	// wait for an error or connection completion
 	select {
 	case <-ctx.Done():
-		t.logger().Debug("ordered shutdown")
-		return nil
-	case err := <-errs:
-		return err
+		return read, written, nil
 	}
 }
 

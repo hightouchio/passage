@@ -1,15 +1,18 @@
 package postgres
 
 import (
-	"database/sql"
+	sq "github.com/Masterminds/squirrel"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
 type Client struct {
-	db *sql.DB
+	db *sqlx.DB
 }
 
-func NewClient(db *sql.DB) Client {
+func NewClient(db *sqlx.DB) Client {
 	return Client{db}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
+	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
@@ -33,8 +34,7 @@ type CheckTunnelResponse struct {
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
 func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
-	s.Stats.Incr("passage.tunnelStatusChecks", nil, 1)
-
+	s.Stats.SimpleEvent("statusCheck")
 	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
@@ -46,9 +46,11 @@ func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*Check
 	defer cancel()
 
 	if err := checkConnectivity(ctx, details.ConnectionDetails); err != nil {
+		s.Stats.Incr("statusCheck", stats.Tags{"success": false}, 1)
 		return &CheckTunnelResponse{Success: false, Error: err.Error()}, nil
 	}
 
+	s.Stats.Incr("statusCheck", stats.Tags{"success": true}, 1)
 	return &CheckTunnelResponse{Success: true}, nil
 }
 

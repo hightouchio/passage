@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"github.com/hightouchio/passage/stats"
+	"github.com/jmoiron/sqlx"
 	"net/http"
 	"os"
 	"os/signal"
@@ -62,13 +63,33 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{})
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		logger.SetLevel(logrus.DebugLevel)
+	case "info":
+		logger.SetLevel(logrus.InfoLevel)
+	case "warning", "warn":
+		logger.SetLevel(logrus.WarnLevel)
+	case "error":
+		logger.SetLevel(logrus.ErrorLevel)
+	default:
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	switch os.Getenv("LOG_FORMAT") {
+	case "json":
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	default:
+		logger.SetFormatter(&logrus.TextFormatter{})
+	}
 
 	healthchecks := newHealthcheckManager()
 
 	// connect to postgres
-	db, err := sql.Open("postgres", getPostgresConnString())
+	db, err := sqlx.Connect("postgres", getPostgresConnString())
 	if err != nil {
 		logrus.WithError(err).Fatal("connect to postgres")
 		return
@@ -81,17 +102,24 @@ func main() {
 	healthchecks.AddCheck("postgres", db.PingContext)
 
 	// initialize statsd client
-	var statsClient statsd.ClientInterface
+	var statsdClient statsd.ClientInterface
 	if *statsdAddr != "" {
 		var err error
-		statsClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
+		statsdClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
-			logrus.WithError(err).Fatal("error initializing stated client")
+			logrus.WithError(err).Fatal("error initializing statsd client")
 			return
 		}
 	} else {
-		statsClient = &statsd.NoOpClient{}
+		statsdClient = &statsd.NoOpClient{}
 	}
+	statsClient := stats.
+		New(statsdClient, logger).
+		WithPrefix("passage").
+		WithTags(stats.Tags{
+			"service": "passage",
+			"env":     "production",
+		})
 
 	// decode host key from base64
 	hostKey, err := base64.StdEncoding.DecodeString(*hostKeyEncoded)
@@ -105,19 +133,17 @@ func main() {
 	router.Handle("/healthcheck", healthchecks)
 
 	// configure tunnel server
-	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient, tunnel.SSHOptions{
+	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), tunnel.SSHOptions{
 		BindHost: *bindHost,
 		HostKey:  hostKey,
 	})
 
 	if shouldRunService("normal") {
-		logrus.Debug("starting normal tunnels")
 		go tunnelServer.StartNormalTunnels(ctx)
 		healthchecks.AddCheck("normal_tunnels", tunnelServer.CheckNormalTunnels)
 	}
 
 	if shouldRunService("reverse") {
-		logrus.Debug("starting reverse tunnels")
 		go tunnelServer.StartReverseTunnels(ctx)
 		healthchecks.AddCheck("reverse_tunnels", tunnelServer.CheckReverseTunnels)
 	}
