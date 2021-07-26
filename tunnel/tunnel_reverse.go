@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hightouchio/passage/stats"
+	"net"
 	"os"
 	"time"
 
@@ -168,11 +169,18 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
 }
 
-func (t ReverseTunnel) GetConnectionDetails() ConnectionDetails {
-	return ConnectionDetails{
-		Host: os.Getenv("TUNNEL_HOST_REVERSE"), // TODO: need to get current server public IP
-		Port: t.TunnelPort,
+func (t ReverseTunnel) GetConnectionDetails() (ConnectionDetails, error) {
+	_, targets, err := net.LookupSRV("passage_reverse", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
+	if err != nil {
+		return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
 	}
+	if len(targets) == 0 {
+		return ConnectionDetails{}, errors.New("no targets found")
+	}
+	return ConnectionDetails{
+		Host: targets[0].Target,
+		Port: t.TunnelPort,
+	}, nil
 }
 
 // createReverseTunnelListFunc wraps our Postgres list function in something that converts the records into ReverseTunnel structs so they can be passed to Manager which accepts the Tunnel interface

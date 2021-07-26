@@ -94,10 +94,15 @@ func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnel
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
+	connectionDetails, err := tunnel.GetConnectionDetails()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get connection details")
+	}
+
 	return &GetTunnelResponse{
 		TunnelType:        tunnelType,
 		Tunnel:            tunnel,
-		ConnectionDetails: tunnel.GetConnectionDetails(),
+		ConnectionDetails: connectionDetails,
 	}, nil
 }
 
