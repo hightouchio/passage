@@ -12,7 +12,7 @@ type Tunnel interface {
 	Start(context.Context, SSHOptions) error
 
 	GetID() uuid.UUID
-	GetConnectionDetails() ConnectionDetails
+	GetConnectionDetails() (ConnectionDetails, error)
 
 	Equal(interface{}) bool
 }
@@ -83,7 +83,11 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 	}
 
 	tunnel := normalTunnelFromSQL(record)
-	response := &CreateNormalTunnelResponse{Tunnel: tunnel, ConnectionDetails: tunnel.GetConnectionDetails()}
+	connectionDetails, err := tunnel.GetConnectionDetails()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get connection details")
+	}
+	response := &CreateNormalTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
@@ -134,7 +138,11 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 	}
 
 	tunnel := reverseTunnelFromSQL(record)
-	response := &CreateReverseTunnelResponse{Tunnel: tunnel, ConnectionDetails: tunnel.GetConnectionDetails()}
+	connectionDetails, err := tunnel.GetConnectionDetails()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get connection details")
+	}
+	response := &CreateReverseTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {

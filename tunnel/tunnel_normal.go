@@ -202,11 +202,19 @@ func (t NormalTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod,
 	return authMethods, nil
 }
 
-func (t NormalTunnel) GetConnectionDetails() ConnectionDetails {
-	return ConnectionDetails{
-		Host: os.Getenv("TUNNEL_HOST_NORMAL"), // TODO: need to get current server public IP
-		Port: t.TunnelPort,
+func (t NormalTunnel) GetConnectionDetails() (ConnectionDetails, error) {
+	_, targets, err := net.LookupSRV("passage_normal", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
+	if err != nil {
+		return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
 	}
+	if len(targets) == 0 {
+		return ConnectionDetails{}, errors.New("no targets found")
+	}
+
+	return ConnectionDetails{
+		Host: targets[0].Target,
+		Port: t.TunnelPort,
+	}, nil
 }
 
 // createNormalTunnelListFunc wraps our Postgres list function in something that converts the records into Normal structs so they can be passed to Manager which accepts the Tunnel interface

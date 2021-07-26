@@ -112,11 +112,11 @@ func (m *mockTunnel) WaitForStop(ctx context.Context) bool {
 	}
 }
 
-func (m *mockTunnel) GetConnectionDetails() ConnectionDetails {
+func (m *mockTunnel) GetConnectionDetails() (ConnectionDetails, error) {
 	return ConnectionDetails{
 		Host: "127.0.0.1",
 		Port: m.port,
-	}
+	}, nil
 }
 
 func (m *mockTunnel) Equal(i interface{}) bool {
