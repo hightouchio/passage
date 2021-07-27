@@ -61,7 +61,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 
 	// connect to remote SSH server
-	st.WithEventTags(stats.Tags{"user": t.SSHUser, "host": t.SSHHost, "port": t.SSHPort}).SimpleEvent("ssh.dial")
+	st.WithEventTags(stats.Tags{"sshUser": t.SSHUser, "sshHost": t.SSHHost, "sshPort": t.SSHPort}).SimpleEvent("ssh.dial")
 	sshConn, err := ssh.Dial(
 		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
 		&ssh.ClientConfig{
