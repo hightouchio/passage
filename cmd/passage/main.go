@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/jmoiron/sqlx"
 	"net/http"
@@ -131,6 +132,12 @@ func main() {
 	// configure web server
 	router := mux.NewRouter()
 	router.Handle("/healthcheck", healthchecks)
+	// inject global logger into request.
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(log.WithLogger(r.Context(), logger)))
+		})
+	})
 
 	// configure tunnel server
 	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), tunnel.SSHOptions{

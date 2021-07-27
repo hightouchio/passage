@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"io"
@@ -39,8 +38,6 @@ func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*Check
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
-
-	log.GetLogger(ctx).WithField("tunnel_id", req.ID).Info("checking tunnel")
 
 	ctx, cancel := context.WithTimeout(ctx, conncheckTimeout)
 	defer cancel()
