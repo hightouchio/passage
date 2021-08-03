@@ -43,7 +43,7 @@ func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (Nor
 
 func (c Client) UpdateNormalTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (NormalTunnel, error) {
 	var tunnel NormalTunnel
-	query, args, err := psql.Update("passage.tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	query, args, err := psql.Update("passage.tunnels").SetMap(filterAllowedFields(fields, normalTunnelAllowedFields)).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
 	if err != nil {
 		return NormalTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}
@@ -89,3 +89,5 @@ func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, er
 
 	return tunnels, nil
 }
+
+var normalTunnelAllowedFields = []string{"service_host", "service_port", "ssh_host", "ssh_port", "ssh_user"}

@@ -33,7 +33,7 @@ func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (R
 
 func (c Client) UpdateReverseTunnel(ctx context.Context, id uuid.UUID, fields map[string]interface{}) (ReverseTunnel, error) {
 	var tunnel ReverseTunnel
-	query, args, err := psql.Update("passage.reverse_tunnels").SetMap(fields).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
+	query, args, err := psql.Update("passage.reverse_tunnels").SetMap(filterAllowedFields(fields, []string{})).Where(sq.Eq{"id": id}).Suffix("RETURNING *").ToSql()
 	if err != nil {
 		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
 	}
