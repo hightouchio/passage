@@ -90,4 +90,4 @@ func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, er
 	return tunnels, nil
 }
 
-var normalTunnelAllowedFields = []string{"service_host", "service_port", "ssh_host", "ssh_port", "ssh_user"}
+var normalTunnelAllowedFields = []string{"enabled", "service_host", "service_port", "ssh_host", "ssh_port", "ssh_user"}

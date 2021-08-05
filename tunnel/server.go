@@ -142,6 +142,7 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 	case TunnelType("normal"):
 		var newTunnel postgres.NormalTunnel
 		newTunnel, err = s.SQL.UpdateNormalTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+			"enabled":     "enabled",
 			"serviceHost": "service_host",
 			"servicePort": "service_port",
 			"sshHost":     "ssh_host",
@@ -151,7 +152,9 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 		tunnel = normalTunnelFromSQL(newTunnel)
 	case TunnelType("reverse"):
 		var newTunnel postgres.ReverseTunnel
-		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{}))
+		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+			"enabled": "enabled",
+		}))
 		tunnel = reverseTunnelFromSQL(newTunnel)
 	default:
 		return nil, fmt.Errorf("invalid tunnel type %s", tunnelType)
