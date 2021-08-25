@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,6 +50,7 @@ func isContextCancelled(ctx context.Context) bool {
 	}
 }
 
+const sshDialTimeout = 15 * time.Second
 func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
@@ -61,9 +63,19 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 
 	// connect to remote SSH server
+	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
 	st.WithEventTags(stats.Tags{"sshUser": t.SSHUser, "sshHost": t.SSHHost, "sshPort": t.SSHPort}).SimpleEvent("ssh.dial")
-	sshConn, err := ssh.Dial(
-		"tcp", fmt.Sprintf("%s:%d", t.SSHHost, t.SSHPort),
+	sshConn, err := net.DialTimeout("tcp", addr, sshDialTimeout)
+	if err != nil {
+		return errors.Wrap(err, "dial remote")
+	}
+	defer func() {
+		sshConn.Close()
+	}()
+
+	// init ssh connection & client
+	c, chans, reqs, err := ssh.NewClientConn(
+		sshConn, addr,
 		&ssh.ClientConfig{
 			User:            t.SSHUser,
 			Auth:            auth,
@@ -71,11 +83,13 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "dial ssh")
+		return errors.Wrap(err, "init ssh")
 	}
-	defer func() {
-		sshConn.Close()
-	}()
+	sshClient := ssh.NewClient(c, chans, reqs)
+
+	// start keepalive handler
+	keepaliveErr := make(chan error)
+	go sshKeepalive(ctx, sshClient, sshConn, keepaliveErr)
 
 	// open tunnel listener
 	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("listener.start")
@@ -120,7 +134,7 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 				st.Incr("accept", nil, 1)
 
 				atomic.AddInt32(&activeConnections, 1)
-				read, written, err := t.handleTunnelConnection(ctx, sshConn, tunnelConn)
+				read, written, err := t.handleTunnelConnection(ctx, sshClient, tunnelConn)
 				atomic.AddInt32(&activeConnections, -1)
 				st.Gauge("bytesRead", float64(read), nil, 1)
 				st.Gauge("bytesWritten", float64(written), nil, 1)
@@ -137,6 +151,9 @@ func (t NormalTunnel) Start(ctx context.Context, options SSHOptions) error {
 		case <-statsTicker.C:
 			// explicit tunnelId tag here, so it appears on the metric
 			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+
+		case <-keepaliveErr:
+			return errors.Wrap(err, "keepalive")
 
 		case <-ctx.Done():
 			return nil
@@ -200,6 +217,36 @@ func (t NormalTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod,
 	}
 
 	return authMethods, nil
+}
+
+const keepaliveInterval = 1 * time.Minute
+const keepaliveTimeout = 15 * time.Second
+func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, errChan chan <- error) {
+	t := time.NewTicker(keepaliveInterval)
+	defer t.Stop()
+
+	err := func() error {
+		for {
+			deadline := time.Now().Add(keepaliveInterval).Add(keepaliveTimeout)
+			err := conn.SetDeadline(deadline)
+			if err != nil {
+				return errors.Wrap(err, "set deadline")
+			}
+			select {
+			case <-t.C:
+				_, _, err = client.SendRequest("keepalive@passage.hightouch.io", true, nil)
+				if err != nil {
+					return errors.Wrap(err, "send keep alive")
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}()
+	if err != nil {
+		errChan <- err
+	}
+	close(errChan)
 }
 
 func (t NormalTunnel) GetConnectionDetails() (ConnectionDetails, error) {
