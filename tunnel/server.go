@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"time"
 
@@ -106,12 +107,70 @@ func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnel
 	}, nil
 }
 
+type UpdateTunnelRequest struct {
+	ID           uuid.UUID              `json:"id"`
+	UpdateFields map[string]interface{} `json:"-"`
+}
+
+type UpdateTunnelResponse struct {
+	ID     uuid.UUID `json:"id"`
+	Tunnel `json:"tunnel"`
+}
+
+func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*UpdateTunnelResponse, error) {
+	// Get initial tunnel to determine type.
+	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
+	if err == postgres.ErrTunnelNotFound {
+		return nil, postgres.ErrTunnelNotFound
+	} else if err != nil {
+		return nil, errors.Wrap(err, "error fetching tunnel")
+	}
+
+	// Map the input fields.
+	mapUpdateFields := func(fields map[string]interface{}, mapping map[string]string) map[string]interface{} {
+		output := make(map[string]interface{})
+		for inputKey, outputKey := range mapping {
+			if inputVal, ok := fields[inputKey]; ok { // input has key
+				output[outputKey] = inputVal
+			}
+		}
+		return output
+	}
+
+	// Update tunnel
+	switch tunnelType {
+	case TunnelType("normal"):
+		var newTunnel postgres.NormalTunnel
+		newTunnel, err = s.SQL.UpdateNormalTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+			"enabled":     "enabled",
+			"serviceHost": "service_host",
+			"servicePort": "service_port",
+			"sshHost":     "ssh_host",
+			"sshPort":     "ssh_port",
+			"sshUser":     "ssh_user",
+		}))
+		tunnel = normalTunnelFromSQL(newTunnel)
+	case TunnelType("reverse"):
+		var newTunnel postgres.ReverseTunnel
+		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+			"enabled": "enabled",
+		}))
+		tunnel = reverseTunnelFromSQL(newTunnel)
+	default:
+		return nil, fmt.Errorf("invalid tunnel type %s", tunnelType)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "could not update postgres")
+	}
+
+	return &UpdateTunnelResponse{ID: req.ID, Tunnel: tunnel}, nil
+}
+
 type DeleteTunnelRequest struct {
 	ID uuid.UUID
 }
 
-type DeleteTunnelResponse struct {
-}
+type DeleteTunnelResponse struct{}
 
 // DeleteTunnel returns the connection details for the tunnel, so Hightouch can connect using it
 func (s Server) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*DeleteTunnelResponse, error) {

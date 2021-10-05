@@ -14,3 +14,13 @@ func (c Client) DeleteTunnel(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
+
+func filterAllowedFields(input map[string]interface{}, allowedFields []string) map[string]interface{} {
+	output := make(map[string]interface{})
+	for _, okField := range allowedFields {
+		if val, ok := input[okField]; ok {
+			output[okField] = val
+		}
+	}
+	return output
+}
