@@ -127,6 +127,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		WithTags(stats.Tags{
 			"service": "passage",
 			"env":     "production",
+			"version": version,
 		})
 
 	// decode host key from base64

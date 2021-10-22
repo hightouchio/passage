@@ -33,6 +33,7 @@ jobs:
           name: Build deployment image
           command: |
             VERSION=$(echo $CIRCLE_TAG | sed 's/^v\([0-9].*\)/\1/')
+            echo "Building version $VERSION"
             docker build --build-arg version=$VERSION --tag $image_base:latest .
 
       - run:
