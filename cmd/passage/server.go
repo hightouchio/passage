@@ -28,6 +28,7 @@ var (
 )
 
 func init() {
+	serverConfig.AutomaticEnv()
 	serverConfig.SetDefault("env", "")
 	serverConfig.BindEnv("http.listenAddr", "HTTP_ADDR")
 	serverConfig.SetDefault("http.listenAddr", ":8080")
