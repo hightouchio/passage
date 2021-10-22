@@ -29,6 +29,8 @@ github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux
+# github.com/inconshreveable/mousetrap v1.0.0
+github.com/inconshreveable/mousetrap
 # github.com/jmoiron/sqlx v1.3.4
 ## explicit
 github.com/jmoiron/sqlx
@@ -52,12 +54,17 @@ github.com/pmezard/go-difflib/difflib
 # github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
+# github.com/spf13/cobra v1.2.1
+## explicit
+github.com/spf13/cobra
+# github.com/spf13/pflag v1.0.5
+github.com/spf13/pflag
 # github.com/stretchr/objx v0.1.1
 ## explicit
-# github.com/stretchr/testify v1.6.1
+# github.com/stretchr/testify v1.7.0
 ## explicit
 github.com/stretchr/testify/assert
-# golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
+# golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 ## explicit
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/chacha20
@@ -70,8 +77,7 @@ golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 ## explicit
-golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+# golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
@@ -81,6 +87,5 @@ golang.org/x/sys/windows
 gopkg.in/alecthomas/kingpin.v2
 # gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
 ## explicit
-# gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c
-## explicit
+# gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 gopkg.in/yaml.v3

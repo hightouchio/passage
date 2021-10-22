@@ -17,11 +17,11 @@ require (
 	github.com/lib/pq v1.9.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
+	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/objx v0.1.1 // indirect
-	github.com/stretchr/testify v1.6.1
-	golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	github.com/stretchr/testify v1.7.0
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c // indirect
 )
