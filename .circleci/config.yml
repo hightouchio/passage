@@ -4,14 +4,17 @@ version: 2.1
 orbs:
   gh: circleci/github-cli@1.0
 
-jobs:
-  build-master:
+executors:
+  docker-publisher:
+    environment:
+      image_base: andrewpage/passage
     docker:
       - image: circleci/buildpack-deps:stretch
 
-    environment:
-      image_base: andrewpage/passage
 
+jobs:
+  build-master:
+    executor: docker-publisher
     steps:
       - checkout
       - setup_remote_docker
@@ -32,11 +35,7 @@ jobs:
             docker build --tag $image_base:latest .
 
   publish-latest:
-    docker:
-      - image: circleci/buildpack-deps:stretch
-
-    environment:
-      image_base: andrewpage/passage
+    executor: docker-publisher
 
     steps:
       - checkout
@@ -46,7 +45,6 @@ jobs:
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push $image_base:latest
-
 
 workflows:
   version: 2
