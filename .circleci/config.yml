@@ -48,9 +48,9 @@ jobs:
 
     steps:
       - checkout
-      - setup_remote_docker
       - attach_workspace:
           at: /tmp/workspace
+      - setup_remote_docker
 
       - run:
           name: Load archived Docker image
@@ -61,6 +61,27 @@ jobs:
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push $image_base:latest
+
+  publish-tag:
+    executor: docker-publisher
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+
+      - run:
+          name: Publish Docker Image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            IMAGE_TAG=${CIRCLE_TAG/v/''}
+            docker tag $image_base:latest $image_base:$IMAGE_TAG
+            docker push $image_base:latest
+            docker push $image_base:$IMAGE_TAG
+
 
 workflows:
   version: 2
@@ -77,3 +98,20 @@ workflows:
           filters:
             branches:
               only: cobra
+
+  build-tags:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish-tag:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
