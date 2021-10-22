@@ -32,7 +32,8 @@ jobs:
       - run:
           name: Build deployment image
           command: |
-            docker build --tag $image_base:latest .
+            VERSION=${CIRCLE_TAG/^v\d\S+$/''}
+            docker build --build-arg version=$VERSION --tag $image_base:latest .
 
       - run:
           name: Archive Docker image
@@ -77,10 +78,9 @@ jobs:
           name: Publish Docker Image to Docker Hub
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            IMAGE_TAG=${CIRCLE_TAG/v/''}
-            docker tag $image_base:latest $image_base:$IMAGE_TAG
+            docker tag $image_base:latest $image_base:$CIRCLE_TAG
             docker push $image_base:latest
-            docker push $image_base:$IMAGE_TAG
+            docker push $image_base:$CIRCLE_TAG
 
 
 workflows:
