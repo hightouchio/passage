@@ -15,9 +15,7 @@ var (
 		Short: "ssh tunnel management server",
 		Long: `
 passage is a utility for programmatically creating and managing SSH tunnels.
-The chief use case is to serve as a secure bridge between SaaS providers and resources that need to be accessed within customer environments.
 `,
-		Run: runServer,
 	}
 )
 
@@ -29,6 +27,8 @@ func init() {
 			fmt.Printf("%s v%s\n", name, version)
 		},
 	})
+
+	rootCmd.AddCommand(serverCommand)
 }
 
 func main() {

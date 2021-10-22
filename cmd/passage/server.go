@@ -7,6 +7,7 @@ import (
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"net/http"
 	"os"
@@ -24,36 +25,52 @@ import (
 
 var (
 	httpAddr = kingpin.
-			Flag("http-addr", "").
-			Envar("HTTP_ADDR").
-			Default(":8080").
-			String()
+		Flag("http-addr", "").
+		Envar("HTTP_ADDR").
+		Default(":8080").
+		String()
 
 	bindHost = kingpin.
-			Flag("bind-host", "").
-			Envar("BIND_HOST").
-			Default("localhost").
-			String()
+		Flag("bind-host", "").
+		Envar("BIND_HOST").
+		Default("localhost").
+		String()
 
 	hostKeyEncoded = kingpin.
-			Flag("host-key", "Base64 encoded").
-			Envar("HOST_KEY").
-			Required().
-			String()
-
-	runServicesStr = kingpin.
-			Flag("services", "Services to run").
-			Envar("SERVICES").
-			Default("api,normal,reverse").
-			String()
+		Flag("host-key", "Base64 encoded").
+		Envar("HOST_KEY").
+		Required().
+		String()
 
 	statsdAddr = kingpin.
-			Flag("statsd-addr", "").
-			Envar("STATSD_ADDR").
-			String()
+		Flag("statsd-addr", "").
+		Envar("STATSD_ADDR").
+		String()
 )
 
-func runServer(cmd *cobra.Command, args []string) {
+var (
+	serverCommand = &cobra.Command{
+		Use:   "server",
+		Short: "run the passage server",
+		RunE:   runServer,
+	}
+
+	runAPIServer bool
+	runNormalTunnelServer bool
+	runReverseTunnelServer bool
+)
+
+func init() {
+	serverCommand.Flags().BoolVar(&runAPIServer, "api", false, "run API server")
+	serverCommand.Flags().BoolVar(&runNormalTunnelServer, "normal", false, "run normal tunnel server")
+	serverCommand.Flags().BoolVar(&runReverseTunnelServer,  "reverse", false, "run reverse tunnel server")
+}
+
+func runServer(cmd *cobra.Command, args []string) error {
+	if !runAPIServer && !runNormalTunnelServer && !runReverseTunnelServer {
+		return errors.New("must choose at least one server to run")
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -85,13 +102,11 @@ func runServer(cmd *cobra.Command, args []string) {
 	// connect to postgres
 	db, err := sqlx.Connect("postgres", getPostgresConnString())
 	if err != nil {
-		logrus.WithError(err).Fatal("connect to postgres")
-		return
+		return errors.Wrap(err, "could not connect to postgres")
 	}
 	defer db.Close()
 	if err = db.Ping(); err != nil {
-		logrus.WithError(err).Fatal("ping postgres")
-		return
+		return errors.Wrap(err, "could not ping postgres")
 	}
 	healthchecks.AddCheck("postgres", db.PingContext)
 
@@ -101,8 +116,7 @@ func runServer(cmd *cobra.Command, args []string) {
 		var err error
 		statsdClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
-			logrus.WithError(err).Fatal("error initializing statsd client")
-			return
+			return errors.Wrap(err, "could not initialize statsd client")
 		}
 	} else {
 		statsdClient = &statsd.NoOpClient{}
@@ -118,8 +132,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	// decode host key from base64
 	hostKey, err := base64.StdEncoding.DecodeString(*hostKeyEncoded)
 	if err != nil {
-		logrus.WithError(err).Fatal("could not decode host key")
-		return
+		return errors.Wrap(err, "could not decode host key")
 	}
 
 	// configure web server
@@ -138,17 +151,17 @@ func runServer(cmd *cobra.Command, args []string) {
 		HostKey:  hostKey,
 	})
 
-	if shouldRunService("normal") {
+	if runNormalTunnelServer {
 		go tunnelServer.StartNormalTunnels(ctx)
 		healthchecks.AddCheck("normal_tunnels", tunnelServer.CheckNormalTunnels)
 	}
 
-	if shouldRunService("reverse") {
+	if runReverseTunnelServer {
 		go tunnelServer.StartReverseTunnels(ctx)
 		healthchecks.AddCheck("reverse_tunnels", tunnelServer.CheckReverseTunnels)
 	}
 
-	if shouldRunService("api") {
+	if runAPIServer {
 		tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
 		// start HTTP server
@@ -166,24 +179,7 @@ func runServer(cmd *cobra.Command, args []string) {
 	}
 
 	<-ctx.Done()
-}
-
-var runServices []string
-
-func init() {
-	//runServices = strings.Split(*runServicesStr, ",")
-	//if len(runServices) == 0 || runServices[0] == "" {
-	//	logrus.Fatal("must specify services to run")
-	//}
-}
-
-func shouldRunService(service string) bool {
-	for _, s := range runServices {
-		if s == service {
-			return true
-		}
-	}
-	return false
+	return nil
 }
 
 func getPostgresConnString() string {
