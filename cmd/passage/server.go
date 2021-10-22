@@ -20,35 +20,24 @@ import (
 	"github.com/hightouchio/passage/tunnel/postgres"
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/spf13/viper"
 )
 
 var (
-	env = kingpin.Flag("env", "environment name").Envar("ENV").Default("").String()
-
-	httpAddr = kingpin.
-		Flag("http-addr", "").
-		Envar("HTTP_ADDR").
-		Default(":8080").
-		String()
-
-	bindHost = kingpin.
-		Flag("bind-host", "").
-		Envar("BIND_HOST").
-		Default("localhost").
-		String()
-
-	hostKeyEncoded = kingpin.
-		Flag("host-key", "Base64 encoded").
-		Envar("HOST_KEY").
-		Required().
-		String()
-
-	statsdAddr = kingpin.
-		Flag("statsd-addr", "").
-		Envar("STATSD_ADDR").
-		String()
+	serverConfig = viper.New()
 )
+
+func init() {
+	serverConfig.SetDefault("env", "")
+	serverConfig.BindEnv("http.listenAddr", "HTTP_ADDR")
+	serverConfig.SetDefault("http.listenAddr", ":8080")
+
+	serverConfig.BindEnv("tunnel.reverse.bindHost", "BIND_HOST")
+	serverConfig.SetDefault("tunnel.reverse.bindHost", "localhost")
+
+	serverConfig.BindEnv("tunnel.reverse.hostKey", "HOST_KEY")
+	serverConfig.BindEnv("statsd.addr", "STATSD_ADDR")
+}
 
 var (
 	serverCommand = &cobra.Command{
@@ -114,9 +103,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// initialize statsd client
 	var statsdClient statsd.ClientInterface
-	if *statsdAddr != "" {
+	if statsdAddr := serverConfig.GetString("statsd.addr"); statsdAddr != "" {
 		var err error
-		statsdClient, err = statsd.New(*statsdAddr, statsd.WithMaxBytesPerPayload(4096))
+		statsdClient, err = statsd.New(statsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
 			return errors.Wrap(err, "could not initialize statsd client")
 		}
@@ -128,12 +117,15 @@ func runServer(cmd *cobra.Command, args []string) error {
 		WithPrefix("passage").
 		WithTags(stats.Tags{
 			"service": "passage",
-			"env":     *env,
+			"env":     serverConfig.GetString("env"),
 			"version": version,
 		})
 
 	// decode host key from base64
-	hostKey, err := base64.StdEncoding.DecodeString(*hostKeyEncoded)
+	if !serverConfig.IsSet("tunnel.reverse.hostKey") {
+		return errors.New("must set tunnel.reverse.hostKey")
+	}
+	hostKey, err := base64.StdEncoding.DecodeString(serverConfig.GetString("tunnel.reverse.hostKey"))
 	if err != nil {
 		return errors.Wrap(err, "could not decode host key")
 	}
@@ -150,7 +142,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// configure tunnel server
 	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), tunnel.SSHOptions{
-		BindHost: *bindHost,
+		BindHost: serverConfig.GetString("tunnel.reverse.bindHost"),
 		HostKey:  hostKey,
 	})
 
@@ -165,12 +157,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	if runAPIServer {
+		httpAddr := serverConfig.GetString("http.listenAddr")
+		if httpAddr == "" {
+			return errors.New("must provide http.listenAddr")
+		}
 		tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
 		// start HTTP server
-		httpServer := &http.Server{Addr: *httpAddr, Handler: router}
+		httpServer := &http.Server{Addr: httpAddr, Handler: router}
 		go func() {
-			logrus.WithField("http_addr", *httpAddr).Debug("starting http server")
+			logrus.WithField("http_addr", httpAddr).Debug("starting http server")
 			if err := httpServer.ListenAndServe(); err != nil {
 				logrus.WithError(err).Fatal("http server shutdown")
 			}
