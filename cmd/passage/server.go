@@ -24,6 +24,8 @@ import (
 )
 
 var (
+	env = kingpin.Flag("env", "environment name").Envar("ENV").Default("").String()
+
 	httpAddr = kingpin.
 		Flag("http-addr", "").
 		Envar("HTTP_ADDR").
@@ -126,7 +128,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		WithPrefix("passage").
 		WithTags(stats.Tags{
 			"service": "passage",
-			"env":     "production",
+			"env":     *env,
 			"version": version,
 		})
 
