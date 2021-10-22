@@ -13,7 +13,7 @@ executors:
 
 
 jobs:
-  build-master:
+  build:
     executor: docker-publisher
     steps:
       - checkout
@@ -87,14 +87,14 @@ workflows:
   version: 2
   build-master:
     jobs:
-      - build-master:
+      - build:
           filters:
             branches:
               only: cobra
 
       - publish-latest:
           requires:
-            - build-master
+            - build
           filters:
             branches:
               only: cobra
