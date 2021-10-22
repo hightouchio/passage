@@ -91,14 +91,21 @@ workflows:
       - build:
           filters:
             branches:
-              only: cobra
+              only: master
 
       - publish-latest:
           requires:
             - build
           filters:
             branches:
-              only: cobra
+              only: master
+
+  build-branch:
+    jobs:
+      - build:
+          filters:
+            branches:
+              ignore: master
 
   build-tags:
     jobs:
