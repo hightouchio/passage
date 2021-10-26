@@ -1,7 +1,11 @@
 # passage
 [![CircleCI](https://circleci.com/gh/hightouchio/passage/tree/master.svg?style=svg)](https://circleci.com/gh/hightouchio/passage/tree/master)
 
-passage is a utility for programmatically creating and managing SSH tunnels. The chief use case is to serve as a secure bridge between SaaS providers and resources that need to be accessed within customer environments.
+passage is a utility for programmatically creating and managing SSH tunnels, both standard and reverse. The chief use case is to serve as a secure bridge between SaaS providers and resources that need to be accessed within customer environments. Passage acts as both a management API, as well as a daemon to manage the tunnels themselves.
+
+With **Standard** tunnels, Passage acts as a SSH client, opening a SSH connection to an internet-facing remote bastion server, then from there opening an upstream connection to a private service within the remote network.
+
+With **Reverse** tunnels, Passage acts as a SSH server, allowing remote clients to forward a local port from a hidden server to a dedicated port on the Passage instance, therefore achieving a tunnel without requiring a remote bastion server to be exposed to the internet.
 
 ## Usage
 Passage is primarily started through the subcommand `passage server`.
