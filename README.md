@@ -1,4 +1,5 @@
 # passage
+[![CircleCI](https://circleci.com/gh/hightouchio/passage/tree/master.svg?style=svg)](https://circleci.com/gh/hightouchio/passage/tree/master)
 
 passage is a utility for programmatically creating and managing SSH tunnels. The chief use case is to serve as a secure bridge between SaaS providers and resources that need to be accessed within customer environments.
 
