@@ -49,7 +49,8 @@ services:
 
   # remote_service represents a hidden service running in a remote network.
   remote_service:
-    image: ubuntu:21.10
+    image: hashicorp/http-echo
+    command: -text "You're talking to the remote service!"
     networks:
       - hidden
 
