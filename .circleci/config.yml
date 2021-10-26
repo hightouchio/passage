@@ -91,7 +91,7 @@ jobs:
 
       - run:
           name: Start Docker Compose environment
-          command: docker compose -f test/docker-compose.yml up -d
+          command: docker-compose -f test/docker-compose.yml up -d
 
       - run:
           name: Run test
@@ -99,7 +99,7 @@ jobs:
 
       - run:
           name: Start Docker Compose environment
-          command: docker compose -f test/docker-compose.yml down
+          command: docker-compose -f test/docker-compose.yml down
 
 workflows:
   version: 2
