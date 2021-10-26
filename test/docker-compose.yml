@@ -41,7 +41,7 @@ services:
 
   # remote_ssh represents a public-facing Bastion server running in a remote network.
   remote_bastion:
-    image: lscr.io/linuxserver/openssh-server
+    build: ./bastion
     environment:
       USER_NAME: hightouch
     volumes:

@@ -64,3 +64,7 @@ until check_tunnel(tunnel_id) do
     sleep 2
 end
 puts "Tunnel online."
+
+# Get data from tunnel.
+response = HTTParty.get("http://#{connection['host']}:#{connection['port']}/")
+puts "Response: #{response.body}"
