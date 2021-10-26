@@ -95,7 +95,7 @@ jobs:
 
       - run:
           name: Run test
-          command: bash test/test.sh
+          command: ./test/test.sh
 
       - run:
           name: Start Docker Compose environment
