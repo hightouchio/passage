@@ -26,14 +26,14 @@ type ConnectionDetails struct {
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
 
-type CreateNormalTunnelRequest struct {
-	NormalTunnel
+type CreateStandardTunnelRequest struct {
+	StandardTunnel
 
 	CreateKeyPair bool        `json:"createKeyPair"`
 	Keys          []uuid.UUID `json:"keys"`
 }
 
-func (r CreateNormalTunnelRequest) Validate() error {
+func (r CreateStandardTunnelRequest) Validate() error {
 	re := newRequestErrors()
 	if r.SSHHost == "" {
 		re.addError("sshHost is required")
@@ -50,7 +50,7 @@ func (r CreateNormalTunnelRequest) Validate() error {
 	return re
 }
 
-type CreateNormalTunnelResponse struct {
+type CreateStandardTunnelResponse struct {
 	Tunnel `json:"tunnel"`
 
 	PublicKey         *string `json:"publicKey,omitempty"`
@@ -59,7 +59,7 @@ type CreateNormalTunnelResponse struct {
 
 const defaultSSHPort = 22
 
-func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelRequest) (*CreateNormalTunnelResponse, error) {
+func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandardTunnelRequest) (*CreateStandardTunnelResponse, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
@@ -70,24 +70,24 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 	}
 
 	// insert into DB
-	record, err := s.SQL.CreateNormalTunnel(ctx, sqlFromNormalTunnel(request.NormalTunnel))
+	record, err := s.SQL.CreateStandardTunnel(ctx, sqlFromStandardTunnel(request.StandardTunnel))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not insert")
 	}
 
 	// add keys
 	for _, keyID := range request.Keys {
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "normal", record.ID, keyID); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "standard", record.ID, keyID); err != nil {
 			return nil, errors.Wrapf(err, "could not add key %d", keyID)
 		}
 	}
 
-	tunnel := normalTunnelFromSQL(record)
+	tunnel := standardTunnelFromSQL(record)
 	connectionDetails, err := tunnel.GetConnectionDetails()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
-	response := &CreateNormalTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
+	response := &CreateStandardTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
@@ -97,7 +97,7 @@ func (s Server) CreateNormalTunnel(ctx context.Context, request CreateNormalTunn
 		}
 
 		// add to DB and attach to tunnel
-		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "normal", record.ID, "private", keyPair.PrivateKey); err != nil {
+		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "standard", record.ID, "private", keyPair.PrivateKey); err != nil {
 			return nil, errors.Wrap(err, "could not add private key to tunnel")
 		}
 
@@ -175,10 +175,10 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 		return nil, "", errors.Wrap(err, "could not fetch from database")
 	}
 
-	// normal tunnel next
-	normalTunnel, err := sql.GetNormalTunnel(ctx, id)
+	// standard tunnel next
+	standardTunnel, err := sql.GetStandardTunnel(ctx, id)
 	if err == nil {
-		return normalTunnelFromSQL(normalTunnel), "normal", nil
+		return standardTunnelFromSQL(standardTunnel), "standard", nil
 	} else if err != postgres.ErrTunnelNotFound {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")

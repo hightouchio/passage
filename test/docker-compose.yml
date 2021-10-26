@@ -3,13 +3,13 @@ services:
   # passage is the tunnel service
   passage:
     build: ../
-    command: server --api --normal --reverse
+    command: server
     environment:
       PASSAGE_ENV: test
       PASSAGE_LOG_LEVEL: debug
       PASSAGE_API_ENABLED: 'true'
       PASSAGE_API_LISTEN_ADDR: 0.0.0.0
-      PASSAGE_TUNNEL_NORMAL_ENABLED: 'true'
+      PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
 
       PGHOST: postgres
       PGPORT: 5432

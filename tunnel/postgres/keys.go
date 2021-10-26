@@ -13,15 +13,15 @@ type Key struct {
 	Contents string
 }
 
-const getNormalTunnelPrivateKeys = `
+const getStandardTunnelPrivateKeys = `
 SELECT passage.keys.id, passage.keys.key_type, passage.keys.contents FROM passage.keys
 JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
-JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type='normal'
+JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type IN ('standard', 'normal')
 WHERE passage.keys.key_type='private' AND passage.tunnels.id=$1;
 `
 
-func (c Client) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
-	return c.getKeysForTunnel(ctx, getNormalTunnelPrivateKeys, tunnelID)
+func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
+	return c.getKeysForTunnel(ctx, getStandardTunnelPrivateKeys, tunnelID)
 }
 
 const getReverseTunnelAuthorizedKeys = `

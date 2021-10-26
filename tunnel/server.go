@@ -16,8 +16,8 @@ type Server struct {
 
 	Stats stats.Stats
 
-	normalTunnels  *Manager
-	reverseTunnels *Manager
+	standardTunnels *Manager
+	reverseTunnels  *Manager
 }
 
 type sqlClient interface {
@@ -27,11 +27,11 @@ type sqlClient interface {
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
 	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
-	CreateNormalTunnel(ctx context.Context, data postgres.NormalTunnel) (postgres.NormalTunnel, error)
-	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.NormalTunnel, error)
-	UpdateNormalTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.NormalTunnel, error)
-	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
-	GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+	CreateStandardTunnel(ctx context.Context, data postgres.StandardTunnel) (postgres.StandardTunnel, error)
+	GetStandardTunnel(ctx context.Context, id uuid.UUID) (postgres.StandardTunnel, error)
+	UpdateStandardTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.StandardTunnel, error)
+	ListStandardActiveTunnels(ctx context.Context) ([]postgres.StandardTunnel, error)
+	GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
 
@@ -47,9 +47,9 @@ func NewServer(sql sqlClient, st stats.Stats, options SSHOptions) Server {
 		SQL:   sql,
 		Stats: st,
 
-		normalTunnels: newManager(
-			st.WithTags(stats.Tags{"tunnelType": "normal"}),
-			createNormalTunnelListFunc(sql.ListNormalActiveTunnels, normalTunnelServices{sql}),
+		standardTunnels: newManager(
+			st.WithTags(stats.Tags{"tunnelType": "standard"}),
+			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{sql}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 		reverseTunnels: newManager(
@@ -60,16 +60,16 @@ func NewServer(sql sqlClient, st stats.Stats, options SSHOptions) Server {
 	}
 }
 
-func (s Server) StartNormalTunnels(ctx context.Context) {
-	s.normalTunnels.Start(ctx)
+func (s Server) StartStandardTunnels(ctx context.Context) {
+	s.standardTunnels.Start(ctx)
 }
 
 func (s Server) StartReverseTunnels(ctx context.Context) {
 	s.reverseTunnels.Start(ctx)
 }
 
-func (s Server) CheckNormalTunnels(ctx context.Context) error {
-	return s.normalTunnels.Check(stats.InjectContext(ctx, s.Stats.WithTags(stats.Tags{"tunnelType": "normal"})))
+func (s Server) CheckStandardTunnels(ctx context.Context) error {
+	return s.standardTunnels.Check(stats.InjectContext(ctx, s.Stats.WithTags(stats.Tags{"tunnelType": "standard"})))
 }
 
 func (s Server) CheckReverseTunnels(ctx context.Context) error {
@@ -139,9 +139,9 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 
 	// Update tunnel
 	switch tunnelType {
-	case TunnelType("normal"):
-		var newTunnel postgres.NormalTunnel
-		newTunnel, err = s.SQL.UpdateNormalTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+	case TunnelType("standard"):
+		var newTunnel postgres.StandardTunnel
+		newTunnel, err = s.SQL.UpdateStandardTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled":     "enabled",
 			"serviceHost": "service_host",
 			"servicePort": "service_port",
@@ -149,7 +149,7 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 			"sshPort":     "ssh_port",
 			"sshUser":     "ssh_user",
 		}))
-		tunnel = normalTunnelFromSQL(newTunnel)
+		tunnel = standardTunnelFromSQL(newTunnel)
 	case TunnelType("reverse"):
 		var newTunnel postgres.ReverseTunnel
 		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{

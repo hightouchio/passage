@@ -28,7 +28,7 @@ var (
 	viperConfig   = viper.New()
 	serverCommand = &cobra.Command{
 		Use:   "server",
-		Short: "run the passage server",
+		Short: "passage server is the entrypoint for the HTTP API, the standard tunnel server, and the reverse tunnel server.",
 		RunE:  runServer,
 	}
 )
@@ -49,15 +49,15 @@ func init() {
 	viperConfig.SetDefault("tunnel.reverse.enabled", false)
 	viperConfig.SetDefault("tunnel.reverse.ssh.bindHost", "localhost")
 
-	viperConfig.SetDefault("tunnel.normal.enabled", false)
+	viperConfig.SetDefault("tunnel.standard.enabled", false)
 }
 
 func init() {
 	serverCommand.Flags().Bool("api", false, "run API server")
 	viperConfig.BindPFlag("api.enabled", serverCommand.Flags().Lookup("api"))
 
-	serverCommand.Flags().Bool("normal", false, "run normal tunnel server")
-	viperConfig.BindPFlag("tunnel.normal.enabled", serverCommand.Flags().Lookup("normal"))
+	serverCommand.Flags().Bool("standard", false, "run standard tunnel server")
+	viperConfig.BindPFlag("tunnel.standard.enabled", serverCommand.Flags().Lookup("standard"))
 
 	serverCommand.Flags().Bool("reverse", false, "run reverse tunnel server")
 	viperConfig.BindPFlag("tunnel.reverse.enabled", serverCommand.Flags().Lookup("reverse"))
@@ -75,7 +75,7 @@ type Config struct {
 	TunnelReverseSSHBindHost string
 	TunnelReverseSSHHostKey  string
 
-	TunnelNormalEnabled bool
+	TunnelStandardEnabled bool
 
 	StatsdAddr string
 }
@@ -87,17 +87,17 @@ func getServerConfig() Config {
 		LogFormat:                viperConfig.GetString("log.format"),
 		APIEnabled:               viperConfig.GetBool("api.enabled"),
 		APIListenAddr:            viperConfig.GetString("api.listenAddr"),
+		TunnelStandardEnabled:    viperConfig.GetBool("tunnel.standard.enabled"),
 		TunnelReverseEnabled:     viperConfig.GetBool("tunnel.reverse.enabled"),
 		TunnelReverseSSHBindHost: viperConfig.GetString("tunnel.reverse.ssh.bindHost"),
 		TunnelReverseSSHHostKey:  viperConfig.GetString("tunnel.reverse.ssh.hostKey"),
-		TunnelNormalEnabled:      viperConfig.GetBool("tunnel.normal.enabled"),
 		StatsdAddr:               viperConfig.GetString("statsd.addr"),
 	}
 }
 
 func (c Config) Validate() error {
-	if !c.APIEnabled && !c.TunnelNormalEnabled && c.TunnelReverseEnabled {
-		return errors.New("must enable one of: api, normal, reverse")
+	if !c.APIEnabled && !c.TunnelStandardEnabled && c.TunnelReverseEnabled {
+		return errors.New("must enable one of: api, standard, reverse")
 	}
 
 	if c.APIEnabled {
@@ -121,7 +121,7 @@ func (c Config) Validate() error {
 func runServer(cmd *cobra.Command, args []string) error {
 	serverConfig := getServerConfig()
 	if err := serverConfig.Validate(); err != nil {
-		return errors.Wrap(err, "error validating config")
+		return errors.Wrap(err, "validating config")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -163,7 +163,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// initialize statsd client
 	var statsdClient statsd.ClientInterface
-	if serverConfig.StatsdAddr!= "" {
+	if serverConfig.StatsdAddr != "" {
 		var err error
 		statsdClient, err = statsd.New(serverConfig.StatsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
@@ -207,9 +207,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Configure tunnel server
 	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), sshOptions)
 
-	if serverConfig.TunnelNormalEnabled {
-		go tunnelServer.StartNormalTunnels(ctx)
-		healthchecks.AddCheck("normal_tunnels", tunnelServer.CheckNormalTunnels)
+	if serverConfig.TunnelStandardEnabled {
+		go tunnelServer.StartStandardTunnels(ctx)
+		healthchecks.AddCheck("standard_tunnels", tunnelServer.CheckStandardTunnels)
 	}
 
 	if serverConfig.TunnelReverseEnabled {

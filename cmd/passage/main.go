@@ -7,11 +7,12 @@ import (
 )
 
 const name = "passage"
+
 var version = "0.0.0"
 
 var (
 	rootCmd = &cobra.Command{
-		Use: "passage",
+		Use:   "passage",
 		Short: "ssh tunnel management server",
 		Long: `
 passage is a utility for programmatically creating and managing SSH tunnels.
@@ -21,7 +22,7 @@ passage is a utility for programmatically creating and managing SSH tunnels.
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use: "version",
+		Use:   "version",
 		Short: "Print the current version number of passage",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("%s v%s\n", name, version)
@@ -37,4 +38,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
