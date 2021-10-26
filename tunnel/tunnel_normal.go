@@ -6,7 +6,6 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -250,16 +249,17 @@ func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, errCha
 }
 
 func (t NormalTunnel) GetConnectionDetails() (ConnectionDetails, error) {
-	_, targets, err := net.LookupSRV("passage_normal", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
-	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
-	}
-	if len(targets) == 0 {
-		return ConnectionDetails{}, errors.New("no targets found")
-	}
+	//_, targets, err := net.LookupSRV("passage_normal", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
+	//if err != nil {
+	//	return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
+	//}
+	//if len(targets) == 0 {
+	//	return ConnectionDetails{}, errors.New("no targets found")
+	//}
 
 	return ConnectionDetails{
-		Host: targets[0].Target,
+		//Host: targets[0].Target,
+		Host: "passage",
 		Port: t.TunnelPort,
 	}, nil
 }
