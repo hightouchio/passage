@@ -83,6 +83,23 @@ jobs:
             docker push $image_base:latest
             docker push $image_base:$CIRCLE_TAG
 
+  test-e2e:
+    executor: docker-publisher
+    steps:
+      - checkout
+      - setup_remote_docker
+
+      - run:
+          name: Start Docker Compose environment
+          command: docker compose -f test/docker-compose.yml up -d
+
+      - run:
+          name: Run test
+          command: bash test/test.sh
+
+      - run:
+          name: Start Docker Compose environment
+          command: docker compose -f test/docker-compose.yml down
 
 workflows:
   version: 2
@@ -103,6 +120,11 @@ workflows:
   build-branch:
     jobs:
       - build:
+          filters:
+            branches:
+              ignore: master
+
+      - test-e2e:
           filters:
             branches:
               ignore: master

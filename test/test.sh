@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-docker build ./runner -t passage-runner:latest
+docker build ./test/runner -t passage-runner:latest
 docker run  \
   --name="passage-test" --rm \
   --network="passage" \
