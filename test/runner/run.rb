@@ -48,10 +48,18 @@ Connection Details: #{connection}
 EOF
 
 # Write public key to shared volume for bastion server
-File.write('/public-keys/passage-normal-tunnel.pub', public_key)
+File.write('/bastion-ssh/authorized_keys', public_key)
 
 # Check tunnel status.
-until check_tunnel(tunnel_id)
+MAX_ATTEMPTS = 5
+attempts = 0
+until check_tunnel(tunnel_id) do
+    attempts += 1
+    if attempts >= MAX_ATTEMPTS
+        puts 'Tunnel did not come online.'
+        exit 1
+    end
+
     puts "Checking tunnel status..."
     sleep 2
 end
