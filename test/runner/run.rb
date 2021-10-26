@@ -67,4 +67,15 @@ puts "Tunnel online."
 
 # Get data from tunnel.
 response = HTTParty.get("http://#{connection['host']}:#{connection['port']}/")
-puts "Response: #{response.body}"
+response_body = response.body&.strip
+if response_body != ENV['EXPECTED_SERVICE_RESPONSE']
+    puts <<-EOF
+ERROR: Unexpected remote service response.
+
+Body: #{response.body}
+Length: #{response.body.length}
+EOF
+    exit 1
+end
+
+puts "Received expected external service response. Success!"
