@@ -1,19 +1,6 @@
 version: "3.9"
 services:
-  postgres:
-    image: postgres:11.6
-    restart: always
-    environment:
-      POSTGRES_USER: "passage"
-      POSTGRES_DB: "passage"
-      POSTGRES_HOST_AUTH_METHOD: trust
-    ports:
-      - "35432:5432"
-    volumes:
-      - ../sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    networks:
-      - passage
-
+  # passage is the tunnel service
   passage:
     build: ../
     command: server --api --normal --reverse
@@ -28,9 +15,53 @@ services:
       HTTP_ADDR: 0.0.0.0:6000
     ports:
       - "36000:6000"
+    depends_on:
+      - "postgres"
+    networks:
+      - public
+      - passage
+
+  # postgres is the hidden Postgres DB backing the passage service.
+  postgres:
+    image: postgres:11.6
+    restart: always
+    environment:
+      POSTGRES_USER: "passage"
+      POSTGRES_DB: "passage"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: "pg_isready -U passage -d passage"
+    ports:
+      - "35432:5432"
+    volumes:
+      - ../sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - passage
 
+  # remote_ssh represents a public-facing Bastion server running in a remote network.
+  remote_bastion:
+    image: lscr.io/linuxserver/openssh-server
+    environment:
+      USER_NAME: hightouch
+    networks:
+      - public
+      - hidden
+
+  # remote_service represents a hidden service running in a remote network.
+  remote_service:
+    image: ubuntu:21.10
+    networks:
+      - hidden
+
 networks:
+  # Public network mimics the open internet.
+  public:
+    name: public
+
+  # Passage network represents the hidden Passage service.
   passage:
     name: passage
+
+  # Hidden mimics the hidden remote network.
+  hidden:
+    name: hidden
