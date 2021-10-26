@@ -1,5 +1,7 @@
-FROM alpine:latest
-RUN apk --no-cache add bash curl jq
-ADD run.sh /run.sh
-RUN chmod +x /run.sh
-CMD /run.sh
+FROM ruby:3
+
+RUN gem install httparty
+
+ADD run.rb /run.rb
+RUN chmod +x /run.rb
+CMD /run.rb

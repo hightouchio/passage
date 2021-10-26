@@ -46,6 +46,13 @@ services:
     networks:
       - public
       - hidden
+    ports:
+      - "2222:2222"
+    volumes:
+      - type: volume
+        source: ssh-public-keys
+        target: /public-keys
+        read_only: true
 
   # remote_service represents a hidden service running in a remote network.
   remote_service:
@@ -66,3 +73,7 @@ networks:
   # Hidden mimics the hidden remote network.
   hidden:
     name: hidden
+
+volumes:
+  # Create a volume for the test runner to authorize public keys.
+  ssh-public-keys:
