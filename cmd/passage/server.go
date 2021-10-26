@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -24,52 +25,110 @@ import (
 )
 
 var (
-	serverConfig = viper.New()
-)
-
-func init() {
-	serverConfig.AutomaticEnv()
-	serverConfig.SetDefault("env", "")
-	serverConfig.BindEnv("http.listenAddr", "HTTP_ADDR")
-	serverConfig.SetDefault("http.listenAddr", ":8080")
-
-	serverConfig.BindEnv("tunnel.reverse.bindHost", "BIND_HOST")
-	serverConfig.SetDefault("tunnel.reverse.bindHost", "localhost")
-
-	serverConfig.BindEnv("tunnel.reverse.hostKey", "HOST_KEY")
-	serverConfig.BindEnv("statsd.addr", "STATSD_ADDR")
-}
-
-var (
+	viperConfig   = viper.New()
 	serverCommand = &cobra.Command{
 		Use:   "server",
 		Short: "run the passage server",
-		RunE:   runServer,
+		RunE:  runServer,
 	}
-
-	runAPIServer bool
-	runNormalTunnelServer bool
-	runReverseTunnelServer bool
 )
 
 func init() {
-	serverCommand.Flags().BoolVar(&runAPIServer, "api", false, "run API server")
-	serverCommand.Flags().BoolVar(&runNormalTunnelServer, "normal", false, "run normal tunnel server")
-	serverCommand.Flags().BoolVar(&runReverseTunnelServer,  "reverse", false, "run reverse tunnel server")
+	viperConfig.AutomaticEnv()
+	viperConfig.SetEnvPrefix("PASSAGE")
+	viperConfig.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	viperConfig.SetDefault("env", "")
+
+	viperConfig.SetDefault("log.level", "info")
+	viperConfig.SetDefault("log.format", "text")
+
+	viperConfig.SetDefault("api.enabled", false)
+	viperConfig.SetDefault("api.listenAddr", ":8080")
+
+	viperConfig.SetDefault("tunnel.reverse.enabled", false)
+	viperConfig.SetDefault("tunnel.reverse.ssh.bindHost", "localhost")
+
+	viperConfig.SetDefault("tunnel.normal.enabled", false)
+}
+
+func init() {
+	serverCommand.Flags().Bool("api", false, "run API server")
+	viperConfig.BindPFlag("api.enabled", serverCommand.Flags().Lookup("api"))
+
+	serverCommand.Flags().Bool("normal", false, "run normal tunnel server")
+	viperConfig.BindPFlag("tunnel.normal.enabled", serverCommand.Flags().Lookup("normal"))
+
+	serverCommand.Flags().Bool("reverse", false, "run reverse tunnel server")
+	viperConfig.BindPFlag("tunnel.reverse.enabled", serverCommand.Flags().Lookup("reverse"))
+}
+
+type Config struct {
+	Env       string
+	LogLevel  string
+	LogFormat string
+
+	APIEnabled    bool
+	APIListenAddr string
+
+	TunnelReverseEnabled     bool
+	TunnelReverseSSHBindHost string
+	TunnelReverseSSHHostKey  string
+
+	TunnelNormalEnabled bool
+
+	StatsdAddr string
+}
+
+func getServerConfig() Config {
+	return Config{
+		Env:                      viperConfig.GetString("env"),
+		LogLevel:                 viperConfig.GetString("log.level"),
+		LogFormat:                viperConfig.GetString("log.format"),
+		APIEnabled:               viperConfig.GetBool("api.enabled"),
+		APIListenAddr:            viperConfig.GetString("api.listenAddr"),
+		TunnelReverseEnabled:     viperConfig.GetBool("tunnel.reverse.enabled"),
+		TunnelReverseSSHBindHost: viperConfig.GetString("tunnel.reverse.ssh.bindHost"),
+		TunnelReverseSSHHostKey:  viperConfig.GetString("tunnel.reverse.ssh.hostKey"),
+		TunnelNormalEnabled:      viperConfig.GetBool("tunnel.normal.enabled"),
+		StatsdAddr:               viperConfig.GetString("statsd.addr"),
+	}
+}
+
+func (c Config) Validate() error {
+	if !c.APIEnabled && !c.TunnelNormalEnabled && c.TunnelReverseEnabled {
+		return errors.New("must enable one of: api, normal, reverse")
+	}
+
+	if c.APIEnabled {
+		if c.APIListenAddr == "" {
+			return errors.New("must set api.listenAddr")
+		}
+	}
+
+	if c.TunnelReverseEnabled {
+		if c.TunnelReverseSSHBindHost == "" {
+			return errors.New("must set tunnel.reverse.ssh.bindHost")
+		}
+		if c.TunnelReverseSSHHostKey == "" {
+			return errors.New("must set tunnel.reverse.ssh.hostKey")
+		}
+	}
+
+	return nil
 }
 
 func runServer(cmd *cobra.Command, args []string) error {
-	if !runAPIServer && !runNormalTunnelServer && !runReverseTunnelServer {
-		return errors.New("must choose at least one server to run")
+	serverConfig := getServerConfig()
+	if err := serverConfig.Validate(); err != nil {
+		return errors.Wrap(err, "error validating config")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
-
-	switch os.Getenv("LOG_LEVEL") {
+	switch serverConfig.LogLevel {
 	case "debug":
 		logger.SetLevel(logrus.DebugLevel)
 	case "info":
@@ -82,7 +141,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		logger.SetLevel(logrus.InfoLevel)
 	}
 
-	switch os.Getenv("LOG_FORMAT") {
+	switch serverConfig.LogFormat {
 	case "json":
 		logger.SetFormatter(&logrus.JSONFormatter{})
 	default:
@@ -104,9 +163,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// initialize statsd client
 	var statsdClient statsd.ClientInterface
-	if statsdAddr := serverConfig.GetString("statsd.addr"); statsdAddr != "" {
+	if serverConfig.StatsdAddr!= "" {
 		var err error
-		statsdClient, err = statsd.New(statsdAddr, statsd.WithMaxBytesPerPayload(4096))
+		statsdClient, err = statsd.New(serverConfig.StatsdAddr, statsd.WithMaxBytesPerPayload(4096))
 		if err != nil {
 			return errors.Wrap(err, "could not initialize statsd client")
 		}
@@ -118,18 +177,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 		WithPrefix("passage").
 		WithTags(stats.Tags{
 			"service": "passage",
-			"env":     serverConfig.GetString("env"),
+			"env":     serverConfig.Env,
 			"version": version,
 		})
-
-	// decode host key from base64
-	if !serverConfig.IsSet("tunnel.reverse.hostKey") {
-		return errors.New("must set tunnel.reverse.hostKey")
-	}
-	hostKey, err := base64.StdEncoding.DecodeString(serverConfig.GetString("tunnel.reverse.hostKey"))
-	if err != nil {
-		return errors.Wrap(err, "could not decode host key")
-	}
 
 	// configure web server
 	router := mux.NewRouter()
@@ -141,33 +191,39 @@ func runServer(cmd *cobra.Command, args []string) error {
 		})
 	})
 
-	// configure tunnel server
-	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), tunnel.SSHOptions{
-		BindHost: serverConfig.GetString("tunnel.reverse.bindHost"),
-		HostKey:  hostKey,
-	})
+	// Initialize SSH options for reverse tunnels
+	var sshOptions tunnel.SSHOptions
+	if serverConfig.TunnelReverseEnabled {
+		// Decode config host key from Base64
+		hostKey, err := base64.StdEncoding.DecodeString(serverConfig.TunnelReverseSSHHostKey)
+		if err != nil {
+			return errors.Wrap(err, "could not decode host key")
+		}
+		sshOptions.HostKey = hostKey
+		// Set bind host.
+		sshOptions.BindHost = serverConfig.TunnelReverseSSHBindHost
+	}
 
-	if runNormalTunnelServer {
+	// Configure tunnel server
+	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), sshOptions)
+
+	if serverConfig.TunnelNormalEnabled {
 		go tunnelServer.StartNormalTunnels(ctx)
 		healthchecks.AddCheck("normal_tunnels", tunnelServer.CheckNormalTunnels)
 	}
 
-	if runReverseTunnelServer {
+	if serverConfig.TunnelReverseEnabled {
 		go tunnelServer.StartReverseTunnels(ctx)
 		healthchecks.AddCheck("reverse_tunnels", tunnelServer.CheckReverseTunnels)
 	}
 
-	if runAPIServer {
-		httpAddr := serverConfig.GetString("http.listenAddr")
-		if httpAddr == "" {
-			return errors.New("must provide http.listenAddr")
-		}
+	if serverConfig.APIEnabled {
 		tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 
 		// start HTTP server
-		httpServer := &http.Server{Addr: httpAddr, Handler: router}
+		httpServer := &http.Server{Addr: serverConfig.APIListenAddr, Handler: router}
 		go func() {
-			logger.WithField("http_addr", httpAddr).Debug("starting http server")
+			logger.WithField("http_addr", serverConfig.APIListenAddr).Debug("starting http server")
 			if err := httpServer.ListenAndServe(); err != nil {
 				logger.WithError(err).Fatal("http server shutdown")
 			}
