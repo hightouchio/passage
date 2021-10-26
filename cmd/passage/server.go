@@ -167,9 +167,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 		// start HTTP server
 		httpServer := &http.Server{Addr: httpAddr, Handler: router}
 		go func() {
-			logrus.WithField("http_addr", httpAddr).Debug("starting http server")
+			logger.WithField("http_addr", httpAddr).Debug("starting http server")
 			if err := httpServer.ListenAndServe(); err != nil {
-				logrus.WithError(err).Fatal("http server shutdown")
+				logger.WithError(err).Fatal("http server shutdown")
 			}
 		}()
 		go func() {
