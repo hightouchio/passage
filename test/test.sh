@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 docker build ./test/runner -t passage-runner:latest
 docker run  \
