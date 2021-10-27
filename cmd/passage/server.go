@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"net/http"
-	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -45,6 +44,13 @@ func init() {
 
 	viperConfig.SetDefault("log.level", "info")
 	viperConfig.SetDefault("log.format", "text")
+
+	viperConfig.BindEnv("postgres.host", "PGHOST")
+	viperConfig.BindEnv("postgres.port", "PGPORT")
+	viperConfig.BindEnv("postgres.user", "PGUSER")
+	viperConfig.BindEnv("postgres.password", "PGPASSWORD")
+	viperConfig.BindEnv("postgres.dbname", "PGDBNAME")
+	viperConfig.BindEnv("postgres.sslmode", "PGSSLMODE")
 
 	viperConfig.SetDefault("api.enabled", false)
 	viperConfig.SetDefault("api.listenAddr", ":8080")
@@ -166,7 +172,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	healthchecks := newHealthcheckManager()
 
 	// connect to postgres
-	db, err := sqlx.Connect("postgres", getPostgresConnString())
+	db, err := sqlx.Connect("postgres", getPostgresConnString(viperConfig.Sub("postgres")))
 	if err != nil {
 		return errors.Wrap(err, "could not connect to postgres")
 	}
@@ -273,18 +279,18 @@ func runServer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getPostgresConnString() string {
-	if os.Getenv("PG_URI") != "" {
-		return os.Getenv("PG_URI")
+func getPostgresConnString(config *viper.Viper) string {
+	if config.IsSet("uri") {
+		return config.GetString("uri")
 	}
 
 	return formatConnString(map[string]string{
-		"host":     os.Getenv("PGHOST"),
-		"port":     os.Getenv("PGPORT"),
-		"user":     os.Getenv("PGUSER"),
-		"password": os.Getenv("PGPASSWORD"),
-		"dbname":   os.Getenv("PGDBNAME"),
-		"sslmode":  os.Getenv("PGSSLMODE"),
+		"host":     config.GetString("host"),
+		"port":     config.GetString("port"),
+		"user":     config.GetString("user"),
+		"password": config.GetString("password"),
+		"dbname":   config.GetString("dbname"),
+		"sslmode":  config.GetString("sslmode"),
 	})
 }
 
