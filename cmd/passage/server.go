@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
+	"github.com/hightouchio/passage/tunnel/discovery/srv"
+	"github.com/hightouchio/passage/tunnel/discovery/static"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -46,6 +49,9 @@ func init() {
 	viperConfig.SetDefault("api.enabled", false)
 	viperConfig.SetDefault("api.listenAddr", ":8080")
 
+	viperConfig.SetDefault("tunnel.discovery.type", "static")
+	viperConfig.SetDefault("tunnel.discovery.host", "localhost")
+
 	viperConfig.SetDefault("tunnel.reverse.enabled", false)
 	viperConfig.SetDefault("tunnel.reverse.ssh.bindHost", "localhost")
 
@@ -71,27 +77,30 @@ type Config struct {
 	APIEnabled    bool
 	APIListenAddr string
 
+	TunnelServiceDiscoveryType string
+
+	TunnelStandardEnabled bool
+
 	TunnelReverseEnabled     bool
 	TunnelReverseSSHBindHost string
 	TunnelReverseSSHHostKey  string
-
-	TunnelStandardEnabled bool
 
 	StatsdAddr string
 }
 
 func getServerConfig() Config {
 	return Config{
-		Env:                      viperConfig.GetString("env"),
-		LogLevel:                 viperConfig.GetString("log.level"),
-		LogFormat:                viperConfig.GetString("log.format"),
-		APIEnabled:               viperConfig.GetBool("api.enabled"),
-		APIListenAddr:            viperConfig.GetString("api.listenAddr"),
-		TunnelStandardEnabled:    viperConfig.GetBool("tunnel.standard.enabled"),
-		TunnelReverseEnabled:     viperConfig.GetBool("tunnel.reverse.enabled"),
-		TunnelReverseSSHBindHost: viperConfig.GetString("tunnel.reverse.ssh.bindHost"),
-		TunnelReverseSSHHostKey:  viperConfig.GetString("tunnel.reverse.ssh.hostKey"),
-		StatsdAddr:               viperConfig.GetString("statsd.addr"),
+		Env:                        viperConfig.GetString("env"),
+		LogLevel:                   viperConfig.GetString("log.level"),
+		LogFormat:                  viperConfig.GetString("log.format"),
+		APIEnabled:                 viperConfig.GetBool("api.enabled"),
+		APIListenAddr:              viperConfig.GetString("api.listenAddr"),
+		TunnelServiceDiscoveryType: viperConfig.GetString("tunnel.discovery.type"),
+		TunnelStandardEnabled:      viperConfig.GetBool("tunnel.standard.enabled"),
+		TunnelReverseEnabled:       viperConfig.GetBool("tunnel.reverse.enabled"),
+		TunnelReverseSSHBindHost:   viperConfig.GetString("tunnel.reverse.ssh.bindHost"),
+		TunnelReverseSSHHostKey:    viperConfig.GetString("tunnel.reverse.ssh.hostKey"),
+		StatsdAddr:                 viperConfig.GetString("statsd.addr"),
 	}
 }
 
@@ -112,6 +121,12 @@ func (c Config) Validate() error {
 		}
 		if c.TunnelReverseSSHHostKey == "" {
 			return errors.New("must set tunnel.reverse.ssh.hostKey")
+		}
+	}
+
+	if c.APIEnabled || c.TunnelStandardEnabled || c.TunnelReverseEnabled {
+		if c.TunnelServiceDiscoveryType == "" {
+			return errors.New("must set tunnel.serviceDiscovery.type")
 		}
 	}
 
@@ -191,6 +206,26 @@ func runServer(cmd *cobra.Command, args []string) error {
 		})
 	})
 
+	// Initialize tunnel discovery service
+	var discoveryService discovery.DiscoveryService
+	switch serverConfig.TunnelServiceDiscoveryType {
+	case "srv":
+		discoveryService = srv.Discovery{
+			SrvRegistry: viper.GetString("tunnel.discovery.registry"),
+			Prefix:      viper.GetString("tunnel.discovery.prefix"),
+		}
+		break
+
+	case "static":
+		discoveryService = static.Discovery{
+			Host: viper.GetString("tunnel.discovery.host"),
+		}
+		break
+
+	default:
+		return errors.New("unknown service discovery type")
+	}
+
 	// Initialize SSH options for reverse tunnels
 	var sshOptions tunnel.SSHOptions
 	if serverConfig.TunnelReverseEnabled {
@@ -205,7 +240,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Configure tunnel server
-	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), sshOptions)
+	tunnelServer := tunnel.NewServer(postgres.NewClient(db), statsClient.WithPrefix("tunnel"), discoveryService, sshOptions)
 
 	if serverConfig.TunnelStandardEnabled {
 		go tunnelServer.StartStandardTunnels(ctx)

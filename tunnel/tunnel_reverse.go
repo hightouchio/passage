@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hightouchio/passage/stats"
-	"net"
-	"os"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -32,6 +31,8 @@ type reverseTunnelServices struct {
 	sql interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
+
+	tunnelDiscovery discovery.DiscoveryService
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
@@ -170,15 +171,13 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 }
 
 func (t ReverseTunnel) GetConnectionDetails() (ConnectionDetails, error) {
-	_, targets, err := net.LookupSRV("passage_reverse", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
+	tunnelHost, err := t.services.tunnelDiscovery.ResolveTunnelHost("standard", t.ID)
 	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
+		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}
-	if len(targets) == 0 {
-		return ConnectionDetails{}, errors.New("no targets found")
-	}
+
 	return ConnectionDetails{
-		Host: targets[0].Target,
+		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
 }

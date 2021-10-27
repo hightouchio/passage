@@ -38,4 +38,5 @@ Passage is configured primarily through environment variables, as listed below.
 | PASSAGE_TUNNEL_REVERSE_ENABLED | Enable the reverse tunnel server. Also `--reverse` via CLI flags. | False | `false` |
 | PASSAGE_TUNNEL_REVERSE_SSH_BIND_HOST | Bind address for the reverse tunnel SSH server. | True, if reverse tunnel enabled. | `localhost` |
 | PASSAGE_TUNNEL_REVERSE_SSH_HOST_KEY | Base64 encoded host key for the reverse tunnel SSH server. | True, if reverse tunnel enabled. | *None.* |
+| PASSAGE_TUNNEL_DISCOVERY_TYPE | Choose a service discovery option (`static` for hardcoded tunnel host, `srv` for DNS SRV-backed discovery | True | `static` |
 | PASSAGE_STATSD_ADDR | Address of a Statsd server to send metrics to. | False | *None.* |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,8 @@ import (
 type Server struct {
 	SQL sqlClient
 
-	Stats stats.Stats
+	Stats            stats.Stats
+	DiscoveryService discovery.DiscoveryService
 
 	standardTunnels *Manager
 	reverseTunnels  *Manager
@@ -42,19 +44,25 @@ type sqlClient interface {
 const managerRefreshDuration = 1 * time.Second
 const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
-func NewServer(sql sqlClient, st stats.Stats, options SSHOptions) Server {
+func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.DiscoveryService, options SSHOptions) Server {
 	return Server{
 		SQL:   sql,
 		Stats: st,
 
 		standardTunnels: newManager(
 			st.WithTags(stats.Tags{"tunnelType": "standard"}),
-			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{sql}),
+			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{
+				sql:             sql,
+				tunnelDiscovery: discoveryService,
+			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 		reverseTunnels: newManager(
 			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
-			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{sql}),
+			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{
+				sql:             sql,
+				tunnelDiscovery: discoveryService,
+			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 	}

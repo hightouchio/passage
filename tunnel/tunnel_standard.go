@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"io"
 	"net"
 	"strconv"
@@ -38,6 +39,8 @@ type standardTunnelServices struct {
 	sql interface {
 		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
+
+	tunnelDiscovery discovery.DiscoveryService
 }
 
 func isContextCancelled(ctx context.Context) bool {
@@ -251,17 +254,13 @@ func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, errCha
 }
 
 func (t StandardTunnel) GetConnectionDetails() (ConnectionDetails, error) {
-	//_, targets, err := net.LookupSRV("passage_standard", "tcp", os.Getenv("PASSAGE_SRV_REGISTRY"))
-	//if err != nil {
-	//	return ConnectionDetails{}, errors.Wrap(err, "could not resolve SRV")
-	//}
-	//if len(targets) == 0 {
-	//	return ConnectionDetails{}, errors.New("no targets found")
-	//}
+	tunnelHost, err := t.services.tunnelDiscovery.ResolveTunnelHost("standard", t.ID)
+	if err != nil {
+		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
+	}
 
 	return ConnectionDetails{
-		//Host: targets[0].Target,
-		Host: "passage",
+		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
 }
