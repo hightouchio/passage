@@ -24,6 +24,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.uber.org/fx"
 )
 
 var (
@@ -140,6 +141,10 @@ func (c Config) Validate() error {
 }
 
 func runServer(cmd *cobra.Command, args []string) error {
+	app := fx.New()
+}
+
+func runServer2(cmd *cobra.Command, args []string) error {
 	serverConfig := getServerConfig()
 	if err := serverConfig.Validate(); err != nil {
 		return errors.Wrap(err, "validating config")
