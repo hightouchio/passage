@@ -93,6 +93,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			runStandardTunnels,
 			runReverseTunnels,
 		 ),
+
+		 fx.NopLogger,
 	)
 
 	startCtx, cancel := context.WithTimeout(context.Background(), 15 * time.Second)
