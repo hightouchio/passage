@@ -72,8 +72,16 @@ func (s Server) StartStandardTunnels(ctx context.Context) {
 	s.standardTunnels.Start(ctx)
 }
 
+func (s Server) StopStandardTunnels(ctx context.Context) {
+	s.standardTunnels.Stop(ctx)
+}
+
 func (s Server) StartReverseTunnels(ctx context.Context) {
 	s.reverseTunnels.Start(ctx)
+}
+
+func (s Server) StopReverseTunnels(ctx context.Context) {
+	s.reverseTunnels.Stop(ctx)
 }
 
 func (s Server) CheckStandardTunnels(ctx context.Context) error {

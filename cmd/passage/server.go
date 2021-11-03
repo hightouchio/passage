@@ -132,13 +132,12 @@ func runStandardTunnels(lc fx.Lifecycle, config Config, logger *logrus.Logger, s
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.Info("start standard tunnels")
 			go server.StartStandardTunnels(ctx)
 			healthchecks.AddCheck("tunnels_standard", server.CheckStandardTunnels)
 			return nil
 		},
 		OnStop:  func (ctx context.Context) error {
-			logger.Info("stop standard tunnels")
+			server.StopStandardTunnels(ctx)
 			return nil
 		},
 	})
@@ -152,13 +151,12 @@ func runReverseTunnels(lc fx.Lifecycle, config Config, logger *logrus.Logger, se
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.Info("start standard tunnels")
 			go server.StartReverseTunnels(ctx)
 			healthchecks.AddCheck("tunnels_reverse", server.CheckStandardTunnels)
 			return nil
 		},
 		OnStop:  func (ctx context.Context) error {
-			logger.Info("stop standard tunnels")
+			server.StopReverseTunnels(ctx)
 			return nil
 		},
 	})

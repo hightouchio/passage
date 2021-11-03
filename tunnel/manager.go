@@ -33,7 +33,7 @@ type Manager struct {
 	lastRefresh time.Time
 
 	lock sync.Mutex
-	once sync.Once
+	stop chan bool
 }
 
 func newManager(stats stats.Stats, listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
@@ -47,18 +47,27 @@ func newManager(stats stats.Stats, listFunc ListFunc, sshOptions SSHOptions, ref
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
+
+		stop: make(chan bool),
 	}
 }
 
 func (m *Manager) Start(ctx context.Context) {
 	m.Stats.SimpleEvent("manager.start")
-	m.startWorker(ctx)
+	m.startWorker()
 }
 
-func (m *Manager) startWorker(ctx context.Context) {
+func (m *Manager) Stop(ctx context.Context) {
+	m.Stats.SimpleEvent("manager.stop")
+	m.stop <- true
+}
+
+func (m *Manager) startWorker() {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for {
 		select {
 		case <-ticker.C:
@@ -69,7 +78,7 @@ func (m *Manager) startWorker(ctx context.Context) {
 			m.refreshSupervisors(ctx)
 			m.lastRefresh = time.Now()
 
-		case <-ctx.Done():
+		case <-m.stop:
 			return
 		}
 	}
