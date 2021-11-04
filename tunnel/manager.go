@@ -149,8 +149,8 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 func (m *Manager) Check(ctx context.Context) error {
 	maxDelay := m.RefreshDuration * 2
 	secondsSinceLastRefresh := time.Now().Sub(m.lastRefresh)
-	if maxDelay > secondsSinceLastRefresh {
-		return fmt.Errorf("manager has not refreshed in %0.2f seconds", secondsSinceLastRefresh.Seconds())
+	if secondsSinceLastRefresh > maxDelay {
+		return fmt.Errorf("manager has not refreshed in %0.2f seconds. max: %0.2f", secondsSinceLastRefresh.Seconds(), maxDelay.Seconds())
 	}
 
 	return nil

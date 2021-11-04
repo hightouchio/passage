@@ -12,6 +12,8 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/discovery/srv"
 	"github.com/hightouchio/passage/tunnel/discovery/static"
+	"github.com/hightouchio/passage/tunnel/keystore"
+	pgkeystore "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -52,8 +54,8 @@ func init() {
 	viperConfig.BindEnv("postgres.dbname", "PGDBNAME")
 	viperConfig.BindEnv("postgres.sslmode", "PGSSLMODE")
 
+	viperConfig.SetDefault("http.addr", ":8080")
 	viperConfig.SetDefault("api.enabled", false)
-	viperConfig.SetDefault("api.listenAddr", ":8080")
 
 	viperConfig.SetDefault("tunnel.discovery.type", "static")
 	viperConfig.SetDefault("tunnel.discovery.host", "localhost")
@@ -78,26 +80,36 @@ func init() {
 func runServer(cmd *cobra.Command, args []string) error {
 	app := fx.New(
 		fx.Provide(
-			newConfig,
-			newLogger,
-			newPostgres,
+			// Main entrypoint.
 			newTunnelServer,
+			// Centralized DB for tunnel configs.
+			newPostgres,
+			// Service for storing and retrieving tunnel public and private keys.
+			newTunnelKeystore,
+			// Service to discover endpoints of currently running tunnels for a distributed system.
 			newTunnelDiscoveryService,
-			newHealthcheck,
-			newStats,
+			// Expose an HTTP server for anything that needs it.
 			newHTTPServer,
-		 ),
+			// Report metrics and events to a statsd collector.
+			newStats,
+			// Healthcheck manager to detect broken instances of Passage. Reports status over HTTP.
+			newHealthcheck,
+			// General server configuration.
+			newConfig,
+			// Logger.
+			newLogger,
+		),
 
 		fx.Invoke(
 			registerAPIRoutes,
 			runStandardTunnels,
 			runReverseTunnels,
-		 ),
+		),
 
-		 fx.NopLogger,
+		fx.NopLogger,
 	)
 
-	startCtx, cancel := context.WithTimeout(context.Background(), 15 * time.Second)
+	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := app.Start(startCtx); err != nil {
@@ -106,7 +118,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	<-app.Done()
 
-	stopCtx, cancel := context.WithTimeout(context.Background(), 15 * time.Second)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := app.Stop(stopCtx); err != nil {
@@ -138,7 +150,7 @@ func runStandardTunnels(lc fx.Lifecycle, config Config, logger *logrus.Logger, s
 			healthchecks.AddCheck("tunnels_standard", server.CheckStandardTunnels)
 			return nil
 		},
-		OnStop:  func (ctx context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			server.StopStandardTunnels(ctx)
 			return nil
 		},
@@ -157,31 +169,32 @@ func runReverseTunnels(lc fx.Lifecycle, config Config, logger *logrus.Logger, se
 			healthchecks.AddCheck("tunnels_reverse", server.CheckStandardTunnels)
 			return nil
 		},
-		OnStop:  func (ctx context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			server.StopReverseTunnels(ctx)
 			return nil
 		},
 	})
 }
 
-func newTunnelServer(config Config, sql *sqlx.DB, stats stats.Stats, discovery discovery.DiscoveryService) (tunnel.Server, error) {
+func newTunnelServer(config Config, sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.Server, error) {
 	// Initialize SSH options for reverse tunnels
 	var sshOptions tunnel.SSHOptions
 	if config.TunnelReverseEnabled {
-		 // Decode config host key from Base64
-		 hostKey, err := base64.StdEncoding.DecodeString(config.TunnelReverseSSHHostKey)
-		 if err != nil {
-			 return tunnel.Server{}, errors.Wrap(err, "could not decode host key")
-		 }
-		 sshOptions.HostKey = hostKey
-		 // Set bind host.
-		 sshOptions.BindHost = config.TunnelReverseSSHBindHost
+		// Decode config host key from Base64
+		hostKey, err := base64.StdEncoding.DecodeString(config.TunnelReverseSSHHostKey)
+		if err != nil {
+			return tunnel.Server{}, errors.Wrap(err, "could not decode host key")
+		}
+		sshOptions.HostKey = hostKey
+		// Set bind host.
+		sshOptions.BindHost = config.TunnelReverseSSHBindHost
 	}
 
 	return tunnel.NewServer(
 		postgres.NewClient(sql),
 		stats.WithPrefix("tunnel"),
 		discovery,
+		keystore,
 		sshOptions,
 	), nil
 }
@@ -208,9 +221,13 @@ func newTunnelDiscoveryService(config Config) (discovery.DiscoveryService, error
 	return discoveryService, nil
 }
 
+func newTunnelKeystore(config Config, db *sqlx.DB) (keystore.Keystore, error) {
+	return pgkeystore.New(db, "passage.keys"), nil
+}
+
 func newHTTPServer(lc fx.Lifecycle, config Config, logger *logrus.Logger) *mux.Router {
 	router := mux.NewRouter()
-	server := &http.Server{Addr: config.APIListenAddr, Handler: router}
+	server := &http.Server{Addr: config.HTTPAddr, Handler: router}
 
 	// Inject global logger into each request.
 	router.Use(func(next http.Handler) http.Handler {
@@ -222,7 +239,11 @@ func newHTTPServer(lc fx.Lifecycle, config Config, logger *logrus.Logger) *mux.R
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			logger.WithField("addr", server.Addr).Debug("starting HTTP server")
-			go server.ListenAndServe()
+			go func() {
+				if err := server.ListenAndServe(); err != nil {
+					logrus.Fatal(errors.Wrap(err, "could not start HTTP server"))
+				}
+			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -238,8 +259,8 @@ type Config struct {
 	LogLevel  string
 	LogFormat string
 
-	APIEnabled    bool
-	APIListenAddr string
+	HTTPAddr   string
+	APIEnabled bool
 
 	TunnelServiceDiscoveryType string
 
@@ -265,8 +286,8 @@ func newConfig() (Config, error) {
 		Env:                        viperConfig.GetString("env"),
 		LogLevel:                   viperConfig.GetString("log.level"),
 		LogFormat:                  viperConfig.GetString("log.format"),
+		HTTPAddr:                   viperConfig.GetString("http.addr"),
 		APIEnabled:                 viperConfig.GetBool("api.enabled"),
-		APIListenAddr:              viperConfig.GetString("api.listenAddr"),
 		TunnelServiceDiscoveryType: viperConfig.GetString("tunnel.discovery.type"),
 		TunnelStandardEnabled:      viperConfig.GetBool("tunnel.standard.enabled"),
 		TunnelReverseEnabled:       viperConfig.GetBool("tunnel.reverse.enabled"),

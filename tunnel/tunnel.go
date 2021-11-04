@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/tunnel/keystore"
 
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -91,13 +92,22 @@ func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandard
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
+		keyId := uuid.New()
 		keyPair, err := GenerateKeyPair()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not generate keypair")
 		}
 
+		// insert into keystore
+		if err := s.Keystore.Set(ctx, "private", keystore.Key{
+			ID:       keyId,
+			Contents: keyPair.PrivateKey,
+		}); err != nil {
+			return nil, errors.Wrap(err, "could not insert key into store")
+		}
+
 		// add to DB and attach to tunnel
-		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "standard", record.ID, "private", keyPair.PrivateKey); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "standard", record.ID, keyId); err != nil {
 			return nil, errors.Wrap(err, "could not add private key to tunnel")
 		}
 
@@ -146,13 +156,22 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
+		keyId := uuid.New()
 		keyPair, err := GenerateKeyPair()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not generate keypair")
 		}
 
+		// insert into keystore
+		if err := s.Keystore.Set(ctx, "public", keystore.Key{
+			ID:       keyId,
+			Contents: keyPair.PublicKey,
+		}); err != nil {
+			return nil, errors.Wrap(err, "could not insert key into store")
+		}
+
 		// add to DB and attach to tunnel
-		if err := s.SQL.AddKeyAndAttachToTunnel(ctx, "reverse", record.ID, "public", keyPair.PublicKey); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "reverse", record.ID, keyId); err != nil {
 			return nil, errors.Wrap(err, "could not add public key to tunnel")
 		}
 

@@ -3,7 +3,7 @@
 require 'httparty'
 require 'json'
 
-PASSAGE_URL="http://passage:6000"
+PASSAGE_URL="http://passage:8080"
 
 def post(path, body)
     HTTParty.post(

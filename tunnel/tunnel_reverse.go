@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
+	"github.com/hightouchio/passage/tunnel/keystore"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -32,6 +33,7 @@ type reverseTunnelServices struct {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 
+	keystore        keystore.Keystore
 	tunnelDiscovery discovery.DiscoveryService
 }
 
@@ -147,12 +149,18 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	}
 
 	// check all authorized keys configured for this tunnel
-	for _, key := range authorizedKeys {
+	for _, authorizedKey := range authorizedKeys {
+		// retrieve key contents
+		key, err := t.services.keystore.Get(ctx, "public", authorizedKey.ID)
+		if err != nil {
+			return false, errors.Wrapf(err, "could not resolve contents for key %s", authorizedKey.ID.String())
+		}
+
+		// compare stored authorized key to test key
 		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(key.Contents))
 		if err != nil {
 			return false, errors.Wrapf(err, "could not parse key %d", key.ID)
 		}
-
 		if ssh.KeysEqual(testKey, authorizedKey) {
 			return true, nil
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
+	"github.com/hightouchio/passage/tunnel/keystore"
 	"io"
 	"net"
 	"strconv"
@@ -40,6 +41,7 @@ type standardTunnelServices struct {
 		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 
+	keystore        keystore.Keystore
 	tunnelDiscovery discovery.DiscoveryService
 }
 
@@ -204,9 +206,9 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 // generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library
 func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod, error) {
 	// get private keys from database
-	keys, err := t.services.sql.GetStandardTunnelPrivateKeys(ctx, t.ID)
+	keys, err := t.getPrivateKeys(ctx)
 	if err != nil {
-		return []ssh.AuthMethod{}, errors.Wrap(err, "could not get keys from db")
+		return []ssh.AuthMethod{}, errors.Wrap(err, "could not get keys")
 	}
 
 	// parse private keys and prepare for SSH
@@ -220,6 +222,22 @@ func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMetho
 	}
 
 	return authMethods, nil
+}
+
+func (t StandardTunnel) getPrivateKeys(ctx context.Context) ([]keystore.Key, error) {
+	contents := make([]keystore.Key, 0)
+	keys, err := t.services.sql.GetStandardTunnelPrivateKeys(ctx, t.ID)
+	if err != nil {
+		return []keystore.Key{}, err
+	}
+	for _, key := range keys {
+		key, err := t.services.keystore.Get(ctx, "private", key.ID)
+		if err != nil {
+			return []keystore.Key{}, err
+		}
+		contents = append(contents, key)
+	}
+	return []keystore.Key{}, nil
 }
 
 const keepaliveInterval = 1 * time.Minute

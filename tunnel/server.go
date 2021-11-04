@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
+	"github.com/hightouchio/passage/tunnel/keystore"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,8 +16,9 @@ import (
 type Server struct {
 	SQL sqlClient
 
-	Stats            stats.Stats
 	DiscoveryService discovery.DiscoveryService
+	Keystore         keystore.Keystore
+	Stats            stats.Stats
 
 	standardTunnels *Manager
 	reverseTunnels  *Manager
@@ -37,22 +39,23 @@ type sqlClient interface {
 
 	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
 
-	AddKeyAndAttachToTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyType string, contents string) error
 	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
 }
 
 const managerRefreshDuration = 1 * time.Second
 const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
 
-func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.DiscoveryService, options SSHOptions) Server {
+func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.DiscoveryService, keystore keystore.Keystore, options SSHOptions) Server {
 	return Server{
-		SQL:   sql,
-		Stats: st,
-
+		SQL:              sql,
+		Stats:            st,
+		DiscoveryService: discoveryService,
+		Keystore:         keystore,
 		standardTunnels: newManager(
 			st.WithTags(stats.Tags{"tunnelType": "standard"}),
 			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{
 				sql:             sql,
+				keystore:        keystore,
 				tunnelDiscovery: discoveryService,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
@@ -61,6 +64,7 @@ func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.Discove
 			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
 			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{
 				sql:             sql,
+				keystore:        keystore,
 				tunnelDiscovery: discoveryService,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
