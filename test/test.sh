@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+docker network ls
 docker build ./test/runner -t passage-runner:latest
 docker run  \
   --name="passage-test" --rm \
