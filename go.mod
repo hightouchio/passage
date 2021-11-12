@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20201120081800-1786d5ef83d4 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
+	github.com/aws/aws-sdk-go v1.42.4
 	github.com/gliderlabs/ssh v0.3.1
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
