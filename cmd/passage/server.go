@@ -134,7 +134,7 @@ func registerAPIRoutes(config Config, logger *logrus.Logger, router *mux.Router,
 		return nil
 	}
 	logger.Info("enabled tunnel APIs")
-	tunnelServer.ConfigureWebRoutes(router)
+	tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 	return nil
 }
 

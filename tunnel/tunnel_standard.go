@@ -41,8 +41,7 @@ type standardTunnelServices struct {
 		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 
-	keystore        keystore.Keystore
-	tunnelDiscovery discovery.DiscoveryService
+	keystore keystore.Keystore
 }
 
 func isContextCancelled(ctx context.Context) bool {
@@ -271,8 +270,8 @@ func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, errCha
 	close(errChan)
 }
 
-func (t StandardTunnel) GetConnectionDetails() (ConnectionDetails, error) {
-	tunnelHost, err := t.services.tunnelDiscovery.ResolveTunnelHost("standard", t.ID)
+func (t StandardTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
+	tunnelHost, err := discovery.ResolveTunnelHost("standard", t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}

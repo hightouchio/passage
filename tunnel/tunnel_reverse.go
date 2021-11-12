@@ -33,8 +33,7 @@ type reverseTunnelServices struct {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 
-	keystore        keystore.Keystore
-	tunnelDiscovery discovery.DiscoveryService
+	keystore keystore.Keystore
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
@@ -178,8 +177,8 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
 }
 
-func (t ReverseTunnel) GetConnectionDetails() (ConnectionDetails, error) {
-	tunnelHost, err := t.services.tunnelDiscovery.ResolveTunnelHost("standard", t.ID)
+func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
+	tunnelHost, err := discovery.ResolveTunnelHost("standard", t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}

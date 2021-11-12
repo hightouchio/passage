@@ -56,7 +56,6 @@ func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.Discove
 			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{
 				sql:             sql,
 				keystore:        keystore,
-				tunnelDiscovery: discoveryService,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
@@ -65,7 +64,6 @@ func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.Discove
 			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{
 				sql:             sql,
 				keystore:        keystore,
-				tunnelDiscovery: discoveryService,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
@@ -115,7 +113,7 @@ func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnel
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
-	connectionDetails, err := tunnel.GetConnectionDetails()
+	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}

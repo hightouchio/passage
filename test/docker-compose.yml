@@ -7,8 +7,8 @@ services:
     environment:
       PASSAGE_ENV: test
       PASSAGE_LOG_LEVEL: debug
+      PASSAGE_HTTP_ADDR: 0.0.0.0:6000
       PASSAGE_API_ENABLED: 'true'
-      PASSAGE_API_LISTEN_ADDR: 0.0.0.0:6000
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
 
       PGHOST: postgres

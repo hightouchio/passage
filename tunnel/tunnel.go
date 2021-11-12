@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ type Tunnel interface {
 	Start(context.Context, SSHOptions) error
 
 	GetID() uuid.UUID
-	GetConnectionDetails() (ConnectionDetails, error)
+	GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error)
 
 	Equal(interface{}) bool
 }
@@ -84,7 +85,7 @@ func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandard
 	}
 
 	tunnel := standardTunnelFromSQL(record)
-	connectionDetails, err := tunnel.GetConnectionDetails()
+	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
@@ -148,7 +149,7 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 	}
 
 	tunnel := reverseTunnelFromSQL(record)
-	connectionDetails, err := tunnel.GetConnectionDetails()
+	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}

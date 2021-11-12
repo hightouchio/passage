@@ -1,0 +1,48 @@
+version: "3.9"
+services:
+  # passage is the tunnel service
+  passage:
+    build: ../
+    command: server
+    environment:
+      PASSAGE_ENV: dev
+      PASSAGE_LOG_LEVEL: debug
+      PASSAGE_HTTP_ADDR: 0.0.0.0:6000
+      PASSAGE_API_ENABLED: 'true'
+      PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
+
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: passage
+      PGDBNAME: passage
+      PGSSLMODE: disable
+    ports:
+      - "6000:6000"
+    networks:
+      - passage_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: "curl -f http://localhost:6000/healthcheck"
+
+  # postgres is the hidden Postgres DB backing the passage service.
+  postgres:
+    image: postgres:11.6
+    restart: always
+    environment:
+      POSTGRES_USER: "passage"
+      POSTGRES_DB: "passage"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '6432:5432'
+    networks:
+      - passage_dev
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: "pg_isready -U passage -d passage"
+
+networks:
+  passage_dev:
+    name: passage_dev
