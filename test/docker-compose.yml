@@ -17,7 +17,8 @@ services:
       PGDBNAME: passage
       PGSSLMODE: disable
     depends_on:
-      - "postgres"
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: "curl -f http://localhost:6000/healthcheck"
     networks:
