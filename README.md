@@ -22,7 +22,7 @@ Flags:
 ```
 
 ## Dependencies
-Passage requires a PostgreSQL database, version 11 or later. Database schema is located in [`sql/schema.sql`](`sql/schema.sql`).
+Passage requires a PostgreSQL database, version 11 or later. Database schema is located in [`sql/1-schema.sql`](`sql/1-schema.sql`).
 
 ## Configuration
 Passage is configured primarily through environment variables, as listed below.

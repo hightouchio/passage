@@ -54,16 +54,16 @@ func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.Discove
 		standardTunnels: newManager(
 			st.WithTags(stats.Tags{"tunnelType": "standard"}),
 			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{
-				sql:             sql,
-				keystore:        keystore,
+				sql:      sql,
+				keystore: keystore,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),
 		reverseTunnels: newManager(
 			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
 			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{
-				sql:             sql,
-				keystore:        keystore,
+				sql:      sql,
+				keystore: keystore,
 			}),
 			options, managerRefreshDuration, tunnelRestartInterval,
 		),

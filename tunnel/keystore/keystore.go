@@ -5,14 +5,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type KeyType string
-
-type Key struct {
-	ID       uuid.UUID
-	Contents string
-}
-
 type Keystore interface {
-	Get(ctx context.Context, keyType KeyType, id uuid.UUID) (Key, error)
-	Set(ctx context.Context, keyType KeyType, key Key) error
+	Get(ctx context.Context, id uuid.UUID) (string, error)
+	Set(ctx context.Context, id uuid.UUID, contents string) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }

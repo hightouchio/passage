@@ -11,7 +11,6 @@ CREATE SCHEMA passage;
 CREATE SEQUENCE IF NOT EXISTS passage.sshd_ports AS INTEGER MINVALUE 49152 MAXVALUE 57343;
 CREATE SEQUENCE IF NOT EXISTS passage.tunnel_ports AS INTEGER MINVALUE 57344 MAXVALUE 65535;
 
-CREATE TYPE passage.key_type AS ENUM('private', 'public');
 CREATE TYPE passage.tunnel_type AS ENUM('standard', 'reverse');
 
 CREATE TABLE IF NOT EXISTS passage.tunnels(
@@ -41,14 +40,6 @@ CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
     PRIMARY KEY(id)
 );
 
-CREATE TABLE IF NOT EXISTS passage.keys(
-    id          UUID DEFAULT uuid_generate_v4(),
-    created_at  timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    key_type    passage.key_type NOT NULL,
-
-    PRIMARY KEY(id)
-);
-
 CREATE TABLE IF NOT EXISTS passage.key_authorizations(
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
@@ -56,7 +47,6 @@ CREATE TABLE IF NOT EXISTS passage.key_authorizations(
     tunnel_type passage.tunnel_type NOT NULL,
     tunnel_id   UUID NOT NULL,
 
-    UNIQUE(key_id, tunnel_type, tunnel_id),
-    CONSTRAINT fk_key FOREIGN KEY (key_id) REFERENCES passage.keys(id)
+    UNIQUE(key_id, tunnel_type, tunnel_id)
 );
 COMMIT;

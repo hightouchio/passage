@@ -149,16 +149,17 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 
 	// check all authorized keys configured for this tunnel
 	for _, authorizedKey := range authorizedKeys {
+		id := authorizedKey.ID
 		// retrieve key contents
-		key, err := t.services.keystore.Get(ctx, "public", authorizedKey.ID)
+		key, err := t.services.keystore.Get(ctx, id)
 		if err != nil {
 			return false, errors.Wrapf(err, "could not resolve contents for key %s", authorizedKey.ID.String())
 		}
 
 		// compare stored authorized key to test key
-		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(key.Contents))
+		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(key))
 		if err != nil {
-			return false, errors.Wrapf(err, "could not parse key %d", key.ID)
+			return false, errors.Wrapf(err, "could not parse key %d", id)
 		}
 		if ssh.KeysEqual(testKey, authorizedKey) {
 			return true, nil

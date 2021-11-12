@@ -205,38 +205,26 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 // generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library
 func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod, error) {
 	// get private keys from database
-	keys, err := t.getPrivateKeys(ctx)
+	keys, err := t.services.sql.GetStandardTunnelPrivateKeys(ctx, t.ID)
 	if err != nil {
-		return []ssh.AuthMethod{}, errors.Wrap(err, "could not get keys")
+		return []ssh.AuthMethod{}, errors.Wrap(err, "could not look up private keys")
 	}
+	authMethods := make([]ssh.AuthMethod, len(keys))
 
 	// parse private keys and prepare for SSH
-	authMethods := make([]ssh.AuthMethod, len(keys))
 	for i, key := range keys {
-		signer, err := ssh.ParsePrivateKey([]byte(key.Contents))
+		contents, err := t.services.keystore.Get(ctx, key.ID)
 		if err != nil {
-			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not parse key %d", key.ID)
+			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
+		}
+		signer, err := ssh.ParsePrivateKey([]byte(contents))
+		if err != nil {
+			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 		authMethods[i] = ssh.PublicKeys(signer)
 	}
 
 	return authMethods, nil
-}
-
-func (t StandardTunnel) getPrivateKeys(ctx context.Context) ([]keystore.Key, error) {
-	contents := make([]keystore.Key, 0)
-	keys, err := t.services.sql.GetStandardTunnelPrivateKeys(ctx, t.ID)
-	if err != nil {
-		return []keystore.Key{}, err
-	}
-	for _, key := range keys {
-		key, err := t.services.keystore.Get(ctx, "private", key.ID)
-		if err != nil {
-			return []keystore.Key{}, err
-		}
-		contents = append(contents, key)
-	}
-	return []keystore.Key{}, nil
 }
 
 const keepaliveInterval = 1 * time.Minute

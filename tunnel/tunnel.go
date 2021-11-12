@@ -2,10 +2,8 @@ package tunnel
 
 import (
 	"context"
-	"github.com/hightouchio/passage/tunnel/discovery"
-	"github.com/hightouchio/passage/tunnel/keystore"
-
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 )
@@ -100,10 +98,7 @@ func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandard
 		}
 
 		// insert into keystore
-		if err := s.Keystore.Set(ctx, "private", keystore.Key{
-			ID:       keyId,
-			Contents: keyPair.PrivateKey,
-		}); err != nil {
+		if err := s.Keystore.Set(ctx, keyId, keyPair.PrivateKey); err != nil {
 			return nil, errors.Wrap(err, "could not insert key into store")
 		}
 
@@ -164,10 +159,7 @@ func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTu
 		}
 
 		// insert into keystore
-		if err := s.Keystore.Set(ctx, "public", keystore.Key{
-			ID:       keyId,
-			Contents: keyPair.PublicKey,
-		}); err != nil {
+		if err := s.Keystore.Set(ctx, keyId, keyPair.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "could not insert key into store")
 		}
 
