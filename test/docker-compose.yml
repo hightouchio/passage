@@ -33,7 +33,7 @@ services:
     healthcheck:
       test: "pg_isready -U passage -d passage"
     volumes:
-      - ../sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ../sql:/docker-entrypoint-initdb.d
     networks:
       - passage
 
