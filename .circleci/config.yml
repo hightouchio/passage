@@ -7,10 +7,9 @@ orbs:
 executors:
   docker-publisher:
     environment:
-      image_base: andrewpage/passage
+      image_base: hightouchio/passage
     docker:
       - image: circleci/buildpack-deps:stretch
-
 
 jobs:
   build:
