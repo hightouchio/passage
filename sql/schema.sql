@@ -42,12 +42,9 @@ CREATE TABLE IF NOT EXISTS passage.reverse_tunnels(
 );
 
 CREATE TABLE IF NOT EXISTS passage.keys(
-    id UUID DEFAULT uuid_generate_v4(),
-
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-
+    id          UUID DEFAULT uuid_generate_v4(),
+    created_at  timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     key_type    passage.key_type NOT NULL,
-    contents    VARCHAR,
 
     PRIMARY KEY(id)
 );
