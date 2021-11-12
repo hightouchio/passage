@@ -18,6 +18,8 @@ services:
       PGSSLMODE: disable
     depends_on:
       - "postgres"
+    healthcheck:
+      test: "curl -f http://localhost:6000/healthcheck"
     networks:
       - public
       - passage
