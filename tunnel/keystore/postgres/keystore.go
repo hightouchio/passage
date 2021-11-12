@@ -19,21 +19,21 @@ func New(db *sqlx.DB, tableName string) Keystore {
 	}
 }
 
-func (p Keystore) Get(ctx context.Context, id uuid.UUID) (string, error) {
-	var contents string
+func (p Keystore) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	var contents []byte
 	row := p.db.QueryRowxContext(ctx, fmt.Sprintf(`SELECT contents FROM %s WHERE id=$1;`, p.tableName), id)
 	if err := row.Scan(&contents); err != nil {
-		return "", err
+		return []byte{}, err
 	}
 	return contents, nil
 }
 
-func (p Keystore) Set(ctx context.Context, id uuid.UUID, contents string) error {
+func (p Keystore) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
 	_, err := p.db.ExecContext(ctx, fmt.Sprintf(`
 	INSERT INTO %s(id, contents)
 	VALUES($1::uuid, $2::text)
 	ON CONFLICT(id) DO UPDATE SET contents=$2::text;
-	`, p.tableName), id, contents)
+	`, p.tableName), id, string(contents))
 	return err
 }
 

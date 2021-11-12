@@ -108,7 +108,8 @@ func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandard
 		}
 
 		// return the public key to the user
-		response.PublicKey = &keyPair.PublicKey
+		keyString := string(keyPair.PublicKey)
+		response.PublicKey = &keyString
 	}
 
 	return response, nil

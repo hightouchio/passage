@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -14,6 +16,7 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery/static"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	pgkeystore "github.com/hightouchio/passage/tunnel/keystore/postgres"
+	s3keystore "github.com/hightouchio/passage/tunnel/keystore/s3"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -222,7 +225,26 @@ func newTunnelDiscoveryService(config Config) (discovery.DiscoveryService, error
 }
 
 func newTunnelKeystore(config Config, db *sqlx.DB) (keystore.Keystore, error) {
-	return pgkeystore.New(db, "passage.keys"), nil
+	keystoreType := "postgres"
+
+	switch keystoreType {
+	case "postgres":
+		return pgkeystore.New(db, "passage.keys"), nil
+
+	case "s3":
+		aws, err := session.NewSession()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not init aws session")
+		}
+		return s3keystore.Keystore{
+			S3:         s3.New(aws),
+			BucketName: "passage-dev-us-west-1",
+			KeyPrefix:  "",
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported keystore type: %s", keystoreType)
+	}
 }
 
 func newHTTPServer(lc fx.Lifecycle, config Config, logger *logrus.Logger) *mux.Router {
