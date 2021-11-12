@@ -21,7 +21,7 @@ func New(db *sqlx.DB, tableName string) Keystore {
 
 func (p Keystore) Get(ctx context.Context, id uuid.UUID) (string, error) {
 	var contents string
-	row := p.db.QueryRowxContext(ctx, fmt.Sprintf(`SELECT id, contents FROM %s WHERE id=$1;`, p.tableName), id)
+	row := p.db.QueryRowxContext(ctx, fmt.Sprintf(`SELECT contents FROM %s WHERE id=$1;`, p.tableName), id)
 	if err := row.Scan(&contents); err != nil {
 		return "", err
 	}

@@ -13,10 +13,10 @@ type Key struct {
 }
 
 const getStandardTunnelPrivateKeys = `
-SELECT passage.keys.id, passage.keys.key_type FROM passage.keys
+SELECT passage.keys.id FROM passage.keys
 JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
 JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type='standard'
-WHERE passage.keys.key_type='private' AND passage.tunnels.id=$1;
+WHERE passage.tunnels.id=$1;
 `
 
 func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
@@ -24,10 +24,10 @@ func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.
 }
 
 const getReverseTunnelAuthorizedKeys = `
-SELECT passage.keys.id, passage.keys.key_type FROM passage.keys
+SELECT passage.keys.id FROM passage.keys
 JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
 JOIN passage.reverse_tunnels ON passage.key_authorizations.tunnel_id=passage.reverse_tunnels.id AND passage.key_authorizations.tunnel_type='reverse'
-WHERE passage.keys.key_type='public' AND passage.reverse_tunnels.id=$1;
+WHERE passage.reverse_tunnels.id=$1;
 `
 
 func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
@@ -60,7 +60,6 @@ func scanKey(scan scanner) (Key, error) {
 	var key Key
 	if err := scan.Scan(
 		&key.ID,
-		&key.Type,
 	); err != nil {
 		return Key{}, err
 	}
