@@ -81,7 +81,7 @@ func (t StandardTunnel) Start(ctx context.Context, options SSHOptions) error {
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
-			User:            t.SSHUser,
+			User:            options.User,
 			Auth:            auth,
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
