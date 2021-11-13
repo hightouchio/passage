@@ -93,6 +93,7 @@ func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigTunnelStandardKeepaliveTimeout, 15*time.Second)
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigDiscoveryType, "static")
+	config.SetDefault(ConfigDiscoveryStaticHost, "localhost")
 	config.SetDefault(ConfigLogLevel, "info")
 	config.SetDefault(ConfigLogFormat, "text")
 }
@@ -217,7 +218,7 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 	if !config.GetBool(ConfigApiEnabled) {
 		return nil
 	}
-	logger.Info("enabled tunnel APIs")
+	logger.Info("start tunnel web api")
 	tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 	return nil
 }
@@ -242,7 +243,6 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 		break
 
 	case "static":
-		config.SetDefault(ConfigDiscoveryStaticHost, "localhost")
 		discoveryService = static.Discovery{
 			Host: config.GetString(ConfigDiscoveryStaticHost),
 		}

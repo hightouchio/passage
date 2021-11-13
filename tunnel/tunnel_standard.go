@@ -74,7 +74,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 
 	// start keepalive handler
 	keepaliveErr := make(chan error)
-	go sshKeepalive(ctx, sshClient, sshConn, keepaliveErr)
+	go sshKeepalive(ctx, sshClient, sshConn, t.clientOptions, keepaliveErr)
 
 	// open tunnel listener
 	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("listener.start")
@@ -208,16 +208,13 @@ func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMetho
 	return authMethods, nil
 }
 
-const keepaliveInterval = 1 * time.Minute
-const keepaliveTimeout = 15 * time.Second
-
-func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, errChan chan<- error) {
-	t := time.NewTicker(keepaliveInterval)
+func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, options SSHClientOptions, errChan chan<- error) {
+	t := time.NewTicker(options.KeepaliveInterval)
 	defer t.Stop()
 
 	err := func() error {
 		for {
-			deadline := time.Now().Add(keepaliveInterval).Add(keepaliveTimeout)
+			deadline := time.Now().Add(options.KeepaliveInterval).Add(options.KeepaliveTimeout)
 			err := conn.SetDeadline(deadline)
 			if err != nil {
 				return errors.Wrap(err, "set deadline")
