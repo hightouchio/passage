@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Supervisor is responsible for a single tunnel. Supervisor monitors Tunnel status and restarts it if it crashes.
 type Supervisor struct {
 	Tunnel        Tunnel
 	TunnelOptions TunnelOptions

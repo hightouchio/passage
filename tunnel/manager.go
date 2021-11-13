@@ -15,8 +15,6 @@ type ListFunc func(ctx context.Context) ([]Tunnel, error)
 
 // Manager is responsible for starting and stopping tunnels that should be started and stopped, according to their presence in the return value of a ListFunc
 type Manager struct {
-	Stats stats.Stats
-
 	// ListFunc is the function that will list all Tunnels that should be running
 	ListFunc
 
@@ -25,6 +23,7 @@ type Manager struct {
 
 	RefreshDuration       time.Duration
 	TunnelRestartInterval time.Duration
+	Stats                 stats.Stats
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor

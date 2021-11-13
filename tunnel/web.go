@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-func (s Server) ConfigureWebRoutes(router *mux.Router) {
+func (s API) ConfigureWebRoutes(router *mux.Router) {
 	// create tunnel
 	router.HandleFunc("/tunnel/standard", s.handleWebCreateStandardTunnel).Methods(http.MethodPost)
 	router.HandleFunc("/tunnel/reverse", s.handleWebCreateReverseTunnel).Methods(http.MethodPost)
@@ -22,7 +22,7 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 	tunnelRouter.HandleFunc("", s.handleWebTunnelDelete).Methods(http.MethodDelete)
 }
 
-func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request GetTunnelRequest
@@ -46,7 +46,7 @@ func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request CheckTunnelRequest
@@ -71,7 +71,7 @@ func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request UpdateTunnelRequest
@@ -95,7 +95,7 @@ func (s Server) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request DeleteTunnelRequest
@@ -118,7 +118,7 @@ func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s Server) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request CreateStandardTunnelRequest
@@ -138,7 +138,7 @@ func (s Server) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Req
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
+func (s API) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger(r.Context())
 
 	var request CreateReverseTunnelRequest

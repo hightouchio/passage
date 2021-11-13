@@ -62,7 +62,7 @@ type CreateStandardTunnelResponse struct {
 
 const defaultSSHPort = 22
 
-func (s Server) CreateStandardTunnel(ctx context.Context, request CreateStandardTunnelRequest) (*CreateStandardTunnelResponse, error) {
+func (s API) CreateStandardTunnel(ctx context.Context, request CreateStandardTunnelRequest) (*CreateStandardTunnelResponse, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ type CreateReverseTunnelResponse struct {
 	ConnectionDetails `json:"connection,omitempty"`
 }
 
-func (s Server) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
+func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
 	var tunnelData postgres.ReverseTunnel
 
 	record, err := s.SQL.CreateReverseTunnel(ctx, tunnelData)

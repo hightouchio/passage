@@ -97,7 +97,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 }
 
 // registerAPIRoutes attaches the API routes to the router
-func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.Router, tunnelServer tunnel.Server) error {
+func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.Router, tunnelServer tunnel.API) error {
 	if !config.GetBool("api.enabled") {
 		return nil
 	}
@@ -107,7 +107,7 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 }
 
 // runStandardTunnels is the entrypoint for tunnel servers
-func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tunnel.Server, healthchecks *healthcheckManager) {
+func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tunnel.API, healthchecks *healthcheckManager) {
 	config.SetDefault("tunnel.refresh_interval", 1*time.Second)
 	config.SetDefault("tunnel.restart_interval", 15*time.Second)
 
@@ -120,7 +120,7 @@ func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tun
 			},
 			RefreshDuration:       config.GetDuration("tunnel.refresh_interval"),
 			TunnelRestartInterval: config.GetDuration("tunnel.restart_interval"),
-			Stats:                 st.WithTags(stats.Tags{"tunnelType": name}),
+			Stats:                 st.WithTags(stats.Tags{"tunnel_type": name}),
 		}
 
 		lc.Append(fx.Hook{
@@ -145,7 +145,7 @@ func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tun
 	}
 }
 
-func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.Server, error) {
+func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.API, error) {
 	// Configure inbound SSH server.
 	var sshServerOptions tunnel.SSHServerOptions
 	if config.GetBool("tunnel.reverse.enabled") {
@@ -154,7 +154,7 @@ func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keyst
 		// Decode config host key from Base64
 		hostKey, err := base64.StdEncoding.DecodeString(config.GetString("tunnel.reverse.host_key"))
 		if err != nil {
-			return tunnel.Server{}, errors.Wrap(err, "could not decode host key")
+			return tunnel.API{}, errors.Wrap(err, "could not decode host key")
 		}
 		sshServerOptions.HostKey = hostKey
 		// Set bind host.
@@ -166,9 +166,10 @@ func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keyst
 	if config.GetBool("tunnel.standard.enabled") {
 		config.SetDefault("tunnel.standard.ssh_user", "passage")
 		sshClientOptions.User = config.GetString("tunnel.standard.ssh_user")
+		sshClientOptions.DialTimeout = config.GetDuration("tunnel.standard.dial_timeout")
 	}
 
-	return tunnel.Server{
+	return tunnel.API{
 		SQL:              postgres.NewClient(sql),
 		DiscoveryService: discovery,
 		Keystore:         keystore,

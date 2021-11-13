@@ -3,6 +3,7 @@ package tunnel
 import (
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
+	"time"
 )
 
 type SSHServerOptions struct {
@@ -23,5 +24,6 @@ func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {
 }
 
 type SSHClientOptions struct {
-	User string
+	User        string
+	DialTimeout time.Duration
 }

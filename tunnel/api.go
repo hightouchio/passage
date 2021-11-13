@@ -11,7 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Server struct {
+// API provides a source of truth for Tunnel configuration. It serves remote clients via HTTP APIs, as well as Manager instances via an exported ListFunc
+type API struct {
 	SQL sqlClient
 
 	DiscoveryService discovery.DiscoveryService
@@ -22,25 +23,8 @@ type Server struct {
 	SSHClientOptions SSHClientOptions
 }
 
-type sqlClient interface {
-	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
-	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
-	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
-	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
-	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-
-	CreateStandardTunnel(ctx context.Context, data postgres.StandardTunnel) (postgres.StandardTunnel, error)
-	GetStandardTunnel(ctx context.Context, id uuid.UUID) (postgres.StandardTunnel, error)
-	UpdateStandardTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.StandardTunnel, error)
-	ListStandardActiveTunnels(ctx context.Context) ([]postgres.StandardTunnel, error)
-	GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-
-	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
-
-	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
-}
-
-func (s Server) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
+// GetStandardTunnels is a ListFunc which returns the set of StandardTunnel[] that should be run.
+func (s API) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
 	standardTunnels, err := s.SQL.ListStandardActiveTunnels(ctx)
 	if err != nil {
 		return []Tunnel{}, err
@@ -58,7 +42,8 @@ func (s Server) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
 	return tunnels, nil
 }
 
-func (s Server) GetReverseTunnels(ctx context.Context) ([]Tunnel, error) {
+// GetReverseTunnels is a ListFunc which returns the set of ReverseTunnel[] that should be run.
+func (s API) GetReverseTunnels(ctx context.Context) ([]Tunnel, error) {
 	reverseTunnels, err := s.SQL.ListReverseActiveTunnels(ctx)
 	if err != nil {
 		return []Tunnel{}, err
@@ -88,7 +73,7 @@ type GetTunnelResponse struct {
 }
 
 // GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
-func (s Server) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelResponse, error) {
+func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelResponse, error) {
 	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
 	if err == postgres.ErrTunnelNotFound {
 		return nil, postgres.ErrTunnelNotFound
@@ -118,7 +103,7 @@ type UpdateTunnelResponse struct {
 	Tunnel `json:"tunnel"`
 }
 
-func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*UpdateTunnelResponse, error) {
+func (s API) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*UpdateTunnelResponse, error) {
 	// Get initial tunnel to determine type.
 	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
 	if err == postgres.ErrTunnelNotFound {
@@ -140,7 +125,7 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 
 	// Update tunnel
 	switch tunnelType {
-	case TunnelType("standard"):
+	case "standard":
 		var newTunnel postgres.StandardTunnel
 		newTunnel, err = s.SQL.UpdateStandardTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled":     "enabled",
@@ -151,7 +136,7 @@ func (s Server) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Upd
 			"sshUser":     "ssh_user",
 		}))
 		tunnel = standardTunnelFromSQL(newTunnel)
-	case TunnelType("reverse"):
+	case "reverse":
 		var newTunnel postgres.ReverseTunnel
 		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled": "enabled",
@@ -174,7 +159,7 @@ type DeleteTunnelRequest struct {
 type DeleteTunnelResponse struct{}
 
 // DeleteTunnel returns the connection details for the tunnel, so Hightouch can connect using it
-func (s Server) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*DeleteTunnelResponse, error) {
+func (s API) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*DeleteTunnelResponse, error) {
 	err := s.SQL.DeleteTunnel(ctx, req.ID)
 	if err == postgres.ErrTunnelNotFound {
 		return nil, postgres.ErrTunnelNotFound
@@ -183,4 +168,22 @@ func (s Server) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*Del
 	}
 
 	return &DeleteTunnelResponse{}, nil
+}
+
+type sqlClient interface {
+	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
+	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
+	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
+	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
+	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+
+	CreateStandardTunnel(ctx context.Context, data postgres.StandardTunnel) (postgres.StandardTunnel, error)
+	GetStandardTunnel(ctx context.Context, id uuid.UUID) (postgres.StandardTunnel, error)
+	UpdateStandardTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.StandardTunnel, error)
+	ListStandardActiveTunnels(ctx context.Context) ([]postgres.StandardTunnel, error)
+	GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+
+	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
+
+	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
 }

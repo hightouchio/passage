@@ -32,7 +32,7 @@ type CheckTunnelResponse struct {
 }
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
-func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
+func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
 	s.Stats.SimpleEvent("statusCheck")
 	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {

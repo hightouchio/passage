@@ -46,17 +46,6 @@ type standardTunnelServices struct {
 	keystore keystore.Keystore
 }
 
-func isContextCancelled(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
-
-const sshDialTimeout = 15 * time.Second
-
 func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
@@ -71,7 +60,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	// connect to remote SSH server
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
 	st.WithEventTags(stats.Tags{"sshUser": t.SSHUser, "sshHost": t.SSHHost, "sshPort": t.SSHPort}).SimpleEvent("ssh.dial")
-	sshConn, err := net.DialTimeout("tcp", addr, sshDialTimeout)
+	sshConn, err := net.DialTimeout("tcp", addr, t.clientOptions.DialTimeout)
 	if err != nil {
 		return errors.Wrap(err, "dial remote")
 	}
