@@ -100,7 +100,7 @@ func (s API) CreateStandardTunnel(ctx context.Context, request CreateStandardTun
 			return nil, errors.Wrap(err, "could not generate keypair")
 		}
 
-		// insert into keystore
+		// insert into Keystore
 		if err := s.Keystore.Set(ctx, keyId, keyPair.PrivateKey); err != nil {
 			return nil, errors.Wrap(err, "could not insert key into store")
 		}
@@ -162,7 +162,7 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 			return nil, errors.Wrap(err, "could not generate keypair")
 		}
 
-		// insert into keystore
+		// insert into Keystore
 		if err := s.Keystore.Set(ctx, keyId, keyPair.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "could not insert key into store")
 		}

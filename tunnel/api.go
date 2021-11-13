@@ -13,29 +13,23 @@ import (
 
 // API provides a source of truth for Tunnel configuration. It serves remote clients via HTTP APIs, as well as Manager instances via an exported ListFunc
 type API struct {
-	SQL sqlClient
-
+	SQL              sqlClient
 	DiscoveryService discovery.DiscoveryService
 	Keystore         keystore.Keystore
 	Stats            stats.Stats
-
-	SSHServerOptions SSHServerOptions
-	SSHClientOptions SSHClientOptions
 }
 
 // GetStandardTunnels is a ListFunc which returns the set of StandardTunnel[] that should be run.
-func (s API) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
+func (s API) GetStandardTunnels(ctx context.Context) ([]StandardTunnel, error) {
 	standardTunnels, err := s.SQL.ListStandardActiveTunnels(ctx)
 	if err != nil {
-		return []Tunnel{}, err
+		return []StandardTunnel{}, err
 	}
 
-	services := standardTunnelServices{sql: s.SQL, keystore: s.Keystore}
 	// convert all the SQL records to our primary struct
-	tunnels := make([]Tunnel, len(standardTunnels))
+	tunnels := make([]StandardTunnel, len(standardTunnels))
 	for i, record := range standardTunnels {
 		tunnel := standardTunnelFromSQL(record)
-		tunnel.services = services // inject dependencies
 		tunnels[i] = tunnel
 	}
 
@@ -43,19 +37,16 @@ func (s API) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
 }
 
 // GetReverseTunnels is a ListFunc which returns the set of ReverseTunnel[] that should be run.
-func (s API) GetReverseTunnels(ctx context.Context) ([]Tunnel, error) {
+func (s API) GetReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
 	reverseTunnels, err := s.SQL.ListReverseActiveTunnels(ctx)
 	if err != nil {
-		return []Tunnel{}, err
+		return []ReverseTunnel{}, err
 	}
 
-	services := reverseTunnelServices{sql: s.SQL, keystore: s.Keystore}
 	// convert all the SQL records to our primary struct
-	tunnels := make([]Tunnel, len(reverseTunnels))
+	tunnels := make([]ReverseTunnel, len(reverseTunnels))
 	for i, record := range reverseTunnels {
 		tunnel := reverseTunnelFromSQL(record)
-		tunnel.services = services // inject dependencies
-		tunnel.serverOptions = s.SSHServerOptions
 		tunnels[i] = tunnel
 	}
 
@@ -175,13 +166,11 @@ type sqlClient interface {
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
 	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
-	GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	CreateStandardTunnel(ctx context.Context, data postgres.StandardTunnel) (postgres.StandardTunnel, error)
 	GetStandardTunnel(ctx context.Context, id uuid.UUID) (postgres.StandardTunnel, error)
 	UpdateStandardTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.StandardTunnel, error)
 	ListStandardActiveTunnels(ctx context.Context) ([]postgres.StandardTunnel, error)
-	GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 
 	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
 

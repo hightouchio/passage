@@ -24,17 +24,8 @@ type ReverseTunnel struct {
 	SSHDPort   int `json:"sshdPort"`
 	TunnelPort int `json:"tunnelPort"`
 
+	services      ReverseTunnelServices
 	serverOptions SSHServerOptions
-	services      reverseTunnelServices
-}
-
-// reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
-type reverseTunnelServices struct {
-	sql interface {
-		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-	}
-
-	keystore keystore.Keystore
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
@@ -143,7 +134,7 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServer
 
 // compare incoming connection key to the key authorized for this tunnel configuration
 func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
-	authorizedKeys, err := t.services.sql.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
+	authorizedKeys, err := t.services.SQL.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get keys from db")
 	}
@@ -152,7 +143,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	for _, authorizedKey := range authorizedKeys {
 		id := authorizedKey.ID
 		// retrieve key contents
-		key, err := t.services.keystore.Get(ctx, id)
+		key, err := t.services.Keystore.Get(ctx, id)
 		if err != nil {
 			return false, errors.Wrapf(err, "could not resolve contents for key %s", authorizedKey.ID.String())
 		}
@@ -170,15 +161,6 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	return false, nil
 }
 
-func (t ReverseTunnel) Equal(v interface{}) bool {
-	t2, ok := v.(ReverseTunnel)
-	if !ok {
-		return false
-	}
-
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
-}
-
 func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
 	tunnelHost, err := discovery.ResolveTunnelHost("standard", t.ID)
 	if err != nil {
@@ -189,6 +171,41 @@ func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService
 		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
+}
+
+// ReverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
+type ReverseTunnelServices struct {
+	SQL interface {
+		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+	}
+	Keystore keystore.Keystore
+}
+
+func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
+	return func(ctx context.Context) ([]Tunnel, error) {
+		// Get standard tunnels
+		sts, err := f(ctx)
+		if err != nil {
+			return []Tunnel{}, err
+		}
+		// Inject ClientOptions into StandardTunnels
+		tunnels := make([]Tunnel, len(sts))
+		for i, st := range sts {
+			st.services = services
+			st.serverOptions = options
+			tunnels[i] = st
+		}
+		return tunnels, nil
+	}
+}
+
+func (t ReverseTunnel) Equal(v interface{}) bool {
+	t2, ok := v.(ReverseTunnel)
+	if !ok {
+		return false
+	}
+
+	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct

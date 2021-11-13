@@ -33,17 +33,7 @@ type StandardTunnel struct {
 	ServicePort int    `json:"servicePort"`
 
 	clientOptions SSHClientOptions
-
-	services standardTunnelServices
-}
-
-// standardTunnelServices are the external dependencies that StandardTunnel needs to do its job
-type standardTunnelServices struct {
-	sql interface {
-		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-	}
-
-	keystore keystore.Keystore
+	services      StandardTunnelServices
 }
 
 func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error {
@@ -196,7 +186,7 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 // generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library
 func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod, error) {
 	// get private keys from database
-	keys, err := t.services.sql.GetStandardTunnelPrivateKeys(ctx, t.ID)
+	keys, err := t.services.SQL.GetStandardTunnelPrivateKeys(ctx, t.ID)
 	if err != nil {
 		return []ssh.AuthMethod{}, errors.Wrap(err, "could not look up private keys")
 	}
@@ -204,7 +194,7 @@ func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMetho
 
 	// parse private keys and prepare for SSH
 	for i, key := range keys {
-		contents, err := t.services.keystore.Get(ctx, key.ID)
+		contents, err := t.services.Keystore.Get(ctx, key.ID)
 		if err != nil {
 			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
 		}
@@ -259,6 +249,32 @@ func (t StandardTunnel) GetConnectionDetails(discovery discovery.DiscoveryServic
 		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
+}
+
+// StandardTunnelServices are the external dependencies that StandardTunnel needs to do its job
+type StandardTunnelServices struct {
+	SQL interface {
+		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+	}
+	Keystore keystore.Keystore
+}
+
+func InjectStandardTunnelDependencies(f func(ctx context.Context) ([]StandardTunnel, error), services StandardTunnelServices, options SSHClientOptions) ListFunc {
+	return func(ctx context.Context) ([]Tunnel, error) {
+		// Get standard tunnels
+		sts, err := f(ctx)
+		if err != nil {
+			return []Tunnel{}, err
+		}
+		// Inject ClientOptions into StandardTunnels
+		tunnels := make([]Tunnel, len(sts))
+		for i, st := range sts {
+			st.services = services
+			st.clientOptions = options
+			tunnels[i] = st
+		}
+		return tunnels, nil
+	}
 }
 
 func (t StandardTunnel) Equal(v interface{}) bool {

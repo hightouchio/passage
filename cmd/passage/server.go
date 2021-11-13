@@ -45,7 +45,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	app := fx.New(
 		fx.Provide(
 			// Main entrypoint.
-			newTunnelServer,
+			newTunnelAPI,
 			// Centralized DB for tunnel configs.
 			newPostgres,
 			// Service for storing and retrieving tunnel public and private keys.
@@ -107,7 +107,7 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 }
 
 // runStandardTunnels is the entrypoint for tunnel servers
-func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tunnel.API, healthchecks *healthcheckManager) {
+func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats) error {
 	config.SetDefault("tunnel.refresh_interval", 1*time.Second)
 	config.SetDefault("tunnel.restart_interval", 15*time.Second)
 
@@ -137,44 +137,48 @@ func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tun
 	}
 
 	if config.GetBool("tunnel.standard.enabled") {
-		runTunnelManager("standard", server.GetStandardTunnels)
+		config.SetDefault("tunnel.standard.ssh_user", "passage")
+		config.SetDefault("tunnel.standard.dial_timeout", 15*time.Second)
+		config.SetDefault("tunnel.standard.keepalive.interval", 1*time.Minute)
+		config.SetDefault("tunnel.standard.keepalive.timeout", 15*time.Second)
+
+		runTunnelManager("standard", tunnel.InjectStandardTunnelDependencies(server.GetStandardTunnels, tunnel.StandardTunnelServices{
+			SQL:      postgres.NewClient(sql),
+			Keystore: keystore,
+		}, tunnel.SSHClientOptions{
+			User:              config.GetString("tunnel.standard.ssh_user"),
+			DialTimeout:       config.GetDuration("tunnel.standard.dial_timeout"),
+			KeepaliveInterval: config.GetDuration("tunnel.standard.keepalive.interval"),
+			KeepaliveTimeout:  config.GetDuration("tunnel.standard.keepalive.timeout"),
+		}))
 	}
 
-	if config.GetBool("tunnel.reverse.enabled") {
-		runTunnelManager("reverse", server.GetReverseTunnels)
-	}
-}
-
-func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.API, error) {
-	// Configure inbound SSH server.
-	var sshServerOptions tunnel.SSHServerOptions
 	if config.GetBool("tunnel.reverse.enabled") {
 		config.SetDefault("tunnel.reverse.bind_host", "0.0.0.0")
 
 		// Decode config host key from Base64
 		hostKey, err := base64.StdEncoding.DecodeString(config.GetString("tunnel.reverse.host_key"))
 		if err != nil {
-			return tunnel.API{}, errors.Wrap(err, "could not decode host key")
+			return errors.Wrap(err, "could not decode host key")
 		}
-		sshServerOptions.HostKey = hostKey
-		// Set bind host.
-		sshServerOptions.BindHost = config.GetString("tunnel.reverse.bind_host")
+
+		runTunnelManager("reverse", tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
+			SQL:      postgres.NewClient(sql),
+			Keystore: keystore,
+		}, tunnel.SSHServerOptions{
+			BindHost: config.GetString("tunnel.reverse.bind_host"),
+			HostKey:  hostKey,
+		}))
 	}
 
-	// Configure outbound SSH client.
-	var sshClientOptions tunnel.SSHClientOptions
-	if config.GetBool("tunnel.standard.enabled") {
-		config.SetDefault("tunnel.standard.ssh_user", "passage")
-		sshClientOptions.User = config.GetString("tunnel.standard.ssh_user")
-		sshClientOptions.DialTimeout = config.GetDuration("tunnel.standard.dial_timeout")
-	}
+	return nil
+}
 
+func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.API, error) {
 	return tunnel.API{
 		SQL:              postgres.NewClient(sql),
 		DiscoveryService: discovery,
 		Keystore:         keystore,
-		SSHServerOptions: sshServerOptions,
-		SSHClientOptions: sshClientOptions,
 		Stats:            stats.WithPrefix("tunnel"),
 	}, nil
 }

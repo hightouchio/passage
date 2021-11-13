@@ -10,4 +10,3 @@ func isContextCancelled(ctx context.Context) bool {
 		return false
 	}
 }
-

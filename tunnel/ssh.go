@@ -24,6 +24,8 @@ func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {
 }
 
 type SSHClientOptions struct {
-	User        string
-	DialTimeout time.Duration
+	User              string
+	DialTimeout       time.Duration
+	KeepaliveInterval time.Duration
+	KeepaliveTimeout  time.Duration
 }
