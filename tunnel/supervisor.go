@@ -8,20 +8,20 @@ import (
 )
 
 type Supervisor struct {
-	Tunnel     Tunnel
-	SSHOptions SSHOptions
-	Retry      time.Duration
-	Stats      stats.Stats
+	Tunnel        Tunnel
+	TunnelOptions TunnelOptions
+	Retry         time.Duration
+	Stats         stats.Stats
 
 	stop chan bool
 }
 
-func NewSupervisor(tunnel Tunnel, st stats.Stats, options SSHOptions, retry time.Duration) *Supervisor {
+func NewSupervisor(tunnel Tunnel, st stats.Stats, options TunnelOptions, retry time.Duration) *Supervisor {
 	return &Supervisor{
-		Tunnel:     tunnel,
-		SSHOptions: options,
-		Retry:      retry,
-		Stats:      st,
+		Tunnel:        tunnel,
+		TunnelOptions: options,
+		Retry:         retry,
+		Stats:         st,
 
 		stop: make(chan bool),
 	}
@@ -50,7 +50,7 @@ func (s *Supervisor) Start(ctx context.Context) {
 				}
 
 				s.Stats.SimpleEvent("start")
-				if err := s.Tunnel.Start(ctx, s.SSHOptions); err != nil {
+				if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
 					s.Stats.ErrorEvent("error", err)
 				} else {
 					s.Stats.SimpleEvent("stop")

@@ -9,12 +9,15 @@ import (
 )
 
 type Tunnel interface {
-	Start(context.Context, SSHOptions) error
-
-	GetID() uuid.UUID
+	Start(context.Context, TunnelOptions) error
 	GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error)
 
+	GetID() uuid.UUID
 	Equal(interface{}) bool
+}
+
+type TunnelOptions struct {
+	BindHost string
 }
 
 // ConnectionDetails describes how the SaaS will use the tunnel

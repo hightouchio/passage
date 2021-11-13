@@ -3,12 +3,10 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"time"
-
-	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 )
@@ -20,8 +18,8 @@ type Server struct {
 	Keystore         keystore.Keystore
 	Stats            stats.Stats
 
-	standardTunnels *Manager
-	reverseTunnels  *Manager
+	SSHServerOptions SSHServerOptions
+	SSHClientOptions SSHClientOptions
 }
 
 type sqlClient interface {
@@ -42,56 +40,41 @@ type sqlClient interface {
 	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
 }
 
-const managerRefreshDuration = 1 * time.Second
-const tunnelRestartInterval = 15 * time.Second // how long to wait after a tunnel crashes
-
-func NewServer(sql sqlClient, st stats.Stats, discoveryService discovery.DiscoveryService, keystore keystore.Keystore, options SSHOptions) Server {
-	return Server{
-		SQL:              sql,
-		Stats:            st,
-		DiscoveryService: discoveryService,
-		Keystore:         keystore,
-		standardTunnels: newManager(
-			st.WithTags(stats.Tags{"tunnelType": "standard"}),
-			createStandardTunnelListFunc(sql.ListStandardActiveTunnels, standardTunnelServices{
-				sql:      sql,
-				keystore: keystore,
-			}),
-			options, managerRefreshDuration, tunnelRestartInterval,
-		),
-		reverseTunnels: newManager(
-			st.WithTags(stats.Tags{"tunnelType": "reverse"}),
-			createReverseTunnelListFunc(sql.ListReverseActiveTunnels, reverseTunnelServices{
-				sql:      sql,
-				keystore: keystore,
-			}),
-			options, managerRefreshDuration, tunnelRestartInterval,
-		),
+func (s Server) GetStandardTunnels(ctx context.Context) ([]Tunnel, error) {
+	standardTunnels, err := s.SQL.ListStandardActiveTunnels(ctx)
+	if err != nil {
+		return []Tunnel{}, err
 	}
+
+	services := standardTunnelServices{sql: s.SQL, keystore: s.Keystore}
+	// convert all the SQL records to our primary struct
+	tunnels := make([]Tunnel, len(standardTunnels))
+	for i, record := range standardTunnels {
+		tunnel := standardTunnelFromSQL(record)
+		tunnel.services = services // inject dependencies
+		tunnels[i] = tunnel
+	}
+
+	return tunnels, nil
 }
 
-func (s Server) StartStandardTunnels(ctx context.Context) {
-	s.standardTunnels.Start(ctx)
-}
+func (s Server) GetReverseTunnels(ctx context.Context) ([]Tunnel, error) {
+	reverseTunnels, err := s.SQL.ListReverseActiveTunnels(ctx)
+	if err != nil {
+		return []Tunnel{}, err
+	}
 
-func (s Server) StopStandardTunnels(ctx context.Context) {
-	s.standardTunnels.Stop(ctx)
-}
+	services := reverseTunnelServices{sql: s.SQL, keystore: s.Keystore}
+	// convert all the SQL records to our primary struct
+	tunnels := make([]Tunnel, len(reverseTunnels))
+	for i, record := range reverseTunnels {
+		tunnel := reverseTunnelFromSQL(record)
+		tunnel.services = services // inject dependencies
+		tunnel.serverOptions = s.SSHServerOptions
+		tunnels[i] = tunnel
+	}
 
-func (s Server) StartReverseTunnels(ctx context.Context) {
-	s.reverseTunnels.Start(ctx)
-}
-
-func (s Server) StopReverseTunnels(ctx context.Context) {
-	s.reverseTunnels.Stop(ctx)
-}
-
-func (s Server) CheckStandardTunnels(ctx context.Context) error {
-	return s.standardTunnels.Check(stats.InjectContext(ctx, s.Stats.WithTags(stats.Tags{"tunnelType": "standard"})))
-}
-
-func (s Server) CheckReverseTunnels(ctx context.Context) error {
-	return s.reverseTunnels.Check(ctx)
+	return tunnels, nil
 }
 
 type GetTunnelRequest struct {

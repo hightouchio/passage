@@ -24,7 +24,8 @@ type ReverseTunnel struct {
 	SSHDPort   int `json:"sshdPort"`
 	TunnelPort int `json:"tunnelPort"`
 
-	services reverseTunnelServices
+	serverOptions SSHServerOptions
+	services      reverseTunnelServices
 }
 
 // reverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
@@ -36,12 +37,12 @@ type reverseTunnelServices struct {
 	keystore keystore.Keystore
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
+func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
 	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshd, err := t.newSSHServer(ctx, options)
+	sshd, err := t.newSSHServer(ctx, t.serverOptions, tunnelOptions)
 	if err != nil {
 		return errors.Wrap(err, "init sshd")
 	}
@@ -64,7 +65,7 @@ func (t ReverseTunnel) Start(ctx context.Context, options SSHOptions) error {
 	}
 }
 
-func (t ReverseTunnel) newSSHServer(ctx context.Context, options SSHOptions) (*ssh.Server, error) {
+func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) (*ssh.Server, error) {
 	st := stats.GetStats(ctx)
 
 	server := &ssh.Server{
@@ -94,7 +95,7 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, options SSHOptions) (*s
 	}
 
 	// get the server-side Host Key signers
-	hostSigners, err := options.GetHostSigners()
+	hostSigners, err := serverOptions.GetHostSigners()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get host signers")
 	}
@@ -102,14 +103,14 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, options SSHOptions) (*s
 
 	// validate port forwarding
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		success := bindHost == options.BindHost && int(bindPort) == t.TunnelPort
+		success := bindHost == tunnelOptions.BindHost && int(bindPort) == t.TunnelPort
 
 		st.WithEventTags(stats.Tags{
 			"sessionId":       ctx.SessionID(),
 			"remoteAddr":      ctx.RemoteAddr().String(),
 			"requestBindHost": bindHost,
 			"requestBindPort": bindPort,
-			"configBindHost":  options.BindHost,
+			"configBindHost":  tunnelOptions.BindHost,
 			"configBindPort":  t.TunnelPort,
 			"success":         success,
 		}).SimpleEvent("session.portForwardRequest")
@@ -188,26 +189,6 @@ func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService
 		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
-}
-
-// createReverseTunnelListFunc wraps our Postgres list function in something that converts the records into ReverseTunnel structs so they can be passed to Manager which accepts the Tunnel interface
-func createReverseTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.ReverseTunnel, error), services reverseTunnelServices) ListFunc {
-	return func(ctx context.Context) ([]Tunnel, error) {
-		reverseTunnels, err := postgresList(ctx)
-		if err != nil {
-			return []Tunnel{}, err
-		}
-
-		// convert all the SQL records to our primary struct
-		tunnels := make([]Tunnel, len(reverseTunnels))
-		for i, record := range reverseTunnels {
-			tunnel := reverseTunnelFromSQL(record)
-			tunnel.services = services // inject dependencies
-			tunnels[i] = tunnel
-		}
-
-		return tunnels, nil
-	}
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct

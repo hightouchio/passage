@@ -13,15 +13,15 @@ import (
 
 type ListFunc func(ctx context.Context) ([]Tunnel, error)
 
-// Manager keeps track of the tunnels that need to be loaded in from the database, and the tunnels that need to be started up with a supervisor
+// Manager is responsible for starting and stopping tunnels that should be started and stopped, according to their presence in the return value of a ListFunc
 type Manager struct {
 	Stats stats.Stats
 
-	// ListFunc is the function that will list all tunnels that should be running
+	// ListFunc is the function that will list all Tunnels that should be running
 	ListFunc
 
-	// SSHOptions are the config options for the SSH server that we start up
-	SSHOptions
+	// TunnelOptions are the config options for the tunnel server we run.
+	TunnelOptions
 
 	RefreshDuration       time.Duration
 	TunnelRestartInterval time.Duration
@@ -36,12 +36,12 @@ type Manager struct {
 	stop chan bool
 }
 
-func newManager(stats stats.Stats, listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func newManager(stats stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
 		Stats:    stats,
 		ListFunc: listFunc,
 
-		SSHOptions:            sshOptions,
+		TunnelOptions:         tunnelOptions,
 		RefreshDuration:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
 
@@ -103,7 +103,7 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 			st := m.Stats.WithEventTags(stats.Tags{"tunnelId": tunnelID.String()})
 			ctx = stats.InjectContext(ctx, st)
 
-			supervisor := NewSupervisor(tunnel, st, m.SSHOptions, m.TunnelRestartInterval)
+			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}

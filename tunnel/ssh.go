@@ -5,13 +5,12 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-type SSHOptions struct {
+type SSHServerOptions struct {
 	BindHost string
 	HostKey  []byte
-	User     string
 }
 
-func (o SSHOptions) GetHostSigners() ([]ssh.Signer, error) {
+func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {
 	var hostSigners []ssh.Signer
 	if len(o.HostKey) != 0 {
 		hostSigner, err := gossh.ParsePrivateKey(o.HostKey)
@@ -21,4 +20,8 @@ func (o SSHOptions) GetHostSigners() ([]ssh.Signer, error) {
 		hostSigners = []ssh.Signer{hostSigner}
 	}
 	return hostSigners, nil
+}
+
+type SSHClientOptions struct {
+	User string
 }

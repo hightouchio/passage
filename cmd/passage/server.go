@@ -66,8 +66,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 		fx.Invoke(
 			registerAPIRoutes,
-			runStandardTunnels,
-			runReverseTunnels,
+			runTunnels,
 		),
 
 		fx.NopLogger,
@@ -107,47 +106,48 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 	return nil
 }
 
-// runStandardTunnels is the entrypoint for the Standard Tunnels service
-func runStandardTunnels(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger, server tunnel.Server, healthchecks *healthcheckManager) {
-	if !config.GetBool("tunnel.standard.enabled") {
-		return
+// runStandardTunnels is the entrypoint for tunnel servers
+func runTunnels(lc fx.Lifecycle, config *viper.Viper, st stats.Stats, server tunnel.Server, healthchecks *healthcheckManager) {
+	config.SetDefault("tunnel.refresh_interval", 1*time.Second)
+	config.SetDefault("tunnel.restart_interval", 15*time.Second)
+
+	// Helper function for initializing a tunnel.Manager
+	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
+		manager := &tunnel.Manager{
+			ListFunc: listFunc,
+			TunnelOptions: tunnel.TunnelOptions{
+				BindHost: config.GetString("tunnel.bind_host"),
+			},
+			RefreshDuration:       config.GetDuration("tunnel.refresh_interval"),
+			TunnelRestartInterval: config.GetDuration("tunnel.restart_interval"),
+			Stats:                 st.WithTags(stats.Tags{"tunnelType": name}),
+		}
+
+		lc.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				go manager.Start(ctx)
+				healthchecks.AddCheck(fmt.Sprintf("tunnel_%s", name), manager.Check)
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				go manager.Stop(ctx)
+				return nil
+			},
+		})
 	}
 
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			go server.StartStandardTunnels(ctx)
-			healthchecks.AddCheck("tunnel_standard", server.CheckStandardTunnels)
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			server.StopStandardTunnels(ctx)
-			return nil
-		},
-	})
-}
-
-// runReverseTunnels is the entrypoint for the Reverse Tunnels service
-func runReverseTunnels(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger, server tunnel.Server, healthchecks *healthcheckManager) {
-	if !config.GetBool("tunnel.reverse.enabled") {
-		return
+	if config.GetBool("tunnel.standard.enabled") {
+		runTunnelManager("standard", server.GetStandardTunnels)
 	}
 
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			go server.StartReverseTunnels(ctx)
-			healthchecks.AddCheck("tunnel_reverse", server.CheckStandardTunnels)
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			server.StopReverseTunnels(ctx)
-			return nil
-		},
-	})
+	if config.GetBool("tunnel.reverse.enabled") {
+		runTunnelManager("reverse", server.GetReverseTunnels)
+	}
 }
 
 func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.Server, error) {
-	// Initialize SSH options for reverse tunnels
-	var sshOptions tunnel.SSHOptions
+	// Configure inbound SSH server.
+	var sshServerOptions tunnel.SSHServerOptions
 	if config.GetBool("tunnel.reverse.enabled") {
 		config.SetDefault("tunnel.reverse.bind_host", "0.0.0.0")
 
@@ -156,24 +156,26 @@ func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keyst
 		if err != nil {
 			return tunnel.Server{}, errors.Wrap(err, "could not decode host key")
 		}
-		sshOptions.HostKey = hostKey
+		sshServerOptions.HostKey = hostKey
 		// Set bind host.
-		sshOptions.BindHost = config.GetString("tunnel.reverse.bind_host")
+		sshServerOptions.BindHost = config.GetString("tunnel.reverse.bind_host")
 	}
 
-	// Set outbound SSH user.
+	// Configure outbound SSH client.
+	var sshClientOptions tunnel.SSHClientOptions
 	if config.GetBool("tunnel.standard.enabled") {
 		config.SetDefault("tunnel.standard.ssh_user", "passage")
-		sshOptions.User = config.GetString("tunnel.standard.ssh_user")
+		sshClientOptions.User = config.GetString("tunnel.standard.ssh_user")
 	}
 
-	return tunnel.NewServer(
-		postgres.NewClient(sql),
-		stats.WithPrefix("tunnel"),
-		discovery,
-		keystore,
-		sshOptions,
-	), nil
+	return tunnel.Server{
+		SQL:              postgres.NewClient(sql),
+		DiscoveryService: discovery,
+		Keystore:         keystore,
+		SSHServerOptions: sshServerOptions,
+		SSHClientOptions: sshClientOptions,
+		Stats:            stats.WithPrefix("tunnel"),
+	}, nil
 }
 
 func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService, error) {

@@ -32,6 +32,8 @@ type StandardTunnel struct {
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
 
+	clientOptions SSHClientOptions
+
 	services standardTunnelServices
 }
 
@@ -55,7 +57,7 @@ func isContextCancelled(ctx context.Context) bool {
 
 const sshDialTimeout = 15 * time.Second
 
-func (t StandardTunnel) Start(ctx context.Context, options SSHOptions) error {
+func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -81,7 +83,7 @@ func (t StandardTunnel) Start(ctx context.Context, options SSHOptions) error {
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
-			User:            options.User,
+			User:            t.clientOptions.User,
 			Auth:            auth,
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
@@ -268,26 +270,6 @@ func (t StandardTunnel) GetConnectionDetails(discovery discovery.DiscoveryServic
 		Host: tunnelHost,
 		Port: t.TunnelPort,
 	}, nil
-}
-
-// createStandardTunnelListFunc wraps our Postgres list function in something that converts the records into Standard structs so they can be passed to Manager which accepts the Tunnel interface
-func createStandardTunnelListFunc(postgresList func(ctx context.Context) ([]postgres.StandardTunnel, error), services standardTunnelServices) ListFunc {
-	return func(ctx context.Context) ([]Tunnel, error) {
-		standardTunnels, err := postgresList(ctx)
-		if err != nil {
-			return []Tunnel{}, err
-		}
-
-		// convert all the SQL records to our primary struct
-		tunnels := make([]Tunnel, len(standardTunnels))
-		for i, record := range standardTunnels {
-			tunnel := standardTunnelFromSQL(record)
-			tunnel.services = services // inject dependencies
-			tunnels[i] = tunnel
-		}
-
-		return tunnels, nil
-	}
 }
 
 func (t StandardTunnel) Equal(v interface{}) bool {
