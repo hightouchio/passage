@@ -22,63 +22,73 @@ Flags:
 Passage requires a PostgreSQL database, version 11 or later. Database schema is located in [`sql/1-schema.sql`](`sql/1-schema.sql`).
 
 ## Configuration
-Passage is configured primarily through environment variables, as listed below.
+Passage can read its configuration from disk (YAML or JSON), or from environment variables.
+Passage's config keys are paths in a configuration object, so the dot notation is used to indicate hierarchy.
 
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| ENV                                | Name of the env for statsd reporting                                    | False                     |              |             |
-| HTTP_ADDR                          | Bind address for the HTTP server                                        | True                      | 0.0.0.0:8080 |             |
-| API_ENABLED                        | Expose Tunnel management APIs via HTTP                                  | False                     | False        |             |
-| TUNNEL_BIND_HOST                   | Bind host for internal tunnel ports.                                    | False                     | 0.0.0.0      |             |
-| TUNNEL_REFRESH_INTERVAL            | How frequently Passage should check Postgres for tunnel status changes. | False                     | 1 second     |             |
-| TUNNEL_RESTART_INTERVAL            | How frequently Passage should attempt to restart a broken tunnel.       | False                     | 15 seconds   |             |
+To use environment variables, replace the dot with an underscore and prefix the variable with `PASSAGE_`.
+For example, `tunnel.standard.ssh_user` becomes `PASSAGE_TUNNEL_STANDARD_SSH_USER`.
 
-### Standard Tunneling
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| TUNNEL_STANDARD_ENABLED            | Enable Standard Tunnels.                                                | False                     | False        |             |
-| TUNNEL_STANDARD_SSH_USER           | SSH client username for standard tunnels.                               | False                     | `passage`    |             |
-| TUNNEL_STANDARD_DIAL_TIMEOUT       | Timeout for initial SSH dial.                                           | False                     | 15 seconds   |             |
-| TUNNEL_STANDARD_KEEPALIVE_INTERVAL | Keepalive interval for Standard Tunnel SSH client connection.           | False                     | 1 minute     |             |
-| TUNNEL_STANDARD_KEEPALIVE_TIMEOUT  | Keepalive timeout for Standard Tunnel SSH client connection.            | False                     | 15 seconds   |             |
+| **Key**                 | **Description**                                                         | **Required** | **Default**  |
+|-------------------------|-------------------------------------------------------------------------|--------------|--------------|
+| http.addr               | Bind address for the HTTP server                                        | True         | 0.0.0.0:8080 |
+| api.enabled             | Expose Tunnel management APIs via HTTP                                  | False        | False        |
+| tunnel.bind.host        | Bind host for internal tunnel ports.                                    | False        | 0.0.0.0      |
+| tunnel.refresh.interval | How frequently Passage should check Postgres for tunnel status changes. | False        | 1 second     |
+| tunnel.restart.interval | How frequently Passage should attempt to restart a broken tunnel.       | False        | 15 seconds   |
 
-### Reverse Tunneling
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| TUNNEL_REVERSE_ENABLED             | Enable Reverse Tunnels.                                                 | False                     | False        |             |
-| TUNNEL_REVERSE_HOST_KEY            | Base64 encoded host key for the reverse tunnel SSH server.              | True, if reverse enabled. |              |             |
-| TUNNEL_REVERSE_BIND_HOST           | Bind host for the reverse tunnel SSH server                             | True, if reverse enabled. |              |             |
+### Standard Tunnels
+| **Key**                            | **Description**                                               | **Required** | **Default** |
+|------------------------------------|---------------------------------------------------------------|--------------|-------------|
+| tunnel.standard.enabled            | Enable Standard Tunnels.                                      | False        | False       |
+| tunnel.standard.ssh.user           | SSH client username for standard tunnels.                     | False        | `passage`   |
+| tunnel.standard.dial.timeout       | Timeout for initial SSH dial.                                 | False        | 15 seconds  |
+| tunnel.standard.keepalive.interval | Keepalive interval for Standard Tunnel SSH client connection. | False        | 1 minute    |
+| tunnel.standard.keepalive.timeout  | Keepalive timeout for Standard Tunnel SSH client connection.  | False        | 15 seconds  |
+
+### Reverse Tunnels
+| **Key**                  | **Description**                                            | **Required**              | **Default** |
+|--------------------------|------------------------------------------------------------|---------------------------|-------------|
+| tunnel.reverse.enabled   | Enable Reverse Tunnels.                                    | False                     | False       |
+| tunnel.reverse.host.key  | Base64 encoded [host key](https://www.ssh.com/academy/ssh/host-key) for the reverse tunnel SSH server. | True, if reverse enabled. |             |
+| tunnel.reverse.bind.host | Bind host for the reverse tunnel SSH server                | True, if reverse enabled. |             |
 
 ### Service Discovery
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| DISCOVERY_TYPE                     | Tunnel service discovery type (`static` or `srv`)                       | False                     | `static`     |             |
-| DISCOVERY_SRV_REGISTRY             | If `srv`, the DNS SRV registry to use.                                  | True, if `srv`.           |              |             |
-| DISCOVERY_SRV_PREFIX               | TODO                                                                    | True, if `srv`.           |              |             |
-| DISCOVERY_STATIC_HOST              | If `static`, the hostname to use.                                       | True, if `static`.        |              |             |
+A production passage deployment may have the standard tunnel server running separately from the reverse tunnel server, and an API server running separately from the two.
+
+| **Key**                | **Description**                                   | **Required**       | **Default** |
+|------------------------|---------------------------------------------------|--------------------|-------------|
+| discovery.type         | Tunnel service discovery type (`static` or `srv`) | False              | `static`    |
+| discovery.srv.registry | If `srv`, the DNS SRV registry to use.            | True, if `srv`.    |             |
+| discovery.srv.prefix   | TODO                                              | True, if `srv`.    |             |
+| discovery.static.host  | If `static`, the hostname to use.                 | True, if `static`. |             |
 
 ### Keystore
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| KEYSTORE_TYPE                      | Tunnel keystore type (`postgres` or `s3`)                               | True                      |              |             |
-| KEYSTORE_POSTGRES_TABLE_NAME       | If `postgres`, the table name to use.                                   | True, if `postgres`       |              |             |
-| KEYSTORE_S3_BUCKET_NAME            | If `s3`, the bucket name to use.                                        | True, if `s3`             |              |             |
-| KEYSTORE_S3_KEY_PREFIX             | If `s3`, the prefix applied to keys.                                    | False                     |              |             |
+Passage needs a place to securely store SSH private keys for Standard Tunnels and public keys for Reverse Tunnels. By default, Passage will store keys unencrypted in a Postgres table, but that should not be deployed to production. 
+
+With the `s3` keystore, Passage will store keys in an S3 bucket. If you choose to go this route, make sure you have properly configured bucket policies and IAM permissions to restrict access to _only_ Passage. Also, it is recommended that you enable at-rest bucket encryption with KMS.
+
+| **Key**                      | **Description**                           | **Required**        |
+|------------------------------|-------------------------------------------|---------------------|
+| keystore.type                | Tunnel keystore type (`postgres` or `s3`) | True                |
+| keystore.postgres.table.name | If `postgres`, the table name to use.     | True, if `postgres` |
+| keystore.s3.bucket.name      | If `s3`, the bucket name to use.          | True, if `s3`       |
+| keystore.s3.key.prefix       | If `s3`, the prefix applied to keys.      | False               |
 
 ### Database Connection
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| POSTGRES_URI                       | Postgres connection string.                                             | False                     |              |             |
-| POSTGRES_HOST                      | See `PGHOST`                                                            | True                      |              |             |
-| POSTGRES_PORT                      | See `PGPORT`                                                            | True                      |              |             |
-| POSTGRES_USER                      | See `PGUSER`                                                            | True                      |              |             |
-| POSTGRES_PASS                      | See `PGPASS`                                                            | True                      |              |             |
-| POSTGRES_DBNAME                    | See `PGDBNAME`                                                          | True                      |              |             |
-| POSTGRES_SSLMODE                   | See `PGSSLMODE`                                                         | True                      |              |             |
+| **Key**          | **Description**             | **Required** | **Alias**   |
+|------------------|-----------------------------|--------------|-------------|
+| postgres.uri     | Postgres connection string. | False        |             |
+| postgres.host    | See `PGHOST`                | True         | `PGHOST`    |
+| postgres.port    | See `PGPORT`                | True         | `PGPORT`    |
+| postgres.user    | See `PGUSER`                | True         | `PGUSER`    |
+| postgres.pass    | See `PGPASS`                | True         | `PGPASS`    |
+| postgres.dbname  | See `PGDBNAME`              | True         | `PGDBNAME`  |
+| postgres.sslmode | See `PGSSLMODE`             | True         | `PGSSLMODE` |
 
 ### Visibility
-| **Key**                                    | **Description**                                                         | **Required**              | **Default**  | **Aliases** |
-|--------------------------------------------|-------------------------------------------------------------------------|---------------------------|--------------|-------------|
-| LOG_LEVEL                          | Visibility level for logs (debug/info/warn/error/fatal)                 | False                     | `info`       |             |
-| LOG_FORMAT                         | Format of structured logs (json/text)                                   | False                     | `text`       |             |
-| STATSD_ADDR                        | Address of a Statsd server to send metrics to.                          | False                     |              |             |
+| **Key**     | **Description**                                         | **Required** | **Default** |
+|-------------|---------------------------------------------------------|--------------|-------------|
+| env         | Name of the env for logging and metrics.                | False        |             |
+| log.level   | Visibility level for logs (debug/info/warn/error/fatal) | False        | `info`      |
+| log.format  | Format of structured logs (json/text)                   | False        | `text`      |
+| statsd.addr | Address of a Statsd server to send metrics to.          | False        |             |
