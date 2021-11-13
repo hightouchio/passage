@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS passage.tunnels(
     enabled             BOOLEAN NOT NULL DEFAULT true,
 
     tunnel_port         INT DEFAULT nextval('passage.tunnel_ports'),
-    ssh_user            VARCHAR NOT NULL DEFAULT 'hightouch',
+    ssh_user            VARCHAR NOT NULL,
     ssh_host            VARCHAR NOT NULL,
     ssh_port            INTEGER NOT NULL,
     service_host        VARCHAR NOT NULL,

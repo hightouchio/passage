@@ -8,6 +8,7 @@ import (
 type SSHOptions struct {
 	BindHost string
 	HostKey  []byte
+	User     string
 }
 
 func (o SSHOptions) GetHostSigners() ([]ssh.Signer, error) {

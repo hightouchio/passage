@@ -149,16 +149,22 @@ func newTunnelServer(config *viper.Viper, sql *sqlx.DB, stats stats.Stats, keyst
 	// Initialize SSH options for reverse tunnels
 	var sshOptions tunnel.SSHOptions
 	if config.GetBool("tunnel.reverse.enabled") {
-		config.SetDefault("tunnel.reverse.bindHost", "0.0.0.0")
+		config.SetDefault("tunnel.reverse.bind_host", "0.0.0.0")
 
 		// Decode config host key from Base64
-		hostKey, err := base64.StdEncoding.DecodeString(config.GetString("tunnel.reverse.hostKey"))
+		hostKey, err := base64.StdEncoding.DecodeString(config.GetString("tunnel.reverse.host_key"))
 		if err != nil {
 			return tunnel.Server{}, errors.Wrap(err, "could not decode host key")
 		}
 		sshOptions.HostKey = hostKey
 		// Set bind host.
-		sshOptions.BindHost = config.GetString("tunnel.reverse.bindHost")
+		sshOptions.BindHost = config.GetString("tunnel.reverse.bind_host")
+	}
+
+	// Set outbound SSH user.
+	if config.GetBool("tunnel.standard.enabled") {
+		config.SetDefault("tunnel.standard.ssh_user", "passage")
+		sshOptions.User = config.GetString("tunnel.standard.ssh_user")
 	}
 
 	return tunnel.NewServer(
