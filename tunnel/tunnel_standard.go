@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
@@ -292,7 +293,7 @@ func (t StandardTunnel) Equal(v interface{}) bool {
 // sqlFromStandardTunnel converts tunnel data into something that can be inserted into the DB
 func sqlFromStandardTunnel(tunnel StandardTunnel) postgres.StandardTunnel {
 	return postgres.StandardTunnel{
-		SSHUser:     tunnel.SSHUser,
+		SSHUser:     sql.NullString{String: tunnel.SSHUser, Valid: tunnel.SSHUser != ""},
 		SSHHost:     tunnel.SSHHost,
 		SSHPort:     tunnel.SSHPort,
 		ServiceHost: tunnel.ServiceHost,
@@ -307,7 +308,7 @@ func standardTunnelFromSQL(record postgres.StandardTunnel) StandardTunnel {
 		CreatedAt:   record.CreatedAt,
 		Enabled:     record.Enabled,
 		TunnelPort:  record.TunnelPort,
-		SSHUser:     record.SSHUser,
+		SSHUser:     record.SSHUser.String,
 		SSHHost:     record.SSHHost,
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,

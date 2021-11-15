@@ -10,6 +10,8 @@ services:
       PASSAGE_HTTP_ADDR: 0.0.0.0:6000
       PASSAGE_API_ENABLED: 'true'
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
+      PASSAGE_KEYSTORE_TYPE: 'postgres'
+      PASSAGE_KEYSTORE_POSTGRES_TABLE_NAME: 'passage.keys'
 
       PGHOST: postgres
       PGPORT: 5432

@@ -159,15 +159,15 @@ func runServer(cmd *cobra.Command, args []string) error {
 func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
-		manager := &tunnel.Manager{
-			ListFunc: listFunc,
-			TunnelOptions: tunnel.TunnelOptions{
+		manager := tunnel.NewManager(
+			st,
+			listFunc,
+			tunnel.TunnelOptions{
 				BindHost: config.GetString(ConfigTunnelBindHost),
 			},
-			RefreshDuration:       config.GetDuration(ConfigTunnelRefreshInterval),
-			TunnelRestartInterval: config.GetDuration(ConfigTunnelRestartInterval),
-			Stats:                 st.WithTags(stats.Tags{"tunnel_type": name}),
-		}
+			config.GetDuration(ConfigTunnelRefreshInterval),
+			config.GetDuration(ConfigTunnelRestartInterval),
+		)
 
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
@@ -265,7 +265,7 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 		if tableName == "" {
 			return nil, newConfigError(ConfigKeystorePostgresTableName, "must be set")
 		}
-		return pgkeystore.New(db, config.GetString(tableName)), nil
+		return pgkeystore.New(db, tableName), nil
 
 	case "s3":
 		bucketName := config.GetString(ConfigKeystoreS3BucketName)

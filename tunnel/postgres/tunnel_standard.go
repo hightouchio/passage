@@ -15,12 +15,12 @@ type StandardTunnel struct {
 	CreatedAt time.Time `db:"created_at"`
 	Enabled   bool      `db:"enabled"`
 
-	TunnelPort  int    `db:"tunnel_port"`
-	SSHUser     string `db:"ssh_user"`
-	SSHHost     string `db:"ssh_host"`
-	SSHPort     int    `db:"ssh_port"`
-	ServiceHost string `db:"service_host"`
-	ServicePort int    `db:"service_port"`
+	TunnelPort  int            `db:"tunnel_port"`
+	SSHUser     sql.NullString `db:"ssh_user"`
+	SSHHost     string         `db:"ssh_host"`
+	SSHPort     int            `db:"ssh_port"`
+	ServiceHost string         `db:"service_host"`
+	ServicePort int            `db:"service_port"`
 }
 
 func (c Client) CreateStandardTunnel(ctx context.Context, input StandardTunnel) (StandardTunnel, error) {

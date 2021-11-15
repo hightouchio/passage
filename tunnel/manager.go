@@ -35,7 +35,7 @@ type Manager struct {
 	stop chan bool
 }
 
-func newManager(stats stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(stats stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
 		Stats:    stats,
 		ListFunc: listFunc,
