@@ -5,6 +5,7 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -27,7 +28,7 @@ func Test_Manager_restartTunnel(t *testing.T) {
 		return t, nil
 	}
 
-	manager := newManager(stats.New(&statsd.NoOpClient{}, logrus.New()), listFunc, SSHOptions{}, 50*time.Millisecond, 50*time.Millisecond)
+	manager := NewManager(stats.New(&statsd.NoOpClient{}, logrus.New()), listFunc, TunnelOptions{}, 50*time.Millisecond, 50*time.Millisecond)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,7 +73,7 @@ func newMockTunnel(port int) *mockTunnel {
 	}
 }
 
-func (m *mockTunnel) Start(ctx context.Context, options SSHOptions) error {
+func (m *mockTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	m.started = true
 	<-ctx.Done()
 	m.stopped = true
@@ -112,7 +113,7 @@ func (m *mockTunnel) WaitForStop(ctx context.Context) bool {
 	}
 }
 
-func (m *mockTunnel) GetConnectionDetails() (ConnectionDetails, error) {
+func (m *mockTunnel) GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error) {
 	return ConnectionDetails{
 		Host: "127.0.0.1",
 		Port: m.port,

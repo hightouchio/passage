@@ -10,12 +10,12 @@ import (
 )
 
 type KeyPair struct {
-	PublicKey  string
-	PrivateKey string
+	PublicKey  []byte
+	PrivateKey []byte
 }
 
 func (k KeyPair) Base64PrivateKey() string {
-	return base64.StdEncoding.EncodeToString([]byte(k.PrivateKey))
+	return base64.StdEncoding.EncodeToString(k.PrivateKey)
 }
 
 const clientKeyPairBits = 2048
@@ -36,16 +36,11 @@ func GenerateKeyPair() (KeyPair, error) {
 	}
 
 	return KeyPair{
-		PublicKey: string(ssh.MarshalAuthorizedKey(publicKey)),
-		PrivateKey: string(pem.EncodeToMemory(&pem.Block{
+		PublicKey: ssh.MarshalAuthorizedKey(publicKey),
+		PrivateKey: pem.EncodeToMemory(&pem.Block{
 			Type:    "RSA PRIVATE KEY",
 			Headers: nil,
 			Bytes:   x509.MarshalPKCS1PrivateKey(privateKey),
-		})),
+		}),
 	}, nil
-}
-
-func IsValidPublicKey(key string) bool {
-	_, err := ssh.ParsePublicKey([]byte(key))
-	return err == nil
 }

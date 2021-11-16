@@ -1,0 +1,98 @@
+version: "3.9"
+services:
+  # passage is the tunnel service
+  passage:
+    build: ../
+    command: server
+    environment:
+      PASSAGE_ENV: test
+      PASSAGE_LOG_LEVEL: debug
+      PASSAGE_HTTP_ADDR: 0.0.0.0:6000
+      PASSAGE_API_ENABLED: 'true'
+      PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
+      PASSAGE_TUNNEL_REVERSE_ENABLED: 'true'
+
+      PASSAGE_DISCOVERY_STATIC_HOST: 'passage'
+      PASSAGE_KEYSTORE_TYPE: 'postgres'
+      PASSAGE_KEYSTORE_POSTGRES_TABLE_NAME: 'passage.keys'
+      LOG_LEVEL: debug
+
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: passage
+      PGDBNAME: passage
+      PGSSLMODE: disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: "curl -f http://localhost:6000/healthcheck"
+    networks:
+      - public
+      - passage
+
+  # postgres is the hidden Postgres DB backing the passage service.
+  postgres:
+    image: postgres:11.6
+    restart: always
+    environment:
+      POSTGRES_USER: "passage"
+      POSTGRES_DB: "passage"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: "pg_isready -U passage -d passage"
+    volumes:
+      - ../sql:/docker-entrypoint-initdb.d
+    networks:
+      - passage
+
+  # remote_ssh represents a public-facing Bastion server running in a remote network.
+  remote_bastion:
+    build: ./bastion
+    environment:
+      USER_NAME: passage
+    volumes:
+      - type: volume
+        source: bastion-ssh-config
+        target: /config/.ssh
+    networks:
+      - public
+      - hidden
+
+  # remote_ssh represents a private server running in a remote network that acts as an SSH client.
+  reverse_tunnel_client:
+    build: ./reverse-tunnel-client
+    volumes:
+      - type: volume
+        source: reverse-tunnel-config
+        target: /reverse_tunnel
+    networks:
+      - public
+      - hidden
+
+  # remote_service represents a hidden service running in a remote network.
+  remote_service:
+    image: hashicorp/http-echo
+    command: -text "You're talking to the remote service!"
+    networks:
+      - hidden
+
+networks:
+  # Public network mimics the open internet.
+  public:
+    name: public
+
+  # Passage network represents the hidden Passage service.
+  passage:
+    name: passage
+
+  # Hidden mimics the hidden remote network.
+  hidden:
+    name: hidden
+
+volumes:
+  # Create a volume for the test runner to authorize public keys on the bastion.
+  bastion-ssh-config:
+
+  # Create a volume for the test runner to configure a reverse tunnel on the hidden client.
+  reverse-tunnel-config:

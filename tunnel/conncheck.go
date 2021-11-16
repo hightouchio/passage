@@ -32,8 +32,8 @@ type CheckTunnelResponse struct {
 }
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
-func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
-	s.Stats.SimpleEvent("statusCheck")
+func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
+	s.Stats.SimpleEvent("status_check")
 	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
@@ -43,11 +43,11 @@ func (s Server) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*Check
 	defer cancel()
 
 	if err := checkConnectivity(ctx, details.ConnectionDetails); err != nil {
-		s.Stats.Incr("statusCheck", stats.Tags{"success": false}, 1)
+		s.Stats.Incr("status_check", stats.Tags{"success": false}, 1)
 		return &CheckTunnelResponse{Success: false, Error: err.Error()}, nil
 	}
 
-	s.Stats.Incr("statusCheck", stats.Tags{"success": true}, 1)
+	s.Stats.Incr("status_check", stats.Tags{"success": true}, 1)
 	return &CheckTunnelResponse{Success: true}, nil
 }
 

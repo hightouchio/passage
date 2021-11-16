@@ -5,14 +5,13 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"net/http"
 )
 
-func (s Server) ConfigureWebRoutes(router *mux.Router) {
+func (s API) ConfigureWebRoutes(router *mux.Router) {
 	// create tunnel
-	router.HandleFunc("/tunnel/normal", s.handleWebCreateNormalTunnel).Methods(http.MethodPost)
+	router.HandleFunc("/tunnel/standard", s.handleWebCreateStandardTunnel).Methods(http.MethodPost)
 	router.HandleFunc("/tunnel/reverse", s.handleWebCreateReverseTunnel).Methods(http.MethodPost)
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
@@ -22,9 +21,7 @@ func (s Server) ConfigureWebRoutes(router *mux.Router) {
 	tunnelRouter.HandleFunc("", s.handleWebTunnelDelete).Methods(http.MethodDelete)
 }
 
-func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
+func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	var request GetTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -32,7 +29,6 @@ func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.GetTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Get", request, response, err)
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -46,9 +42,7 @@ func (s Server) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
+func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	var request CheckTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -56,8 +50,6 @@ func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.CheckTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Check", request, response, err)
-
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -71,9 +63,7 @@ func (s Server) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
+func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	var request UpdateTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -85,8 +75,6 @@ func (s Server) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.UpdateTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Update", response, request, err)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -95,9 +83,7 @@ func (s Server) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
+func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	var request DeleteTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -105,8 +91,6 @@ func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.DeleteTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Delete", request, response, err)
-
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -116,20 +100,18 @@ func (s Server) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	renderJSON(w, response)
 }
 
-func (s Server) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
-	var request CreateNormalTunnelRequest
+func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Request) {
+	var request CreateStandardTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	response, err := s.CreateNormalTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:CreateNormal", response, request, err)
-
+	response, err := s.CreateStandardTunnel(r.Context(), request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -138,9 +120,7 @@ func (s Server) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Reque
 	renderJSON(w, response)
 }
 
-func (s Server) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
+func (s API) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
 	var request CreateReverseTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -148,8 +128,6 @@ func (s Server) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Requ
 	}
 
 	response, err := s.CreateReverseTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:CreateReverse", response, request, err)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -179,5 +157,6 @@ func read(r *http.Request, req interface{}) error {
 
 func renderJSON(w http.ResponseWriter, ret interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(ret)
 }

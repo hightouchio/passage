@@ -1,21 +1,22 @@
 # Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
+
+orbs:
+  gh: circleci/github-cli@1.0
+
+executors:
+  docker-publisher:
+    environment:
+      image_base: hightouchio/passage
+    docker:
+      - image: circleci/buildpack-deps:stretch
+
 jobs:
   build:
-    machine: # executor type
-      image: ubuntu-2004:202010-01 # # recommended linux image - includes Ubuntu 20.04, docker 19.03.13, docker-compose 1.27.4
-      docker_layer_caching: true
-
-    environment:
-      image_base: passage
-
+    executor: docker-publisher
     steps:
       - checkout
-
-      - run:
-          name: Set build environment variables
-          command: |
-            echo "export BUILD_TAG=${image_base}:sha.$(echo $CIRCLE_SHA1 | cut -c1-7)" >> $BASH_ENV
+      - setup_remote_docker
 
       - run:
           name: Build test image
@@ -30,29 +31,118 @@ jobs:
       - run:
           name: Build deployment image
           command: |
-            docker build --tag $BUILD_TAG .
+            VERSION=$(echo $CIRCLE_TAG | sed 's/^v\([0-9].*\)/\1/')
+            echo "Building version $VERSION"
+            docker build --build-arg version=$VERSION --tag $image_base:latest .
 
       - run:
-          name: Push image
+          name: Archive Docker image
+          command: docker save -o image.tar $image_base:latest
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./image.tar
+
+  publish-latest:
+    executor: docker-publisher
+
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+
+      - run:
+          name: Publish Docker Image to Docker Hub
           command: |
-            export IMAGES_TO_PUSH=($BUILD_TAG)
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push $image_base:latest
 
-            if [ -n "$CIRCLE_BRANCH" ]; then
-              BRANCH_TAG=${image_base}:branch.${CIRCLE_BRANCH}
-              docker tag "${BUILD_TAG}" "${BRANCH_TAG}"
-              IMAGES_TO_PUSH+=("${BRANCH_TAG}")
-            fi
+  publish-tag:
+    executor: docker-publisher
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
 
-            if [ -n "$CIRCLE_TAG" ]; then
-              TAG_TAG=${image_base}:tag.${CIRCLE_TAG}
-              docker tag "${BUILD_TAG}" "${TAG_TAG}"
-              IMAGES_TO_PUSH+=("${TAG_TAG}")
-            fi
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
 
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ECR_ACCOUNT_URL
+      - run:
+          name: Publish Docker Image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker tag $image_base:latest $image_base:$CIRCLE_TAG
+            docker push $image_base:latest
+            docker push $image_base:$CIRCLE_TAG
 
-            for image_id in "${IMAGES_TO_PUSH[@]}"; do
-              echo "Deploying ${image_id}"
-              docker tag $image_id $AWS_ECR_ACCOUNT_URL/$image_id
-              docker push $AWS_ECR_ACCOUNT_URL/$image_id
-            done
+
+  test-e2e:
+    machine:
+      image: ubuntu-2004:202010-01
+
+    steps:
+      - checkout
+
+      - run:
+          name: Start Docker Compose environment
+          command: docker-compose -f test/docker-compose.yml up -d
+
+      - run:
+          name: Run test
+          command: ./test/test.sh
+
+      - run:
+          name: Start Docker Compose environment
+          command: docker-compose -f test/docker-compose.yml down
+
+workflows:
+  version: 2
+  build-master:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: master
+
+      - publish-latest:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
+
+  build-branch:
+    jobs:
+      - build:
+          filters:
+            branches:
+              ignore: master
+
+      - test-e2e:
+          filters:
+            branches:
+              ignore: master
+
+  build-tags:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish-tag:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/

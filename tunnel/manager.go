@@ -13,18 +13,17 @@ import (
 
 type ListFunc func(ctx context.Context) ([]Tunnel, error)
 
-// Manager keeps track of the tunnels that need to be loaded in from the database, and the tunnels that need to be started up with a supervisor
+// Manager is responsible for starting and stopping tunnels that should be started and stopped, according to their presence in the return value of a ListFunc
 type Manager struct {
-	Stats stats.Stats
-
-	// ListFunc is the function that will list all tunnels that should be running
+	// ListFunc is the function that will list all Tunnels that should be running
 	ListFunc
 
-	// SSHOptions are the config options for the SSH server that we start up
-	SSHOptions
+	// TunnelOptions are the config options for the tunnel server we run.
+	TunnelOptions
 
 	RefreshDuration       time.Duration
 	TunnelRestartInterval time.Duration
+	Stats                 stats.Stats
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
@@ -33,32 +32,41 @@ type Manager struct {
 	lastRefresh time.Time
 
 	lock sync.Mutex
-	once sync.Once
+	stop chan bool
 }
 
-func newManager(stats stats.Stats, listFunc ListFunc, sshOptions SSHOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
-		Stats:    stats,
+		Stats:    st,
 		ListFunc: listFunc,
 
-		SSHOptions:            sshOptions,
+		TunnelOptions:         tunnelOptions,
 		RefreshDuration:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
+
+		stop: make(chan bool),
 	}
 }
 
 func (m *Manager) Start(ctx context.Context) {
 	m.Stats.SimpleEvent("manager.start")
-	m.startWorker(ctx)
+	m.startWorker()
 }
 
-func (m *Manager) startWorker(ctx context.Context) {
+func (m *Manager) Stop(ctx context.Context) {
+	m.Stats.SimpleEvent("manager.stop")
+	m.stop <- true
+}
+
+func (m *Manager) startWorker() {
 	ticker := time.NewTicker(m.RefreshDuration)
 	defer ticker.Stop()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for {
 		select {
 		case <-ticker.C:
@@ -69,7 +77,7 @@ func (m *Manager) startWorker(ctx context.Context) {
 			m.refreshSupervisors(ctx)
 			m.lastRefresh = time.Now()
 
-		case <-ctx.Done():
+		case <-m.stop:
 			return
 		}
 	}
@@ -91,19 +99,19 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			st := m.Stats.WithEventTags(stats.Tags{"tunnelId": tunnelID.String()})
+			st := m.Stats.WithEventTags(stats.Tags{"tunnel_id": tunnelID.String()})
 			ctx = stats.InjectContext(ctx, st)
 
-			supervisor := NewSupervisor(tunnel, st, m.SSHOptions, m.TunnelRestartInterval)
+			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}
 	}
 
-	m.Stats.Gauge("runningCount", float64(len(m.supervisors)), nil, 1)
+	m.Stats.Gauge("running_count", float64(len(m.supervisors)), nil, 1)
 }
 
-// runningTunnel is useful because it has more stateful information about the tunnel such as whether or not it needs to restart
+// runningTunnel is useful because it has more stateful information about the tunnel such as if it needs to restart
 type runningTunnel struct {
 	Tunnel
 	needsRestart bool
@@ -140,8 +148,8 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 func (m *Manager) Check(ctx context.Context) error {
 	maxDelay := m.RefreshDuration * 2
 	secondsSinceLastRefresh := time.Now().Sub(m.lastRefresh)
-	if maxDelay > secondsSinceLastRefresh {
-		return fmt.Errorf("manager has not refreshed in %0.2f seconds", secondsSinceLastRefresh.Seconds())
+	if secondsSinceLastRefresh > maxDelay {
+		return fmt.Errorf("manager has not refreshed in %0.2f seconds. max: %0.2f", secondsSinceLastRefresh.Seconds(), maxDelay.Seconds())
 	}
 
 	return nil
