@@ -43,7 +43,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 
 	errs := make(chan error)
 	go func() {
-		st.WithEventTags(stats.Tags{"port": t.SSHDPort}).SimpleEvent("sshd.start")
+		st.WithEventTags(stats.Tags{"sshd_port": t.SSHDPort}).SimpleEvent("sshd.start")
 		errs <- sshd.ListenAndServe()
 	}()
 
@@ -76,7 +76,7 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 
 	// request session handler
 	server.Handler = func(s ssh.Session) {
-		st := st.WithEventTags(stats.Tags{"remoteAddr": s.RemoteAddr().String()})
+		st := st.WithEventTags(stats.Tags{"remote_addr": s.RemoteAddr().String()})
 		st.SimpleEvent("session.start")
 		st.Incr("session.start", nil, 1)
 		select {
@@ -98,14 +98,14 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
 
 		st.WithEventTags(stats.Tags{
-			"sessionId":       ctx.SessionID(),
-			"remoteAddr":      ctx.RemoteAddr().String(),
-			"requestBindHost": bindHost,
-			"requestBindPort": bindPort,
-			"configBindHost":  t.serverOptions.BindHost,
-			"configBindPort":  t.TunnelPort,
-			"success":         success,
-		}).SimpleEvent("session.portForwardRequest")
+			"session_id":        ctx.SessionID(),
+			"remote_addr":       ctx.RemoteAddr().String(),
+			"request_bind_host": bindHost,
+			"request_bind_port": bindPort,
+			"config_bind_host":  t.serverOptions.BindHost,
+			"config_bind_port":  t.TunnelPort,
+			"success":           success,
+		}).SimpleEvent("session.port_forward_request")
 
 		return success
 	}
@@ -113,20 +113,21 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 	// Match incoming auth requests against stored public keys.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		sessSt := st.WithEventTags(stats.Tags{
-			"user":       ctx.User(),
-			"sessionId":  ctx.SessionID(),
-			"remoteAddr": ctx.RemoteAddr().String(),
-			"keyType":    incomingKey.Type(),
+			"session_id":  ctx.SessionID(),
+			"remote_addr": ctx.RemoteAddr().String(),
+			"user":        ctx.User(),
+			"key_type":    incomingKey.Type(),
+			"fingerprint": gossh.FingerprintSHA256(incomingKey),
 		})
 
 		// Check if there's a public key match.
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
-			sessSt.ErrorEvent("session.authRequest.error", err)
+			sessSt.ErrorEvent("session.auth_request.error", err)
 			return false
 		}
 
-		sessSt.WithTags(stats.Tags{"success": ok}).SimpleEvent("session.authRequest")
+		sessSt.WithTags(stats.Tags{"success": ok}).SimpleEvent("session.auth_request")
 		return ok
 	})); err != nil {
 		return nil, err

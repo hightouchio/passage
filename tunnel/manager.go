@@ -108,10 +108,10 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 		}
 	}
 
-	m.Stats.Gauge("runningCount", float64(len(m.supervisors)), nil, 1)
+	m.Stats.Gauge("running_count", float64(len(m.supervisors)), nil, 1)
 }
 
-// runningTunnel is useful because it has more stateful information about the tunnel such as whether or not it needs to restart
+// runningTunnel is useful because it has more stateful information about the tunnel such as if it needs to restart
 type runningTunnel struct {
 	Tunnel
 	needsRestart bool

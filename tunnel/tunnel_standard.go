@@ -122,7 +122,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 		// Handle incoming tunnel connections.
 		case tunnelConn := <-incomingConns:
 			go func() {
-				st := st.WithEventTags(stats.Tags{"remoteAddr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
+				st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
 				ctx := stats.InjectContext(ctx, st)
 
 				st.SimpleEvent("accept")
@@ -131,9 +131,9 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 				atomic.AddInt32(&activeConnections, 1)
 				read, written, err := t.handleTunnelConnection(ctx, sshClient, tunnelConn)
 				atomic.AddInt32(&activeConnections, -1)
-				st.Gauge("bytesRead", float64(read), nil, 1)
-				st.Gauge("bytesWritten", float64(written), nil, 1)
-				st = st.WithEventTags(stats.Tags{"bytesRead": read, "bytesWritten": written})
+				st.Gauge("read", float64(read), nil, 1)
+				st.Gauge("write", float64(written), nil, 1)
+				st = st.WithEventTags(stats.Tags{"read": read, "write": written})
 
 				if err != nil {
 					st.ErrorEvent("error", err)
@@ -145,7 +145,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 
 		case <-statsTicker.C:
 			// explicit tunnelId tag here, so it appears on the metric
-			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-keepaliveErr:
 			return errors.Wrap(err, "keepalive")

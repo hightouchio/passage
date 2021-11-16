@@ -102,12 +102,12 @@ func (s API) CreateStandardTunnel(ctx context.Context, request CreateStandardTun
 
 		// insert into Keystore
 		if err := s.Keystore.Set(ctx, keyId, keyPair.PrivateKey); err != nil {
-			return nil, errors.Wrap(err, "could not insert key into store")
+			return nil, errors.Wrap(err, "could not set key")
 		}
 
 		// add to DB and attach to tunnel
 		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "standard", record.ID, keyId); err != nil {
-			return nil, errors.Wrap(err, "could not add private key to tunnel")
+			return nil, errors.Wrap(err, "could not auth key for tunnel")
 		}
 
 		// return the public key to the user
@@ -164,12 +164,12 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 
 		// insert into Keystore
 		if err := s.Keystore.Set(ctx, keyId, keyPair.PublicKey); err != nil {
-			return nil, errors.Wrap(err, "could not insert key into store")
+			return nil, errors.Wrap(err, "could not set key")
 		}
 
 		// add to DB and attach to tunnel
 		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "reverse", record.ID, keyId); err != nil {
-			return nil, errors.Wrap(err, "could not add public key to tunnel")
+			return nil, errors.Wrap(err, "could not auth key for tunnel")
 		}
 
 		// return the public key to the user

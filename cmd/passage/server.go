@@ -297,7 +297,7 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithField("addr", server.Addr).Debug("starting HTTP server")
+			logger.WithField("addr", server.Addr).Debug("start http server")
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
 					logrus.Fatal(errors.Wrap(err, "could not start HTTP server"))
