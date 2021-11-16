@@ -2,7 +2,7 @@
 [![CircleCI](https://circleci.com/gh/hightouchio/passage/tree/master.svg?style=svg)](https://circleci.com/gh/hightouchio/passage/tree/master)
 ![Go Version](https://shields.io/github/go-mod/go-version/hightouchio/passage)
 [![GitHub Releases](https://shields.io/github/v/release/hightouchio/passage?display_name=tag&include_prereleases)](https://github.com/hightouchio/passage/releases)
-[![Docker Hub](https://shields.io/docker/v/hightouchio/passage)](https://hub.docker.com/r/hightouchio/passage)
+[![Docker Hub](https://shields.io/docker/v/hightouchio/passage?label=docker&sort=semver)](https://hub.docker.com/r/hightouchio/passage)
 
 Secure private tunnels as a service 🔐
 
