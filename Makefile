@@ -1,4 +1,4 @@
-test-golang:
+test:
 	go test ./...
 
 test-e2e:
