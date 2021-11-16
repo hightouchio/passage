@@ -61,5 +61,10 @@ An appropriate network configuration begins with Passage instances completely lo
    1. Port range `57344 - 65535`
 3. Of course, any other ingress you need (load balancers, internal tools, etc.)
 
+## Testing
+Go unit tests can be run with `make test`.
+
+There is an end-to-end test of both Standard and Reverse tunnels, using Docker networks to simulate network isolation, and docker compose for orchestration, that can be run with `make test-e2e`.
+
 # License
 Passage is released under the MIT license. See [LICENSE.txt](https://github.com/hightouchio/passage/blob/master/LICENSE.txt)
