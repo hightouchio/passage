@@ -8,7 +8,8 @@ import (
 
 const name = "passage"
 
-var version = "0.0.0"
+// version is set by build args at compile time
+var version = ""
 
 var (
 	rootCmd = &cobra.Command{

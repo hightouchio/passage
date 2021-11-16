@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"net/http"
 )
@@ -23,8 +22,6 @@ func (s API) ConfigureWebRoutes(router *mux.Router) {
 }
 
 func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request GetTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -32,7 +29,6 @@ func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.GetTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Get", request, response, err)
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -47,8 +43,6 @@ func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request CheckTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -56,8 +50,6 @@ func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.CheckTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Check", request, response, err)
-
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -72,8 +64,6 @@ func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request UpdateTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -85,8 +75,6 @@ func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.UpdateTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Update", response, request, err)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -96,8 +84,6 @@ func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request DeleteTunnelRequest
 	if err := getTunnelID(r, &request.ID); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -105,8 +91,6 @@ func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.DeleteTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:Delete", request, response, err)
-
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
@@ -116,11 +100,11 @@ func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	renderJSON(w, response)
 }
 
 func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request CreateStandardTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -128,8 +112,6 @@ func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Reques
 	}
 
 	response, err := s.CreateStandardTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:CreateStandard", response, request, err)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -139,8 +121,6 @@ func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Reques
 }
 
 func (s API) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger(r.Context())
-
 	var request CreateReverseTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -148,8 +128,6 @@ func (s API) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request
 	}
 
 	response, err := s.CreateReverseTunnel(r.Context(), request)
-	defer log.Request(logger, "tunnel:CreateReverse", response, request, err)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -179,5 +157,6 @@ func read(r *http.Request, req interface{}) error {
 
 func renderJSON(w http.ResponseWriter, ret interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(ret)
 }

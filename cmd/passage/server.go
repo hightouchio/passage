@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
-	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/discovery"
@@ -220,7 +219,7 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 	if !config.GetBool(ConfigApiEnabled) {
 		return nil
 	}
-	logger.Info("start tunnel web api")
+	logger.Info("passage.api.start")
 	tunnelServer.ConfigureWebRoutes(router.PathPrefix("/api").Subrouter())
 	return nil
 }
@@ -293,12 +292,8 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 	router := mux.NewRouter()
 	server := &http.Server{Addr: config.GetString(ConfigHTTPAddr), Handler: router}
 
-	// Inject global logger into each request.
-	router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(log.WithLogger(r.Context(), logger)))
-		})
-	})
+	// Log every request.
+	router.Use(LoggingMiddleware(logger))
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -439,8 +434,11 @@ func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
 	} else {
 		statsdClient = &statsd.NoOpClient{}
 	}
-	return stats.
+	st := stats.
 		New(statsdClient, logger).
-		WithPrefix("passage").
-		WithTags(stats.Tags{"version": version}), nil
+		WithPrefix("passage")
+	if version != "" {
+		st = st.WithTags(stats.Tags{"version": version})
+	}
+	return st, nil
 }
