@@ -65,6 +65,3 @@ An appropriate network configuration begins with Passage instances completely lo
 Go unit tests can be run with `make test`.
 
 There is an end-to-end test of both Standard and Reverse tunnels, using Docker networks to simulate network isolation, and docker compose for orchestration, that can be run with `make test-e2e`.
-
-# License
-Passage is released under the MIT license. See [LICENSE.txt](https://github.com/hightouchio/passage/blob/master/LICENSE.txt)
