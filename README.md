@@ -5,15 +5,15 @@
 [![GitHub Releases](https://shields.io/github/v/release/hightouchio/passage?display_name=tag)](https://github.com/hightouchio/passage/releases)
 [![Docker Hub](https://shields.io/docker/v/hightouchio/passage)](https://hub.docker.com/r/hightouchio/passage)
 
-passage is a utility for programmatically creating and managing SSH tunnels. The primary use case is to serve as a secure bridge between SaaS providers and resources that need to be accessed within customer environments. Passage acts as both a management API, as well as a daemon to manage the tunnels themselves.
+Secure private tunnels as a service 🔐
 
-With **Standard** tunnels, Passage acts as an SSH client, opening an SSH connection to an internet-facing remote bastion server, then from there opening an upstream connection to a private service within the remote network.
+## Get Started
+```bash 
+$ docker compose up
+$ curl -X POST -d '{"sshHost":"localhost"}' http://localhost:6000/api/tunnel/standard  
+```
 
-With **Reverse** tunnels, Passage acts as an SSH server, allowing remote clients to forward a local port from a hidden server to a dedicated port on the Passage instance, therefore achieving a tunnel without requiring a remote bastion server to be exposed to inbound traffic from the internet.
-
-## Usage
-Passage is primarily started through the subcommand `passage server`.
-
+passage is primarily started through the subcommand `passage server`.
 ```
 Usage:
   passage server [flags]
@@ -22,8 +22,19 @@ Flags:
   -h, --help      help for server
 ```
 
+## What is passage?
+passage is a service for programmatically creating and managing SSH tunnels. The primary use case is to serve as a secure bridge between SaaS providers and services that need to be accessed within customer networks. Passage acts both as a management API, and as a daemon which maintains the tunnels themselves. 
+
+### Standard vs Reverse
+With **Standard** tunnels, Passage acts as an SSH client, opening an SSH connection to an internet-facing remote bastion server, then from there opening an upstream connection to a private service within the remote network.
+
+With **Reverse** tunnels, Passage acts as an SSH server, allowing remote clients to forward a local port from a hidden server to a dedicated port on the Passage instance, therefore achieving a tunnel without requiring a remote bastion server to be exposed to inbound traffic from the internet.
+
 ## Dependencies
-Passage requires a PostgreSQL database, version 11 or later. Database schema is located in [`sql/1-schema.sql`](`sql/1-schema.sql`).
+- Postgres 11 or later ([`schema`](`sql/1-schema.sql`))
+- A keystore to securely store and retrieve public and private keys.
+  - Passage supports Postgres or S3 (default is a table in the same Postgres database)
+  - Passage does not handle encryption of keys at rest.
 
 ## Configuration
 Passage can read its configuration from disk (YAML or JSON), or from environment variables.
@@ -32,7 +43,7 @@ Passage's config keys are paths in a configuration object, so the dot notation i
 To use environment variables, replace the dot with an underscore and prefix the variable with `PASSAGE_`.
 For example, `tunnel.standard.ssh_user` becomes `PASSAGE_TUNNEL_STANDARD_SSH_USER`.
 
-The following are required config options that you should set to quickstart with Passage. A full configuration reference is available at [docs/config.md](docs/config.md). 
+The following are required config options that you must set to quickstart with Passage. A full configuration reference is available at [docs/config.md](docs/config.md). 
 
 | **Key**          | **Description**             | **Required** | **Alias**   |
 |------------------|-----------------------------|--------------|-------------|
