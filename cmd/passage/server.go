@@ -94,6 +94,8 @@ func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigDiscoveryType, "static")
 	config.SetDefault(ConfigDiscoveryStaticHost, "localhost")
+	config.SetDefault(ConfigKeystoreType, "postgres")
+	config.SetDefault(ConfigKeystorePostgresTableName, "passage.keys")
 	config.SetDefault(ConfigLogLevel, "info")
 	config.SetDefault(ConfigLogFormat, "text")
 }
