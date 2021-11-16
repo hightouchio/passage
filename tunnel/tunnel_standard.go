@@ -58,7 +58,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 
 	// Dial remote SSH server
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
-	st.WithEventTags(stats.Tags{"host": t.SSHHost, "port": t.SSHPort}).SimpleEvent("dial")
+	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
 	sshConn, err := net.DialTimeout("tcp", addr, t.clientOptions.DialTimeout)
 	if err != nil {
 		return errors.Wrap(err, "dial remote")
@@ -162,7 +162,7 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 	st := stats.GetStats(ctx)
 
 	// Dial upstream service.
-	st.WithEventTags(stats.Tags{"host": t.ServiceHost, "port": t.ServicePort}).SimpleEvent("upstream.dial")
+	st.WithEventTags(stats.Tags{"upstream_host": t.ServiceHost, "upstream_port": t.ServicePort}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "dial upstream")
