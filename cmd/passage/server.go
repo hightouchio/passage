@@ -157,7 +157,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runStandardTunnels is the entrypoint for tunnel servers
+// runTunnels is the entrypoint for tunnel servers
 func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {

@@ -34,11 +34,10 @@ def check_tunnel(tunnel_id)
 end
 
 # Check Passage status.
-puts "Healthcheck", get('healthcheck').inspect
+puts "Healthcheck", get('healthcheck')
 
 # Create tunnel.
 response = create_tunnel()
-puts "Create Tunnel", response.inspect
 tunnel_id = response['tunnel']['id']
 public_key = response['publicKey']
 connection = response['connection']

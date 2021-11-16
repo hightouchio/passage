@@ -33,7 +33,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshd, err := t.newSSHServer(ctx, t.serverOptions, tunnelOptions)
+	sshd, err := t.newSshServer(ctx, t.serverOptions, tunnelOptions)
 	if err != nil {
 		return errors.Wrap(err, "init sshd")
 	}
@@ -56,7 +56,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	}
 }
 
-func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) (*ssh.Server, error) {
+func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) (*ssh.Server, error) {
 	st := stats.GetStats(ctx)
 
 	server := &ssh.Server{
@@ -85,14 +85,14 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServer
 		}
 	}
 
-	// get the server-side Host Key signers
+	// Init host key signing
 	hostSigners, err := serverOptions.GetHostSigners()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get host signers")
 	}
 	server.HostSigners = hostSigners
 
-	// validate port forwarding
+	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
 		success := bindHost == tunnelOptions.BindHost && int(bindPort) == t.TunnelPort
 
@@ -109,7 +109,7 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServer
 		return success
 	}
 
-	// integrate public key auth
+	// Match incoming auth requests against stored public keys.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		sessSt := st.WithEventTags(stats.Tags{
 			"sessionId":  ctx.SessionID(),
@@ -117,6 +117,7 @@ func (t ReverseTunnel) newSSHServer(ctx context.Context, serverOptions SSHServer
 			"keyType":    incomingKey.Type(),
 		})
 
+		// Check if there's a public key match.
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
 			sessSt.ErrorEvent("session.authRequest.error", err)
@@ -145,7 +146,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 		// retrieve key contents
 		key, err := t.services.Keystore.Get(ctx, id)
 		if err != nil {
-			return false, errors.Wrapf(err, "could not resolve contents for key %s", authorizedKey.ID.String())
+			return false, errors.Wrapf(err, "could get key %s", authorizedKey.ID.String())
 		}
 
 		// compare stored authorized key to test key
@@ -162,7 +163,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 }
 
 func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost("standard", t.ID)
+	tunnelHost, err := discovery.ResolveTunnelHost("reverse", t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}
