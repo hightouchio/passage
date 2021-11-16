@@ -60,3 +60,6 @@ An appropriate network configuration begins with Passage instances completely lo
 2. Expose `sshd` ports to public internet
    1. Port range `57344 - 65535`
 3. Of course, any other ingress you need (load balancers, internal tools, etc.)
+
+# License
+Passage is released under the MIT license. See [LICENSE.txt](https://github.com/hightouchio/passage/blob/master/LICENSE.txt)
