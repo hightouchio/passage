@@ -146,7 +146,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 		// retrieve key contents
 		key, err := t.services.Keystore.Get(ctx, id)
 		if err != nil {
-			return false, errors.Wrapf(err, "could get key %s", authorizedKey.ID.String())
+			return false, errors.Wrapf(err, "could not get key %s", authorizedKey.ID.String())
 		}
 
 		// compare stored authorized key to test key
