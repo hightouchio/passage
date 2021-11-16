@@ -68,7 +68,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	}()
 
 	// Init SSH connection protocol
-	st.WithEventTags(stats.Tags{"user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh")
+	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh")
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
