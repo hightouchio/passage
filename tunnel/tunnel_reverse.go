@@ -82,6 +82,7 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 		select {
 		case <-s.Context().Done():
 			st.SimpleEvent("session.end")
+			return
 		}
 	}
 
