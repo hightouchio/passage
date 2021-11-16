@@ -48,7 +48,7 @@ Connection Details: #{connection}
 EOF
 
 # Write public key to shared volume for bastion server
-File.write('/bastion-ssh/authorized_keys', public_key)
+File.write('/bastion_ssh/authorized_keys', public_key)
 
 # Check tunnel status.
 MAX_ATTEMPTS = 5

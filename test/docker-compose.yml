@@ -10,6 +10,8 @@ services:
       PASSAGE_HTTP_ADDR: 0.0.0.0:6000
       PASSAGE_API_ENABLED: 'true'
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
+      PASSAGE_TUNNEL_REVERSE_ENABLED: 'true'
+
       PASSAGE_DISCOVERY_STATIC_HOST: 'passage'
       PASSAGE_KEYSTORE_TYPE: 'postgres'
       PASSAGE_KEYSTORE_POSTGRES_TABLE_NAME: 'passage.keys'
@@ -57,6 +59,17 @@ services:
       - public
       - hidden
 
+  # remote_ssh represents a private server running in a remote network that acts as an SSH client.
+  reverse_tunnel_client:
+    build: ./reverse-tunnel-client
+    volumes:
+      - type: volume
+        source: reverse-tunnel-config
+        target: /reverse_tunnel
+    networks:
+      - public
+      - hidden
+
   # remote_service represents a hidden service running in a remote network.
   remote_service:
     image: hashicorp/http-echo
@@ -80,3 +93,6 @@ networks:
 volumes:
   # Create a volume for the test runner to authorize public keys on the bastion.
   bastion-ssh-config:
+
+  # Create a volume for the test runner to configure a reverse tunnel on the hidden client.
+  reverse-tunnel-config:

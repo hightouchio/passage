@@ -95,14 +95,14 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		success := bindHost == tunnelOptions.BindHost && int(bindPort) == t.TunnelPort
+		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
 
 		st.WithEventTags(stats.Tags{
 			"sessionId":       ctx.SessionID(),
 			"remoteAddr":      ctx.RemoteAddr().String(),
 			"requestBindHost": bindHost,
 			"requestBindPort": bindPort,
-			"configBindHost":  tunnelOptions.BindHost,
+			"configBindHost":  t.serverOptions.BindHost,
 			"configBindPort":  t.TunnelPort,
 			"success":         success,
 		}).SimpleEvent("session.portForwardRequest")
@@ -113,6 +113,7 @@ func (t ReverseTunnel) newSshServer(ctx context.Context, serverOptions SSHServer
 	// Match incoming auth requests against stored public keys.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		sessSt := st.WithEventTags(stats.Tags{
+			"user":       ctx.User(),
 			"sessionId":  ctx.SessionID(),
 			"remoteAddr": ctx.RemoteAddr().String(),
 			"keyType":    incomingKey.Type(),
