@@ -42,15 +42,23 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// generate our authentication strategy
-	auth, err := t.generateAuthMethod(ctx)
+	// Get a list of key signers to use for authentication
+	keySigners, err := t.getAuthSigners(ctx)
 	if err != nil {
-		return errors.Wrap(err, "generate auth method")
+		return errors.Wrap(err, "generate key signers")
 	}
 
-	// connect to remote SSH server
+	// Determine SSH user to use, either from the database or from the config.
+	var sshUser string
+	if t.SSHUser != "" {
+		sshUser = t.SSHUser
+	} else {
+		sshUser = t.clientOptions.User
+	}
+
+	// Dial remote SSH server
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
-	st.WithEventTags(stats.Tags{"sshUser": t.SSHUser, "sshHost": t.SSHHost, "sshPort": t.SSHPort}).SimpleEvent("ssh.dial")
+	st.WithEventTags(stats.Tags{"host": t.SSHHost, "port": t.SSHPort}).SimpleEvent("dial")
 	sshConn, err := net.DialTimeout("tcp", addr, t.clientOptions.DialTimeout)
 	if err != nil {
 		return errors.Wrap(err, "dial remote")
@@ -59,26 +67,27 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 		sshConn.Close()
 	}()
 
-	// init ssh connection & client
+	// Init SSH connection protocol
+	st.WithEventTags(stats.Tags{"user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh")
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
-			User:            t.clientOptions.User,
-			Auth:            auth,
+			User:            sshUser,
+			Auth:            []ssh.AuthMethod{ssh.PublicKeys(keySigners...)},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "init ssh")
+		return errors.Wrap(err, "ssh")
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 
-	// start keepalive handler
+	// Start connection Keepalive.
 	keepaliveErr := make(chan error)
 	go sshKeepalive(ctx, sshClient, sshConn, t.clientOptions, keepaliveErr)
 
-	// open tunnel listener
-	st.WithEventTags(stats.Tags{"tunnelPort": t.TunnelPort}).SimpleEvent("listener.start")
+	// Listen for incoming tunnel connections.
+	st.WithEventTags(stats.Tags{"port": t.TunnelPort}).SimpleEvent("listener.start")
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
 	if err != nil {
 		return errors.Wrap(err, "listen")
@@ -86,16 +95,15 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	defer func() {
 		listener.Close()
 	}()
-
-	// accept incoming conns and serve them up
 	incomingConns := make(chan net.Conn)
 	go func() {
 		for {
 			select {
 			default:
+				// Accept incoming tunnel connections
 				conn, err := listener.Accept()
 				if err != nil && !isContextCancelled(ctx) {
-					t.logger().WithError(err).Error("tunnel connection accept error")
+					t.logger().WithError(err).Error("tunnel conn accept error")
 					break
 				}
 				incomingConns <- conn
@@ -111,6 +119,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	var activeConnections int32
 	for {
 		select {
+		// Handle incoming tunnel connections.
 		case tunnelConn := <-incomingConns:
 			go func() {
 				st := st.WithEventTags(stats.Tags{"remoteAddr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
@@ -136,7 +145,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 
 		case <-statsTicker.C:
 			// explicit tunnelId tag here, so it appears on the metric
-			st.WithTags(stats.Tags{"tunnelId": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("activeConnections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-keepaliveErr:
 			return errors.Wrap(err, "keepalive")
@@ -152,11 +161,11 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 	defer cancel()
 	st := stats.GetStats(ctx)
 
-	// connect to upstream service
+	// Dial upstream service.
 	st.WithEventTags(stats.Tags{"host": t.ServiceHost, "port": t.ServicePort}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "dial upstream service")
+		return 0, 0, errors.Wrap(err, "dial upstream")
 	}
 	defer serviceConn.Close()
 
@@ -172,41 +181,44 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 		defer cancel()
 		g := new(sync.WaitGroup)
 		g.Add(2)
+		// Copy data bidirectionally.
 		go copy(g, tunnelConn, serviceConn, &written)
 		go copy(g, serviceConn, tunnelConn, &read)
 		g.Wait()
 	}()
 
-	// wait for an error or connection completion
+	// Wait for an error or connection completion
 	select {
 	case <-ctx.Done():
 		return read, written, nil
 	}
 }
 
-// generateAuthMethod finds the SSH private keys that are configured for this tunnel and structure them for use by the SSH client library
-func (t StandardTunnel) generateAuthMethod(ctx context.Context) ([]ssh.AuthMethod, error) {
+// getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
+func (t StandardTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) {
 	// get private keys from database
 	keys, err := t.services.SQL.GetStandardTunnelPrivateKeys(ctx, t.ID)
 	if err != nil {
-		return []ssh.AuthMethod{}, errors.Wrap(err, "could not look up private keys")
+		return []ssh.Signer{}, errors.Wrap(err, "could not look up private keys")
 	}
-	authMethods := make([]ssh.AuthMethod, len(keys))
+	signers := make([]ssh.Signer, len(keys))
 
 	// parse private keys and prepare for SSH
 	for i, key := range keys {
 		contents, err := t.services.Keystore.Get(ctx, key.ID)
 		if err != nil {
-			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
+			return []ssh.Signer{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
 		}
-		signer, err := ssh.ParsePrivateKey([]byte(contents))
+		signer, err := ssh.ParsePrivateKey(contents)
 		if err != nil {
-			return []ssh.AuthMethod{}, errors.Wrapf(err, "could not parse key %s", key.ID)
+			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
-		authMethods[i] = ssh.PublicKeys(signer)
+
+		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("using ssh key")
+		signers[i] = signer
 	}
 
-	return authMethods, nil
+	return signers, nil
 }
 
 func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, options SSHClientOptions, errChan chan<- error) {
@@ -222,7 +234,7 @@ func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, option
 			}
 			select {
 			case <-t.C:
-				_, _, err = client.SendRequest("keepalive@passage.hightouch.io", true, nil)
+				_, _, err = client.SendRequest("keepalive@passage", true, nil)
 				if err != nil {
 					return errors.Wrap(err, "send keep alive")
 				}

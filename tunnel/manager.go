@@ -35,9 +35,9 @@ type Manager struct {
 	stop chan bool
 }
 
-func NewManager(stats stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
-		Stats:    stats,
+		Stats:    st,
 		ListFunc: listFunc,
 
 		TunnelOptions:         tunnelOptions,
@@ -99,7 +99,7 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			st := m.Stats.WithEventTags(stats.Tags{"tunnelId": tunnelID.String()})
+			st := m.Stats.WithEventTags(stats.Tags{"tunnel_id": tunnelID.String()})
 			ctx = stats.InjectContext(ctx, st)
 
 			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)

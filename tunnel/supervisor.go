@@ -50,11 +50,11 @@ func (s *Supervisor) Start(ctx context.Context) {
 				case <-initialRun:
 				}
 
-				s.Stats.SimpleEvent("start")
+				s.Stats.SimpleEvent("tunnel.start")
 				if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-					s.Stats.ErrorEvent("error", err)
+					s.Stats.ErrorEvent("tunnel.error", err)
 				} else {
-					s.Stats.SimpleEvent("stop")
+					s.Stats.SimpleEvent("tunnel.stop")
 				}
 			}
 		}

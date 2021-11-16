@@ -12,6 +12,7 @@ services:
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
       PASSAGE_KEYSTORE_TYPE: 'postgres'
       PASSAGE_KEYSTORE_POSTGRES_TABLE_NAME: 'passage.keys'
+      LOG_LEVEL: debug
 
       PGHOST: postgres
       PGPORT: 5432
@@ -46,7 +47,7 @@ services:
   remote_bastion:
     build: ./bastion
     environment:
-      USER_NAME: hightouch
+      USER_NAME: passage
     volumes:
       - type: volume
         source: bastion-ssh-config

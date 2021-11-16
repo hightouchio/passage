@@ -162,7 +162,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
-			st,
+			st.WithTags(stats.Tags{"tunnel_type": name}),
 			listFunc,
 			tunnel.TunnelOptions{
 				BindHost: config.GetString(ConfigTunnelBindHost),
@@ -442,9 +442,5 @@ func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
 	return stats.
 		New(statsdClient, logger).
 		WithPrefix("passage").
-		WithTags(stats.Tags{
-			"service": "passage",
-			"env":     config.GetString(ConfigEnv),
-			"version": version,
-		}), nil
+		WithTags(stats.Tags{"version": version}), nil
 }
