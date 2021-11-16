@@ -2,21 +2,17 @@
 ## explicit
 github.com/DataDog/datadog-go/statsd
 # github.com/Masterminds/squirrel v1.5.0
-## explicit
+## explicit; go 1.14
 github.com/Masterminds/squirrel
 # github.com/Microsoft/go-winio v0.5.0
-## explicit
+## explicit; go 1.12
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
-## explicit
-# github.com/alecthomas/units v0.0.0-20201120081800-1786d5ef83d4
-## explicit
 # github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
-## explicit
+## explicit; go 1.13
 github.com/anmitsu/go-shlex
 # github.com/aws/aws-sdk-go v1.42.4
-## explicit
+## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/arn
 github.com/aws/aws-sdk-go/aws/awserr
@@ -62,15 +58,15 @@ github.com/aws/aws-sdk-go/private/protocol/restjson
 github.com/aws/aws-sdk-go/private/protocol/restxml
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
 github.com/aws/aws-sdk-go/service/s3
-github.com/aws/aws-sdk-go/service/s3/s3iface
-github.com/aws/aws-sdk-go/service/s3/s3manager
 github.com/aws/aws-sdk-go/service/sso
 github.com/aws/aws-sdk-go/service/sso/ssoiface
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/davecgh/go-spew v1.1.1
+## explicit
 github.com/davecgh/go-spew/spew
 # github.com/fsnotify/fsnotify v1.4.9
+## explicit; go 1.13
 github.com/fsnotify/fsnotify
 # github.com/gliderlabs/ssh v0.3.1
 ## explicit
@@ -79,9 +75,10 @@ github.com/gliderlabs/ssh
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
-## explicit
+## explicit; go 1.12
 github.com/gorilla/mux
 # github.com/hashicorp/hcl v1.0.0
+## explicit
 github.com/hashicorp/hcl
 github.com/hashicorp/hcl/hcl/ast
 github.com/hashicorp/hcl/hcl/parser
@@ -93,76 +90,93 @@ github.com/hashicorp/hcl/json/parser
 github.com/hashicorp/hcl/json/scanner
 github.com/hashicorp/hcl/json/token
 # github.com/inconshreveable/mousetrap v1.0.0
+## explicit
 github.com/inconshreveable/mousetrap
 # github.com/jmespath/go-jmespath v0.4.0
+## explicit; go 1.14
 github.com/jmespath/go-jmespath
 # github.com/jmoiron/sqlx v1.3.4
-## explicit
+## explicit; go 1.10
 github.com/jmoiron/sqlx
 github.com/jmoiron/sqlx/reflectx
 # github.com/kr/pretty v0.2.0
-## explicit
+## explicit; go 1.12
 # github.com/lann/builder v0.0.0-20180802200727-47ae307949d0
+## explicit
 github.com/lann/builder
 # github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0
+## explicit
 github.com/lann/ps
 # github.com/lib/pq v1.9.0
-## explicit
+## explicit; go 1.13
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
 # github.com/magiconair/properties v1.8.5
+## explicit; go 1.13
 github.com/magiconair/properties
 # github.com/mitchellh/mapstructure v1.4.1
+## explicit; go 1.14
 github.com/mitchellh/mapstructure
 # github.com/pelletier/go-toml v1.9.3
+## explicit; go 1.12
 github.com/pelletier/go-toml
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
+## explicit
 github.com/pmezard/go-difflib/difflib
 # github.com/sirupsen/logrus v1.7.0
-## explicit
+## explicit; go 1.13
 github.com/sirupsen/logrus
 # github.com/spf13/afero v1.6.0
+## explicit; go 1.13
 github.com/spf13/afero
 github.com/spf13/afero/mem
 # github.com/spf13/cast v1.3.1
+## explicit
 github.com/spf13/cast
 # github.com/spf13/cobra v1.2.1
-## explicit
+## explicit; go 1.14
 github.com/spf13/cobra
 # github.com/spf13/jwalterweatherman v1.1.0
+## explicit
 github.com/spf13/jwalterweatherman
 # github.com/spf13/pflag v1.0.5
+## explicit; go 1.12
 github.com/spf13/pflag
 # github.com/spf13/viper v1.8.1
-## explicit
+## explicit; go 1.12
 github.com/spf13/viper
 # github.com/stretchr/objx v0.1.1
 ## explicit
 # github.com/stretchr/testify v1.7.0
-## explicit
+## explicit; go 1.13
 github.com/stretchr/testify/assert
 # github.com/subosito/gotenv v1.2.0
+## explicit
 github.com/subosito/gotenv
 # go.uber.org/atomic v1.7.0
+## explicit; go 1.13
 go.uber.org/atomic
 # go.uber.org/dig v1.12.0
+## explicit; go 1.13
 go.uber.org/dig
 go.uber.org/dig/internal/digreflect
 go.uber.org/dig/internal/dot
 # go.uber.org/fx v1.14.2
-## explicit
+## explicit; go 1.13
 go.uber.org/fx
 go.uber.org/fx/fxevent
 go.uber.org/fx/internal/fxlog
 go.uber.org/fx/internal/fxreflect
 go.uber.org/fx/internal/lifecycle
 # go.uber.org/multierr v1.6.0
+## explicit; go 1.12
 go.uber.org/multierr
 # go.uber.org/zap v1.17.0
+## explicit; go 1.13
 go.uber.org/zap
 go.uber.org/zap/buffer
 go.uber.org/zap/internal/bufferpool
@@ -170,7 +184,7 @@ go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
 # golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-## explicit
+## explicit; go 1.11
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/curve25519
@@ -180,23 +194,24 @@ golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-## explicit
 # golang.org/x/sys v0.0.0-20210510120138-977fb7262007
+## explicit; go 1.17
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.6
+## explicit; go 1.11
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
-# gopkg.in/alecthomas/kingpin.v2 v2.2.6
-## explicit
 # gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15
 ## explicit
 # gopkg.in/ini.v1 v1.62.0
+## explicit
 gopkg.in/ini.v1
 # gopkg.in/yaml.v2 v2.4.0
+## explicit; go 1.15
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+## explicit
 gopkg.in/yaml.v3
