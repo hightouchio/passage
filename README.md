@@ -48,7 +48,7 @@ The following are required config options that you must set to quickstart with P
 | postgres.sslmode | See `PGSSLMODE`             | True         | `PGSSLMODE` |
 
 ## Deployment
-passage exposes parts of your private network to the Internet. Therefore, securing your production deployment is incredibly important.
+passage exposes parts of your private network to the Internet. Therefore, its important to secure the network that passage operates in.
 
 Passage opens two kinds of ports on machines that it runs on: (1) tunnel ports, and (2) `sshd` ports. Tunnel ports forward packets to the exposed, remote customer port (what your services will talk to).
 `sshd` ports are used for reverse tunnels. These ports host SSH servers that remote clients will connect to with their remote port forwarding requests. These ports need to be exposed to the public Internet. 
