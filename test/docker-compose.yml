@@ -12,8 +12,14 @@ services:
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
       PASSAGE_TUNNEL_REVERSE_ENABLED: 'true'
 
-      PASSAGE_DISCOVERY_STATIC_HOST: 'passage'
-      LOG_LEVEL: debug
+      # Configure keystore via minio
+      AWS_ACCESS_KEY_ID: 'passage'
+      AWS_SECRET_ACCESS_KEY: 'passage'
+      PASSAGE_KEYSTORE_S3_BUCKET_NAME: 'keystore'
+      PASSAGE_KEYSTORE_S3_BUCKET_REGION: 'us-east-1'
+      PASSAGE_KEYSTORE_S3_ENDPOINT: 'http://minio:9000'
+      PASSAGE_KEYSTORE_S3_DISABLE_SSL: 'true'
+      PASSAGE_KEYSTORE_S3_FORCE_PATH_STYLE: 'true'
 
       PGHOST: postgres
       PGPORT: 5432
@@ -43,6 +49,22 @@ services:
       - ../sql:/docker-entrypoint-initdb.d
     networks:
       - passage
+
+  # Passage uses Minio in development as a keystore.
+  minio:
+    image: minio/minio:RELEASE.2021-12-20T22-07-16Z
+    environment:
+      MINIO_ROOT_USER: passage
+      MINIO_ROOT_PASSWORD: passage
+    networks:
+      - passage
+    volumes:
+      - minio:/data
+    entrypoint:
+      - "sh"
+      - "-c"
+      - "mkdir -p /data/keystore && minio server /data"
+    restart: always
 
   # remote_ssh represents a public-facing Bastion server running in a remote network.
   remote_bastion:
@@ -89,6 +111,9 @@ networks:
     name: hidden
 
 volumes:
+  # Persistent volume for Minio keystore.
+  minio:
+
   # Create a volume for the test runner to authorize public keys on the bastion.
   bastion-ssh-config:
 

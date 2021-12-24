@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
@@ -55,8 +56,13 @@ const (
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
-	ConfigKeystoreS3BucketName      = "keystore.s3.bucket_name"
-	ConfigKeystoreS3KeyPrefix       = "keystore.s3.key_prefix"
+
+	ConfigKeystoreS3BucketName     = "keystore.s3.bucket_name"
+	ConfigKeystoreS3KeyPrefix      = "keystore.s3.key_prefix"
+	ConfigKeystoreS3Endpoint       = "keystore.s3.endpoint"
+	ConfigKeystoreS3DisableSSL     = "keystore.s3.disable_ssl"
+	ConfigKeystoreS3ForcePathStyle = "keystore.s3.force_path_style"
+	ConfigKeystoreS3BucketRegion   = "keystore.s3.bucket_region"
 
 	ConfigPostgresUri     = "postgres.uri"
 	ConfigPostgresHost    = "postgres.host"
@@ -197,10 +203,27 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 		if bucketName == "" {
 			return nil, newConfigError(ConfigKeystoreS3BucketName, "must be set")
 		}
-		sess, err := session.NewSession()
+
+		// Configure AWS session
+		awsConfig := &aws.Config{}
+		if config.IsSet(ConfigKeystoreS3BucketRegion) {
+			awsConfig.Region = aws.String(config.GetString(ConfigKeystoreS3BucketRegion))
+		}
+		if config.IsSet(ConfigKeystoreS3Endpoint) {
+			awsConfig.Endpoint = aws.String(config.GetString(ConfigKeystoreS3Endpoint))
+		}
+		if config.IsSet(ConfigKeystoreS3DisableSSL) {
+			awsConfig.DisableSSL = aws.Bool(config.GetBool(ConfigKeystoreS3DisableSSL))
+		}
+		if config.IsSet(ConfigKeystoreS3ForcePathStyle) {
+			awsConfig.S3ForcePathStyle = aws.Bool(config.GetBool(ConfigKeystoreS3ForcePathStyle))
+		}
+		sess, err := session.NewSession(awsConfig)
 		if err != nil {
 			return nil, configError{"could not init aws session"}
 		}
+
+		// Init S3 keystore
 		return s3keystore.S3{
 			S3:         s3.New(sess),
 			BucketName: bucketName,
