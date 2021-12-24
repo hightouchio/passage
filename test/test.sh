@@ -1,18 +1,17 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
-docker network ls
-docker build ./test/runner -t passage-runner:latest
+set -e
 
-docker run  \
-  --name="passage-test-reverse" --rm \
-  --network="passage" \
-  --env EXPECTED_SERVICE_RESPONSE="You're talking to the remote service!" \
-  --volume test_reverse-tunnel-config:/reverse_tunnel \
-  passage-runner:latest /test-reverse.rb
+# Teardown environment.
+cleanup() {
+  docker-compose -f test/docker-compose.yml down --volumes
+  exit $?
+}
+trap cleanup EXIT
 
-docker run  \
-  --name="passage-test-standard" --rm \
-  --network="passage" \
-  --env EXPECTED_SERVICE_RESPONSE="You're talking to the remote service!" \
-  --volume test_bastion-ssh-config:/bastion_ssh \
-  passage-runner:latest /test-standard.rb
+# Spin up environment.
+docker-compose -f test/docker-compose.yml build passage
+docker-compose -f test/docker-compose.yml up -d
+
+# Execute tests.
+./test/runner.sh
