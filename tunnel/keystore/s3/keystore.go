@@ -10,13 +10,13 @@ import (
 	"io/ioutil"
 )
 
-type Keystore struct {
+type S3 struct {
 	S3         *s3.S3
 	BucketName string
 	KeyPrefix  string
 }
 
-func (k Keystore) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
+func (k S3) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
 	response, err := k.S3.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),
@@ -33,7 +33,7 @@ func (k Keystore) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
 	return contents, nil
 }
 
-func (k Keystore) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
+func (k S3) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
 	_, err := k.S3.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),
@@ -42,7 +42,7 @@ func (k Keystore) Set(ctx context.Context, id uuid.UUID, contents []byte) error 
 	return err
 }
 
-func (k Keystore) Delete(ctx context.Context, id uuid.UUID) error {
+func (k S3) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := k.S3.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),

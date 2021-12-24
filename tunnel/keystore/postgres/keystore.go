@@ -7,19 +7,19 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type Keystore struct {
+type Postgres struct {
 	db        *sqlx.DB
 	tableName string
 }
 
-func New(db *sqlx.DB, tableName string) Keystore {
-	return Keystore{
+func New(db *sqlx.DB, tableName string) Postgres {
+	return Postgres{
 		db:        db,
 		tableName: tableName,
 	}
 }
 
-func (p Keystore) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
+func (p Postgres) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
 	var contents []byte
 	row := p.db.QueryRowxContext(ctx, fmt.Sprintf(`SELECT contents FROM %s WHERE id=$1;`, p.tableName), id)
 	if err := row.Scan(&contents); err != nil {
@@ -28,7 +28,7 @@ func (p Keystore) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
 	return contents, nil
 }
 
-func (p Keystore) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
+func (p Postgres) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
 	_, err := p.db.ExecContext(ctx, fmt.Sprintf(`
 	INSERT INTO %s(id, contents)
 	VALUES($1::uuid, $2::text)
@@ -37,7 +37,7 @@ func (p Keystore) Set(ctx context.Context, id uuid.UUID, contents []byte) error 
 	return err
 }
 
-func (p Keystore) Delete(ctx context.Context, id uuid.UUID) error {
+func (p Postgres) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := p.db.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id=$1;`, p.tableName), id)
 	return err
 }

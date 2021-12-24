@@ -201,7 +201,7 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 		if err != nil {
 			return nil, configError{"could not init aws session"}
 		}
-		return s3keystore.Keystore{
+		return s3keystore.S3{
 			S3:         s3.New(sess),
 			BucketName: bucketName,
 			KeyPrefix:  config.GetString(ConfigKeystoreS3KeyPrefix),
