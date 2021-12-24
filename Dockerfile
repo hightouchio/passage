@@ -4,7 +4,7 @@ ARG version
 WORKDIR /app
 COPY ./ ./
 
-RUN GOOS=linux CGO_ENABLED=0 go build \
+RUN GOOS=linux go build \
   -mod vendor \
   -ldflags "-X main.version=$version" \
   -o ./passage \
