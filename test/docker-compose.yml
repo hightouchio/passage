@@ -12,6 +12,9 @@ services:
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
       PASSAGE_TUNNEL_REVERSE_ENABLED: 'true'
 
+      PASSAGE_KEYSTORE_TYPE: sqlite3
+      PASSAGE_KEYSTORE_SQLITE3_PATH: /keystore/sqlite3.db
+
       PASSAGE_DISCOVERY_STATIC_HOST: 'passage'
       LOG_LEVEL: debug
 
@@ -20,6 +23,10 @@ services:
       PGUSER: passage
       PGDBNAME: passage
       PGSSLMODE: disable
+    volumes:
+      - type: volume
+        source: passage-keystore
+        target: /keystore
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +96,9 @@ networks:
     name: hidden
 
 volumes:
+  # Volume for persistent Sqlite3 keystore.
+  passage-keystore:
+
   # Create a volume for the test runner to authorize public keys on the bastion.
   bastion-ssh-config:
 

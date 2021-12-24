@@ -16,6 +16,7 @@ import (
 	inmemorykeystore "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	pgkeystore "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	s3keystore "github.com/hightouchio/passage/tunnel/keystore/s3"
+	sqlitekeystore "github.com/hightouchio/passage/tunnel/keystore/sqlite3"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -57,6 +58,7 @@ const (
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
 	ConfigKeystoreS3BucketName      = "keystore.s3.bucket_name"
 	ConfigKeystoreS3KeyPrefix       = "keystore.s3.key_prefix"
+	ConfigKeystoreSqlite3Path       = "keystore.sqlite3.path"
 
 	ConfigPostgresUri     = "postgres.uri"
 	ConfigPostgresHost    = "postgres.host"
@@ -176,7 +178,7 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 	return discoveryService, nil
 }
 
-func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, error) {
+func newTunnelKeystore(lc fx.Lifecycle, config *viper.Viper, db *sqlx.DB) (keystore.Keystore, error) {
 	if !config.IsSet(ConfigKeystoreType) {
 		return nil, newConfigError(ConfigKeystoreType, "must be set")
 	}
@@ -191,6 +193,20 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 			return nil, newConfigError(ConfigKeystorePostgresTableName, "must be set")
 		}
 		return pgkeystore.New(db, tableName), nil
+
+	case "sqlite3":
+		path := config.GetString(ConfigKeystoreSqlite3Path)
+		if path == "" {
+			return nil, newConfigError(path, "must be set")
+		}
+		ks, err := sqlitekeystore.New(path, "keys")
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
+			return ks.Close()
+		}})
+		return ks, nil
 
 	case "s3":
 		bucketName := config.GetString(ConfigKeystoreS3BucketName)
