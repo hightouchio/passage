@@ -13,7 +13,7 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery/srv"
 	"github.com/hightouchio/passage/tunnel/discovery/static"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	inmemorykeystore "github.com/hightouchio/passage/tunnel/keystore/in-memory"
+	inmemorykeystore "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	pgkeystore "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	s3keystore "github.com/hightouchio/passage/tunnel/keystore/s3"
 	"github.com/hightouchio/passage/tunnel/postgres"

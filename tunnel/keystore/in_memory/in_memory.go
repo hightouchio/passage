@@ -1,4 +1,4 @@
-package postgres
+package in_memory
 
 import (
 	"context"
