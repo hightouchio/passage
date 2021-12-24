@@ -10,11 +10,12 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
-	"github.com/hightouchio/passage/tunnel/discovery"
-	"github.com/hightouchio/passage/tunnel/discovery/srv"
-	"github.com/hightouchio/passage/tunnel/discovery/static"
-	"github.com/hightouchio/passage/tunnel/keystore"
 
+	"github.com/hightouchio/passage/tunnel/discovery"
+	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
+	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
+
+	"github.com/hightouchio/passage/tunnel/keystore"
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
@@ -166,14 +167,14 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 	var discoveryService discovery.DiscoveryService
 	switch config.GetString(ConfigDiscoveryType) {
 	case "srv":
-		discoveryService = srv.Discovery{
+		discoveryService = discoverySRV.Discovery{
 			SrvRegistry: config.GetString(ConfigDiscoverySrvRegistry),
 			Prefix:      config.GetString(ConfigDiscoverySrvPrefix),
 		}
 		break
 
 	case "static":
-		discoveryService = static.Discovery{
+		discoveryService = discoveryStatic.Discovery{
 			Host: config.GetString(ConfigDiscoveryStaticHost),
 		}
 		break
