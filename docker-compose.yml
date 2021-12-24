@@ -10,7 +10,9 @@ services:
       PASSAGE_HTTP_ADDR: 0.0.0.0:6000
       PASSAGE_API_ENABLED: 'true'
       PASSAGE_TUNNEL_STANDARD_ENABLED: 'true'
-      PASSAGE_KEYSTORE_POSTGRES_TABLE_NAME: 'keystore.keys'
+
+      PASSAGE_KEYSTORE_TYPE: sqlite3
+      PASSAGE_KEYSTORE_SQLITE3_PATH: /keystore/sqlite3.db
 
       PGHOST: postgres
       PGPORT: 5432
@@ -22,7 +24,10 @@ services:
     networks:
       - passage_dev
     volumes:
-      - ./sql:/docker-entrypoint-initdb.d
+      # Mount keystore sqlite3 DB
+      - type: volume
+        source: passage-keystore
+        target: /keystore
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,6 +48,10 @@ services:
       - passage_dev
     healthcheck:
       test: "pg_isready -U passage -d passage"
+
+volumes:
+  # Volume for persistent Sqlite3 keystore.
+  passage-keystore:
 
 networks:
   passage_dev:

@@ -1,5 +1,8 @@
-FROM golang:1.17 AS builder
+FROM golang:1.17-alpine AS builder
 ARG version
+
+# Install gcc build tools
+RUN apk add build-base
 
 WORKDIR /app
 COPY ./ ./
