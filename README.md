@@ -21,7 +21,7 @@ With **Standard** tunnels, Passage acts as an SSH client, opening an SSH connect
 With **Reverse** tunnels, Passage acts as an SSH server, allowing remote clients to forward a local port from a hidden server to a dedicated port on the Passage instance, therefore achieving a tunnel without requiring a remote bastion server to be exposed to inbound traffic from the internet.
 
 ## Dependencies
-- Postgres 11 or later ([`schema`](sql/1-schema.sql))
+- Postgres 11 or later
 - A keystore to securely store and retrieve public and private keys.
   - Passage supports Postgres or S3 (default is a table in the same Postgres database)
   - Passage does not handle encryption of keys at rest.
