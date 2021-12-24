@@ -8,14 +8,14 @@
 | tunnel.refresh.interval | How frequently Passage should check Postgres for tunnel status changes. | False        | 1 second     |
 | tunnel.restart.interval | How frequently Passage should attempt to restart a broken tunnel.       | False        | 15 seconds   |
 
-## Standard Tunnels
+## Normal Tunnels
 | **Key**                            | **Description**                                               | **Required** | **Default** |
 |------------------------------------|---------------------------------------------------------------|--------------|-------------|
-| tunnel.standard.enabled            | Enable Standard Tunnels.                                      | True         | True        |
-| tunnel.standard.ssh.user           | SSH client username for standard tunnels.                     | True         | `passage`   |
-| tunnel.standard.dial.timeout       | Timeout for initial SSH dial.                                 | False        | 15 seconds  |
-| tunnel.standard.keepalive.interval | Keepalive interval for Standard Tunnel SSH client connection. | False        | 1 minute    |
-| tunnel.standard.keepalive.timeout  | Keepalive timeout for Standard Tunnel SSH client connection.  | False        | 15 seconds  |
+| tunnel.normal.enabled            | Enable normal Tunnels.                                      | True         | True        |
+| tunnel.normal.ssh.user           | SSH client username for normal tunnels.                     | True         | `passage`   |
+| tunnel.normal.dial.timeout       | Timeout for initial SSH dial.                                 | False        | 15 seconds  |
+| tunnel.normal.keepalive.interval | Keepalive interval for normal Tunnel SSH client connection. | False        | 1 minute    |
+| tunnel.normal.keepalive.timeout  | Keepalive timeout for normal Tunnel SSH client connection.  | False        | 15 seconds  |
 
 ## Reverse Tunnels
 | **Key**                  | **Description**                                            | **Required**              | **Default** |
@@ -25,7 +25,7 @@
 | tunnel.reverse.bind.host | Bind host for the reverse tunnel SSH server                | True, if reverse enabled. | 0.0.0.0 |
 
 ## Service Discovery
-A production passage deployment may have the standard tunnel server running separately from the reverse tunnel server, and an API server running separately from the two.
+A production passage deployment may have the normal tunnel server running separately from the reverse tunnel server, and an API server running separately from the two.
 
 | **Key**                | **Description**                                   | **Required**       | **Default** |
 |------------------------|---------------------------------------------------|--------------------|-------------|
@@ -35,7 +35,7 @@ A production passage deployment may have the standard tunnel server running sepa
 | discovery.static.host  | If `static`, the hostname to use.                 | True, if `static`. |             |
 
 ## Keystore
-Passage needs a place to securely store SSH private keys for Standard Tunnels and public keys for Reverse Tunnels. By default, Passage will store keys unencrypted in a Postgres table, but that should not be deployed to production.
+Passage needs a place to securely store SSH private keys for normal Tunnels and public keys for Reverse Tunnels. By default, Passage will store keys unencrypted in a Postgres table, but that should not be deployed to production.
 
 With the `s3` keystore, Passage will store keys in an S3 bucket. If you choose to go this route, make sure you have properly configured bucket policies and IAM permissions to restrict access to _only_ Passage. Also, it is recommended that you enable at-rest bucket encryption with KMS.
 

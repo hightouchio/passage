@@ -21,7 +21,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-type StandardTunnel struct {
+type NormalTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
@@ -34,10 +34,10 @@ type StandardTunnel struct {
 	ServicePort int    `json:"servicePort"`
 
 	clientOptions SSHClientOptions
-	services      StandardTunnelServices
+	services      NormalTunnelServices
 }
 
-func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error {
+func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	st := stats.GetStats(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -156,7 +156,7 @@ func (t StandardTunnel) Start(ctx context.Context, options TunnelOptions) error 
 	}
 }
 
-func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	st := stats.GetStats(ctx)
@@ -195,9 +195,9 @@ func (t StandardTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
-func (t StandardTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) {
+func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) {
 	// get private keys from database
-	keys, err := t.services.SQL.GetStandardTunnelPrivateKeys(ctx, t.ID)
+	keys, err := t.services.SQL.GetNormalTunnelPrivateKeys(ctx, t.ID)
 	if err != nil {
 		return []ssh.Signer{}, errors.Wrap(err, "could not look up private keys")
 	}
@@ -249,8 +249,8 @@ func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, option
 	close(errChan)
 }
 
-func (t StandardTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost("standard", t.ID)
+func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
+	tunnelHost, err := discovery.ResolveTunnelHost(Normal, t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}
@@ -261,22 +261,20 @@ func (t StandardTunnel) GetConnectionDetails(discovery discovery.DiscoveryServic
 	}, nil
 }
 
-// StandardTunnelServices are the external dependencies that StandardTunnel needs to do its job
-type StandardTunnelServices struct {
+// NormalTunnelServices are the external dependencies that NormalTunnel needs to do its job
+type NormalTunnelServices struct {
 	SQL interface {
-		GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 	Keystore keystore.Keystore
 }
 
-func InjectStandardTunnelDependencies(f func(ctx context.Context) ([]StandardTunnel, error), services StandardTunnelServices, options SSHClientOptions) ListFunc {
+func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
-		// Get standard tunnels
 		sts, err := f(ctx)
 		if err != nil {
 			return []Tunnel{}, err
 		}
-		// Inject ClientOptions into StandardTunnels
 		tunnels := make([]Tunnel, len(sts))
 		for i, st := range sts {
 			st.services = services
@@ -287,8 +285,8 @@ func InjectStandardTunnelDependencies(f func(ctx context.Context) ([]StandardTun
 	}
 }
 
-func (t StandardTunnel) Equal(v interface{}) bool {
-	t2, ok := v.(StandardTunnel)
+func (t NormalTunnel) Equal(v interface{}) bool {
+	t2, ok := v.(NormalTunnel)
 	if !ok {
 		return false
 	}
@@ -302,9 +300,9 @@ func (t StandardTunnel) Equal(v interface{}) bool {
 		t.ServicePort == t2.ServicePort
 }
 
-// sqlFromStandardTunnel converts tunnel data into something that can be inserted into the DB
-func sqlFromStandardTunnel(tunnel StandardTunnel) postgres.StandardTunnel {
-	return postgres.StandardTunnel{
+// sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
+func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
+	return postgres.NormalTunnel{
 		SSHUser:     sql.NullString{String: tunnel.SSHUser, Valid: tunnel.SSHUser != ""},
 		SSHHost:     tunnel.SSHHost,
 		SSHPort:     tunnel.SSHPort,
@@ -313,9 +311,9 @@ func sqlFromStandardTunnel(tunnel StandardTunnel) postgres.StandardTunnel {
 	}
 }
 
-// convert a SQL DB representation of a postgres.StandardTunnel into the primary StandardTunnel struct
-func standardTunnelFromSQL(record postgres.StandardTunnel) StandardTunnel {
-	return StandardTunnel{
+// convert a SQL DB representation of a postgres.NormalTunnel into the primary NormalTunnel struct
+func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
+	return NormalTunnel{
 		ID:          record.ID,
 		CreatedAt:   record.CreatedAt,
 		Enabled:     record.Enabled,
@@ -328,13 +326,13 @@ func standardTunnelFromSQL(record postgres.StandardTunnel) StandardTunnel {
 	}
 }
 
-func (t StandardTunnel) GetID() uuid.UUID {
+func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
 }
 
-func (t StandardTunnel) logger() *logrus.Entry {
+func (t NormalTunnel) logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
-		"tunnel_type": "standard",
+		"tunnel_type": Normal,
 		"tunnel_id":   t.ID.String(),
 	})
 }

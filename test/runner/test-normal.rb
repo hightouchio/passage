@@ -18,7 +18,7 @@ def get(path)
 end
 
 def create_tunnel
-    post('api/tunnel/standard', {
+    post('api/tunnel/normal', {
         "sshHost": "remote_bastion",
         "sshPort": 2222,
         "serviceHost": "remote_service",

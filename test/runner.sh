@@ -11,8 +11,8 @@ docker run  \
   passage-runner:latest /test-reverse.rb
 
 docker run  \
-  --name="passage-test-standard" --rm \
+  --name="passage-test-normal" --rm \
   --network="passage" \
   --env EXPECTED_SERVICE_RESPONSE="You're talking to the remote service!" \
   --volume test_bastion-ssh-config:/bastion_ssh \
-  passage-runner:latest /test-standard.rb
+  passage-runner:latest /test-normal.rb

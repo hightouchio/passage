@@ -10,8 +10,8 @@ import (
 )
 
 func (s API) ConfigureWebRoutes(router *mux.Router) {
-	// create tunnel
-	router.HandleFunc("/tunnel/standard", s.handleWebCreateStandardTunnel).Methods(http.MethodPost)
+	// Create tunnel endpoints.
+	router.HandleFunc("/tunnel/normal", s.handleWebCreateNormalTunnel).Methods(http.MethodPost)
 	router.HandleFunc("/tunnel/reverse", s.handleWebCreateReverseTunnel).Methods(http.MethodPost)
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
@@ -104,14 +104,14 @@ func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 	renderJSON(w, response)
 }
 
-func (s API) handleWebCreateStandardTunnel(w http.ResponseWriter, r *http.Request) {
-	var request CreateStandardTunnelRequest
+func (s API) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Request) {
+	var request CreateNormalTunnelRequest
 	if err := read(r, &request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	response, err := s.CreateStandardTunnel(r.Context(), request)
+	response, err := s.CreateNormalTunnel(r.Context(), request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -166,7 +166,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 }
 
 func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost("reverse", t.ID)
+	tunnelHost, err := discovery.ResolveTunnelHost(Reverse, t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
 	}
@@ -187,12 +187,11 @@ type ReverseTunnelServices struct {
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
-		// Get standard tunnels
 		sts, err := f(ctx)
 		if err != nil {
 			return []Tunnel{}, err
 		}
-		// Inject ClientOptions into StandardTunnels
+		// Inject dependencies
 		tunnels := make([]Tunnel, len(sts))
 		for i, st := range sts {
 			st.services = services
@@ -229,7 +228,7 @@ func (t ReverseTunnel) GetID() uuid.UUID {
 
 func (t ReverseTunnel) logger() *logrus.Entry {
 	return logrus.WithFields(logrus.Fields{
-		"tunnel_type": "reverse",
+		"tunnel_type": Reverse,
 		"tunnel_id":   t.ID.String(),
 	})
 }

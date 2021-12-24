@@ -11,12 +11,12 @@ type Key struct {
 	ID uuid.UUID
 }
 
-const getStandardTunnelPrivateKeys = `
-SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='standard';
+const getNormalTunnelPrivateKeys = `
+SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='normal';
 `
 
-func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
-	return c.getKeysForTunnel(ctx, getStandardTunnelPrivateKeys, tunnelID)
+func (c Client) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
+	return c.getKeysForTunnel(ctx, getNormalTunnelPrivateKeys, tunnelID)
 }
 
 const getReverseTunnelAuthorizedKeys = `
