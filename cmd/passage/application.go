@@ -14,9 +14,11 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery/srv"
 	"github.com/hightouchio/passage/tunnel/discovery/static"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	inmemorykeystore "github.com/hightouchio/passage/tunnel/keystore/in_memory"
-	pgkeystore "github.com/hightouchio/passage/tunnel/keystore/postgres"
-	s3keystore "github.com/hightouchio/passage/tunnel/keystore/s3"
+
+	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
+	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
+	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -189,14 +191,14 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 
 	switch keystoreType := config.GetString(ConfigKeystoreType); keystoreType {
 	case "in-memory":
-		return inmemorykeystore.New(), nil
+		return keystoreInMemory.New(), nil
 
 	case "postgres":
 		tableName := config.GetString(ConfigKeystorePostgresTableName)
 		if tableName == "" {
 			return nil, newConfigError(ConfigKeystorePostgresTableName, "must be set")
 		}
-		return pgkeystore.New(db, tableName), nil
+		return keystorePostgres.New(db, tableName), nil
 
 	case "s3":
 		bucketName := config.GetString(ConfigKeystoreS3BucketName)
@@ -224,7 +226,7 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 		}
 
 		// Init S3 keystore
-		return s3keystore.S3{
+		return keystoreS3.S3{
 			S3:         s3.New(sess),
 			BucketName: bucketName,
 			KeyPrefix:  config.GetString(ConfigKeystoreS3KeyPrefix),
