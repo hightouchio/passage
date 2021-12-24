@@ -29,8 +29,6 @@ services:
       - "6000:6000"
     networks:
       - passage_dev
-    volumes:
-      - ./sql:/docker-entrypoint-initdb.d
     depends_on:
       postgres:
         condition: service_healthy

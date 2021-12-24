@@ -45,8 +45,6 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     healthcheck:
       test: "pg_isready -U passage -d passage"
-    volumes:
-      - ../sql:/docker-entrypoint-initdb.d
     networks:
       - passage
 
