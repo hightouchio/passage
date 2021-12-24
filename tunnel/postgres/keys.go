@@ -8,8 +8,7 @@ import (
 )
 
 type Key struct {
-	ID   uuid.UUID
-	Type string
+	ID uuid.UUID
 }
 
 const getStandardTunnelPrivateKeys = `
