@@ -1,12 +1,5 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- cleanup (REMOVE IF RUNNING IN PROD)
-DROP SCHEMA IF EXISTS passage CASCADE;
-
 -- define passage schema
 BEGIN;
-
-CREATE SCHEMA passage;
 
 CREATE SEQUENCE IF NOT EXISTS passage.sshd_ports AS INTEGER MINVALUE 49152 MAXVALUE 57343;
 CREATE SEQUENCE IF NOT EXISTS passage.tunnel_ports AS INTEGER MINVALUE 57344 MAXVALUE 65535;
@@ -49,4 +42,5 @@ CREATE TABLE IF NOT EXISTS passage.key_authorizations(
 
     UNIQUE(key_id, tunnel_type, tunnel_id)
 );
+
 COMMIT;
