@@ -71,6 +71,11 @@ github.com/fsnotify/fsnotify
 # github.com/gliderlabs/ssh v0.3.1
 ## explicit
 github.com/gliderlabs/ssh
+# github.com/golang-migrate/migrate v3.5.4+incompatible
+## explicit
+github.com/golang-migrate/migrate
+github.com/golang-migrate/migrate/database
+github.com/golang-migrate/migrate/source
 # github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid

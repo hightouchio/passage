@@ -7,6 +7,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.0
 	github.com/aws/aws-sdk-go v1.42.4
 	github.com/gliderlabs/ssh v0.3.1
+	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/mux v1.8.0
 	github.com/jmoiron/sqlx v1.3.4
