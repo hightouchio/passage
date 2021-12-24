@@ -17,7 +17,7 @@ type S3 struct {
 }
 
 func (k S3) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
-	response, err := k.S3.GetObject(&s3.GetObjectInput{
+	response, err := k.S3.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),
 	})
@@ -34,7 +34,7 @@ func (k S3) Get(ctx context.Context, id uuid.UUID) ([]byte, error) {
 }
 
 func (k S3) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
-	_, err := k.S3.PutObject(&s3.PutObjectInput{
+	_, err := k.S3.PutObjectWithContext(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),
 		Body:   bytes.NewReader(contents),
@@ -43,7 +43,7 @@ func (k S3) Set(ctx context.Context, id uuid.UUID, contents []byte) error {
 }
 
 func (k S3) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := k.S3.DeleteObject(&s3.DeleteObjectInput{
+	_, err := k.S3.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(k.BucketName),
 		Key:    aws.String(k.KeyPrefix + id.String()),
 	})
