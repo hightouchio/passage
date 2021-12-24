@@ -73,20 +73,27 @@ github.com/fsnotify/fsnotify
 github.com/gliderlabs/ssh
 # github.com/golang-migrate/migrate v3.5.4+incompatible
 ## explicit
-github.com/golang-migrate/migrate
-github.com/golang-migrate/migrate/database
-github.com/golang-migrate/migrate/database/postgres
-github.com/golang-migrate/migrate/source
 # github.com/golang-migrate/migrate/v4 v4.15.1
 ## explicit; go 1.16
+github.com/golang-migrate/migrate/v4
+github.com/golang-migrate/migrate/v4/database
+github.com/golang-migrate/migrate/v4/database/multistmt
+github.com/golang-migrate/migrate/v4/database/postgres
+github.com/golang-migrate/migrate/v4/internal/url
 github.com/golang-migrate/migrate/v4/source
-github.com/golang-migrate/migrate/v4/source/httpfs
+github.com/golang-migrate/migrate/v4/source/iofs
 # github.com/google/uuid v1.3.0
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
 ## explicit; go 1.12
 github.com/gorilla/mux
+# github.com/hashicorp/errwrap v1.0.0
+## explicit
+github.com/hashicorp/errwrap
+# github.com/hashicorp/go-multierror v1.1.0
+## explicit; go 1.14
+github.com/hashicorp/go-multierror
 # github.com/hashicorp/hcl v1.0.0
 ## explicit
 github.com/hashicorp/hcl
