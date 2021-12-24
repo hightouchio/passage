@@ -13,10 +13,7 @@ type Key struct {
 }
 
 const getStandardTunnelPrivateKeys = `
-SELECT passage.keys.id FROM passage.keys
-JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
-JOIN passage.tunnels ON passage.key_authorizations.tunnel_id=passage.tunnels.id AND passage.key_authorizations.tunnel_type='standard'
-WHERE passage.tunnels.id=$1;
+SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='standard';
 `
 
 func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
@@ -24,10 +21,7 @@ func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.
 }
 
 const getReverseTunnelAuthorizedKeys = `
-SELECT passage.keys.id FROM passage.keys
-JOIN passage.key_authorizations ON passage.keys.id=passage.key_authorizations.key_id
-JOIN passage.reverse_tunnels ON passage.key_authorizations.tunnel_id=passage.reverse_tunnels.id AND passage.key_authorizations.tunnel_type='reverse'
-WHERE passage.reverse_tunnels.id=$1;
+SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='reverse';
 `
 
 func (c Client) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
