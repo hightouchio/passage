@@ -78,7 +78,7 @@ func checkConnectivity(ctx context.Context, details ConnectionDetails) error {
 }
 
 // waitForTunnelError
-func waitForTunnelError(ctx context.Context, reader io.ReadCloser, duration time.Duration) error {
+func waitForTunnelError(ctx context.Context, reader io.ReadCloser, waitDuration time.Duration) error {
 	done := make(chan error)
 
 	// read in a context-aware fashion
@@ -100,7 +100,7 @@ func waitForTunnelError(ctx context.Context, reader io.ReadCloser, duration time
 	}()
 
 	select {
-	case <-time.After(duration):
+	case <-time.After(waitDuration):
 		return nil // success
 
 	case err := <-done:

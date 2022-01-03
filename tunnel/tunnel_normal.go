@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -104,6 +103,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
+
 			default:
 				// Accept incoming tunnel connections
 				conn, err := listener.Accept()
@@ -113,8 +115,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				}
 				incomingConns <- conn
 
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
@@ -156,12 +156,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				st.Gauge("read", float64(read), nil, 1)
 				st.Gauge("write", float64(written), nil, 1)
 
+				st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
 				if err != nil {
 					st.ErrorEvent("error", err)
 					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
 					return
 				}
-				st.WithEventTags(stats.Tags{"read": read, "write": written}).SimpleEvent("close")
+				st.SimpleEvent("close")
 			}()
 
 		case <-ctx.Done():
@@ -170,39 +171,58 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 }
 
+// handleTunnelConnection TODO write more
 func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	st := stats.GetStats(ctx)
 
 	// Dial upstream service.
-	st.WithEventTags(stats.Tags{"upstream_host": t.ServiceHost, "upstream_port": t.ServicePort}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
+	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
+	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
+	serviceConn, err := sshConn.Dial("tcp", upstreamAddr)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "dial upstream")
 	}
 	defer serviceConn.Close()
 
-	copy := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64) error {
+	// copyConn copies all bytes from io.Reader to io.Writer, records
+	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan <- error) {
 		defer g.Done()
+
 		byteCount, err := io.Copy(dst, src)
+		if err != nil {
+			errors <- err
+		}
+		// Record number of bytes written in this direction
 		*written = byteCount
-		return err
 	}
 
 	var read, written int64
+	readErr := make(chan error)
+	writeErr := make(chan error)
+
+	// Copy all bytes from tunnel to service and service to tunnel
 	go func() {
 		defer cancel()
 		g := new(sync.WaitGroup)
 		g.Add(2)
+
 		// Copy data bidirectionally.
-		go copy(g, tunnelConn, serviceConn, &written)
-		go copy(g, serviceConn, tunnelConn, &read)
+		go copyConn(g, serviceConn, tunnelConn, &read, readErr)
+		go copyConn(g, tunnelConn, serviceConn, &written, writeErr)
+
 		g.Wait()
+		// Close serviceConn before the end of the function so we get a bytes written count
+		serviceConn.Close()
 	}()
 
 	// Wait for an error or connection completion
 	select {
+	case err := <-readErr:
+		return read, written, errors.Wrap(err, "read error")
+	case err := <-writeErr:
+		return read, written, errors.Wrap(err, "write error")
 	case <-ctx.Done():
 		return read, written, nil
 	}
