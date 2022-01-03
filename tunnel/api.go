@@ -19,17 +19,17 @@ type API struct {
 	Stats            stats.Stats
 }
 
-// GetStandardTunnels is a ListFunc which returns the set of StandardTunnel[] that should be run.
-func (s API) GetStandardTunnels(ctx context.Context) ([]StandardTunnel, error) {
-	standardTunnels, err := s.SQL.ListStandardActiveTunnels(ctx)
+// GetNormalTunnels is a ListFunc which returns the set of NormalTunnel[] that should be run.
+func (s API) GetNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
+	normalTunnels, err := s.SQL.ListNormalActiveTunnels(ctx)
 	if err != nil {
-		return []StandardTunnel{}, err
+		return []NormalTunnel{}, err
 	}
 
 	// convert all the SQL records to our primary struct
-	tunnels := make([]StandardTunnel, len(standardTunnels))
-	for i, record := range standardTunnels {
-		tunnel := standardTunnelFromSQL(record)
+	tunnels := make([]NormalTunnel, len(normalTunnels))
+	for i, record := range normalTunnels {
+		tunnel := normalTunnelFromSQL(record)
 		tunnels[i] = tunnel
 	}
 
@@ -116,9 +116,9 @@ func (s API) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Update
 
 	// Update tunnel
 	switch tunnelType {
-	case "standard":
-		var newTunnel postgres.StandardTunnel
-		newTunnel, err = s.SQL.UpdateStandardTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
+	case Normal:
+		var newTunnel postgres.NormalTunnel
+		newTunnel, err = s.SQL.UpdateNormalTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled":     "enabled",
 			"serviceHost": "service_host",
 			"servicePort": "service_port",
@@ -126,8 +126,8 @@ func (s API) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Update
 			"sshPort":     "ssh_port",
 			"sshUser":     "ssh_user",
 		}))
-		tunnel = standardTunnelFromSQL(newTunnel)
-	case "reverse":
+		tunnel = normalTunnelFromSQL(newTunnel)
+	case Reverse:
 		var newTunnel postgres.ReverseTunnel
 		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled": "enabled",
@@ -167,10 +167,10 @@ type sqlClient interface {
 	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
 
-	CreateStandardTunnel(ctx context.Context, data postgres.StandardTunnel) (postgres.StandardTunnel, error)
-	GetStandardTunnel(ctx context.Context, id uuid.UUID) (postgres.StandardTunnel, error)
-	UpdateStandardTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.StandardTunnel, error)
-	ListStandardActiveTunnels(ctx context.Context) ([]postgres.StandardTunnel, error)
+	CreateNormalTunnel(ctx context.Context, data postgres.NormalTunnel) (postgres.NormalTunnel, error)
+	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.NormalTunnel, error)
+	UpdateNormalTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.NormalTunnel, error)
+	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
 
 	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
 

@@ -21,7 +21,7 @@ import (
 var (
 	serverCommand = &cobra.Command{
 		Use:   "server",
-		Short: "passage server is the entrypoint for the HTTP API, the standard tunnel server, and the reverse tunnel server.",
+		Short: "passage server is the entrypoint for the HTTP API, the normal tunnel server, and the reverse tunnel server.",
 		RunE:  runServer,
 	}
 )
@@ -67,15 +67,15 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		})
 	}
 
-	if config.GetBool(ConfigTunnelStandardEnabled) {
-		runTunnelManager("standard", tunnel.InjectStandardTunnelDependencies(server.GetStandardTunnels, tunnel.StandardTunnelServices{
+	if config.GetBool(ConfigTunnelNormalEnabled) {
+		runTunnelManager(tunnel.Normal, tunnel.InjectStandardTunnelDependencies(server.GetNormalTunnels, tunnel.StandardTunnelServices{
 			SQL:      postgres.NewClient(sql),
 			Keystore: keystore,
 		}, tunnel.SSHClientOptions{
-			User:              config.GetString(ConfigTunnelStandardSshUser),
-			DialTimeout:       config.GetDuration(ConfigTunnelStandardDialTimeout),
-			KeepaliveInterval: config.GetDuration(ConfigTunnelStandardKeepaliveInterval),
-			KeepaliveTimeout:  config.GetDuration(ConfigTunnelStandardKeepaliveTimeout),
+			User:              config.GetString(ConfigTunnelNormalSshUser),
+			DialTimeout:       config.GetDuration(ConfigTunnelNormalDialTimeout),
+			KeepaliveInterval: config.GetDuration(ConfigTunnelNormalKeepaliveInterval),
+			KeepaliveTimeout:  config.GetDuration(ConfigTunnelNormalKeepaliveTimeout),
 		}))
 	}
 
@@ -86,7 +86,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			return errors.Wrap(err, "could not decode host key")
 		}
 
-		runTunnelManager("reverse", tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
+		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
 			SQL:      postgres.NewClient(sql),
 			Keystore: keystore,
 		}, tunnel.SSHServerOptions{

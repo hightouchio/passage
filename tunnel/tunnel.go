@@ -28,9 +28,13 @@ type ConnectionDetails struct {
 
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
+const (
+	Normal  = "normal"
+	Reverse = "reverse"
+)
 
 type CreateStandardTunnelRequest struct {
-	StandardTunnel
+	NormalTunnel
 
 	CreateKeyPair bool        `json:"createKeyPair"`
 	Keys          []uuid.UUID `json:"keys"`
@@ -73,19 +77,19 @@ func (s API) CreateStandardTunnel(ctx context.Context, request CreateStandardTun
 	}
 
 	// insert into DB
-	record, err := s.SQL.CreateStandardTunnel(ctx, sqlFromStandardTunnel(request.StandardTunnel))
+	record, err := s.SQL.CreateNormalTunnel(ctx, sqlFromStandardTunnel(request.NormalTunnel))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not insert")
 	}
 
 	// add keys
 	for _, keyID := range request.Keys {
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "standard", record.ID, keyID); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Normal, record.ID, keyID); err != nil {
 			return nil, errors.Wrapf(err, "could not add key %d", keyID)
 		}
 	}
 
-	tunnel := standardTunnelFromSQL(record)
+	tunnel := normalTunnelFromSQL(record)
 	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
@@ -106,7 +110,7 @@ func (s API) CreateStandardTunnel(ctx context.Context, request CreateStandardTun
 		}
 
 		// add to DB and attach to tunnel
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "standard", record.ID, keyId); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Normal, record.ID, keyId); err != nil {
 			return nil, errors.Wrap(err, "could not auth key for tunnel")
 		}
 
@@ -142,7 +146,7 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 
 	// add keys
 	for _, keyID := range request.Keys {
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "reverse", record.ID, keyID); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Reverse, record.ID, keyID); err != nil {
 			return nil, errors.Wrapf(err, "could not add key %d", keyID)
 		}
 	}
@@ -168,7 +172,7 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 		}
 
 		// add to DB and attach to tunnel
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, "reverse", record.ID, keyId); err != nil {
+		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Reverse, record.ID, keyId); err != nil {
 			return nil, errors.Wrap(err, "could not auth key for tunnel")
 		}
 
@@ -182,19 +186,19 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 
 // findTunnel finds whichever tunnel type matches the UUID
 func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, TunnelType, error) {
-	// reverse funnel first
+	// Reverse funnel first
 	reverseTunnel, err := sql.GetReverseTunnel(ctx, id)
 	if err == nil {
-		return reverseTunnelFromSQL(reverseTunnel), "reverse", nil
+		return reverseTunnelFromSQL(reverseTunnel), Reverse, nil
 	} else if err != postgres.ErrTunnelNotFound {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")
 	}
 
-	// standard tunnel next
-	standardTunnel, err := sql.GetStandardTunnel(ctx, id)
+	// Normal tunnel next
+	normalTunnel, err := sql.GetNormalTunnel(ctx, id)
 	if err == nil {
-		return standardTunnelFromSQL(standardTunnel), "standard", nil
+		return normalTunnelFromSQL(normalTunnel), Normal, nil
 	} else if err != postgres.ErrTunnelNotFound {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")

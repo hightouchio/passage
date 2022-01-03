@@ -10,8 +10,8 @@ import (
 )
 
 func (s API) ConfigureWebRoutes(router *mux.Router) {
-	// create tunnel
-	router.HandleFunc("/tunnel/standard", s.handleWebCreateStandardTunnel).Methods(http.MethodPost)
+	// Create tunnel endpoints.
+	router.HandleFunc("/tunnel/normal", s.handleWebCreateStandardTunnel).Methods(http.MethodPost)
 	router.HandleFunc("/tunnel/reverse", s.handleWebCreateReverseTunnel).Methods(http.MethodPost)
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()

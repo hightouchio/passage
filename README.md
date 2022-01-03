@@ -15,8 +15,8 @@ $ docker compose up
 ## What is passage?
 passage is a service for programmatically creating and managing [SSH tunnels](https://www.ssh.com/academy/ssh/tunneling). The primary use case is to serve as a secure bridge between SaaS providers and services that need to be accessed within customer networks. Passage acts both as a management API, and as a daemon which maintains the tunnels themselves. 
 
-### Standard vs Reverse
-With **Standard** tunnels, Passage acts as an SSH client, opening an SSH connection to an internet-facing remote bastion server, then from there opening an upstream connection to a private service within the remote network.
+### Normal vs Reverse
+With **Normal** tunnels, Passage acts as an SSH client, opening an SSH connection to an internet-facing remote bastion server, then from there opening an upstream connection to a private service within the remote network.
 
 With **Reverse** tunnels, Passage acts as an SSH server, allowing remote clients to forward a local port from a hidden server to a dedicated port on the Passage instance, therefore achieving a tunnel without requiring a remote bastion server to be exposed to inbound traffic from the internet.
 
@@ -31,7 +31,7 @@ Passage can read its configuration from disk (YAML or JSON), or from environment
 Passage's config keys are paths in a configuration object, so the dot notation is used to indicate hierarchy.
 
 To use environment variables, replace the dot with an underscore and prefix the variable with `PASSAGE_`.
-For example, `tunnel.standard.ssh_user` becomes `PASSAGE_TUNNEL_STANDARD_SSH_USER`.
+For example, `tunnel.normal.ssh_user` becomes `PASSAGE_TUNNEL_NORMAL_SSH_USER`.
 
 The following are required config options that you must set to quickstart with Passage. A full configuration reference is available at [docs/config.md](docs/config.md). 
 
@@ -63,4 +63,4 @@ An appropriate network configuration begins with Passage instances completely lo
 ## Testing
 Go unit tests can be run with `make test`.
 
-There is an end-to-end test of both Standard and Reverse tunnels, using Docker networks to simulate network isolation, and docker compose for orchestration, that can be run with `make test-e2e`.
+There is an end-to-end test of both Normal and Reverse tunnels, using Docker networks to simulate network isolation, and docker compose for orchestration, that can be run with `make test-e2e`.

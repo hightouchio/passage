@@ -4,7 +4,7 @@ BEGIN;
 CREATE SEQUENCE IF NOT EXISTS passage.sshd_ports AS INTEGER MINVALUE 49152 MAXVALUE 57343;
 CREATE SEQUENCE IF NOT EXISTS passage.tunnel_ports AS INTEGER MINVALUE 57344 MAXVALUE 65535;
 
-CREATE TYPE passage.tunnel_type AS ENUM('standard', 'reverse');
+CREATE TYPE passage.tunnel_type AS ENUM('normal', 'reverse');
 
 CREATE TABLE IF NOT EXISTS passage.tunnels(
     id                  UUID DEFAULT uuid_generate_v4(),

@@ -12,7 +12,7 @@ type Key struct {
 }
 
 const getStandardTunnelPrivateKeys = `
-SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='standard';
+SELECT key_id FROM passage.key_authorizations WHERE tunnel_id=$1 AND tunnel_type='normal';
 `
 
 func (c Client) GetStandardTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]Key, error) {
