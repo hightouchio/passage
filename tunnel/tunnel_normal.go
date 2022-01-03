@@ -99,6 +99,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 	defer listener.Close()
 
+	// Accept incoming connections and push them to this channel
 	incomingConns := make(chan net.Conn)
 	go func() {
 		for {
@@ -118,38 +119,50 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	statsTicker := time.NewTicker(1 * time.Second)
-	defer statsTicker.Stop()
+	// Report active connections every tick
 	var activeConnections int32
+	go func() {
+		statsTicker := time.NewTicker(1 * time.Second)
+		defer statsTicker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-statsTicker.C:
+				// explicit tunnelId tag here, so it appears on the metric
+				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+
+			}
+		}
+	}()
+
+	// Handle incoming tunnel connections
 	for {
 		select {
-		// Handle incoming tunnel connections.
 		case tunnelConn := <-incomingConns:
 			go func() {
 				st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
-				ctx := stats.InjectContext(ctx, st)
 
 				st.SimpleEvent("accept")
 				st.Incr("accept", nil, 1)
 
 				atomic.AddInt32(&activeConnections, 1)
-				read, written, err := t.handleTunnelConnection(ctx, sshClient, tunnelConn)
+				read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
 				atomic.AddInt32(&activeConnections, -1)
+
+				// TODO: This is probably wrong because its overriding a shared value.
 				st.Gauge("read", float64(read), nil, 1)
 				st.Gauge("write", float64(written), nil, 1)
-				st = st.WithEventTags(stats.Tags{"read": read, "write": written})
 
 				if err != nil {
 					st.ErrorEvent("error", err)
 					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
 					return
 				}
-				st.SimpleEvent("close")
+				st.WithEventTags(stats.Tags{"read": read, "write": written}).SimpleEvent("close")
 			}()
-
-		case <-statsTicker.C:
-			// explicit tunnelId tag here, so it appears on the metric
-			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
 
 		case <-ctx.Done():
 			return nil
