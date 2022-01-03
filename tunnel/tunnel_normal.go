@@ -89,17 +89,23 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 
-	// Listen for incoming tunnel connections.
+	// Resolve tunnel listener addr.
 	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
-	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
-	listener, err := net.Listen("tcp", listenAddr)
+	listenTcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
 	if err != nil {
-		return errors.Wrap(err, "listen")
+		return errors.Wrap(err, "resolve tunnel listen addr")
+	}
+
+	// Listen for incoming tunnel connections.
+	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
+	listener, err := net.ListenTCP("tcp", listenTcpAddr)
+	if err != nil {
+		return errors.Wrap(err, "tunnel listen")
 	}
 	defer listener.Close()
 
 	// Accept incoming connections and push them to this channel
-	incomingConns := make(chan net.Conn)
+	incomingConns := make(chan *net.TCPConn)
 	go func() {
 		for {
 			select {
@@ -108,13 +114,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 			default:
 				// Accept incoming tunnel connections
-				conn, err := listener.Accept()
+				conn, err := listener.AcceptTCP()
 				if err != nil && !isContextCancelled(ctx) {
 					t.logger().WithError(err).Error("tunnel conn accept error")
 					break
 				}
-				incomingConns <- conn
 
+				incomingConns <- conn
 			}
 		}
 	}()
@@ -147,19 +153,21 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			case tunnelConn := <-incomingConns:
 				go func() {
 					st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
-
 					st.SimpleEvent("accept")
 					st.Incr("accept", nil, 1)
-
 					atomic.AddInt32(&activeConnections, 1)
-					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
-					atomic.AddInt32(&activeConnections, -1)
 
+					// Configure keepalive
+					tunnelConn.SetKeepAlive(true)
+					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
+					// Tunnel connection
+					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
+
+					atomic.AddInt32(&activeConnections, -1)
 					// TODO: This is probably wrong because its overriding a shared value.
+					st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
 					st.Gauge("read", float64(read), nil, 1)
 					st.Gauge("write", float64(written), nil, 1)
-
-					st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
 					if err != nil {
 						st.ErrorEvent("error", err)
 						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
