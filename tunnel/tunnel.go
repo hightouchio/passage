@@ -28,6 +28,7 @@ type ConnectionDetails struct {
 
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
+
 const (
 	Normal  = "normal"
 	Reverse = "reverse"
