@@ -46,7 +46,6 @@ const (
 	ConfigTunnelNormalSshUser           = "tunnel.normal.ssh_user"
 	ConfigTunnelNormalDialTimeout       = "tunnel.normal.dial.timeout"
 	ConfigTunnelNormalKeepaliveInterval = "tunnel.normal.keepalive_interval"
-	ConfigTunnelNormalKeepaliveTimeout  = "tunnel.normal.keepalive_timeout"
 
 	ConfigTunnelReverseEnabled  = "tunnel.reverse.enabled"
 	ConfigTunnelReverseHostKey  = "tunnel.reverse.host_key"
@@ -87,7 +86,6 @@ func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigTunnelNormalSshUser, "passage")
 	config.SetDefault(ConfigTunnelNormalDialTimeout, 15*time.Second)
 	config.SetDefault(ConfigTunnelNormalKeepaliveInterval, 1*time.Minute)
-	config.SetDefault(ConfigTunnelNormalKeepaliveTimeout, 15*time.Second)
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigDiscoveryType, "static")
 	config.SetDefault(ConfigDiscoveryStaticHost, "localhost")

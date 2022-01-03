@@ -75,7 +75,6 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			User:              config.GetString(ConfigTunnelNormalSshUser),
 			DialTimeout:       config.GetDuration(ConfigTunnelNormalDialTimeout),
 			KeepaliveInterval: config.GetDuration(ConfigTunnelNormalKeepaliveInterval),
-			KeepaliveTimeout:  config.GetDuration(ConfigTunnelNormalKeepaliveTimeout),
 		}))
 	}
 

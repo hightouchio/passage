@@ -27,5 +27,4 @@ type SSHClientOptions struct {
 	User              string
 	DialTimeout       time.Duration
 	KeepaliveInterval time.Duration
-	KeepaliveTimeout  time.Duration
 }

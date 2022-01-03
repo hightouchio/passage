@@ -56,19 +56,27 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		sshUser = t.clientOptions.User
 	}
 
-	// Dial remote SSH server
+	// Resolve dial address
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return errors.Wrapf(err, "could not resolve addr %s", addr)
+	}
+
+	// Dial external SSH server
 	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
-	sshConn, err := net.DialTimeout("tcp", addr, t.clientOptions.DialTimeout)
+	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
 		return errors.Wrap(err, "dial remote")
 	}
-	defer func() {
-		sshConn.Close()
-	}()
+	defer sshConn.Close()
+
+	// Configure TCP keepalive.
+	sshConn.SetKeepAlive(true)
+	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh")
+	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh_connect")
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -82,19 +90,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 
-	// Start connection Keepalive.
-	keepaliveErr := make(chan error)
-	go sshKeepalive(ctx, sshClient, sshConn, t.clientOptions, keepaliveErr)
-
 	// Listen for incoming tunnel connections.
-	st.WithEventTags(stats.Tags{"port": t.TunnelPort}).SimpleEvent("listener.start")
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
+	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
+	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
+	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	defer func() {
-		listener.Close()
-	}()
+	defer listener.Close()
+
 	incomingConns := make(chan net.Conn)
 	go func() {
 		for {
@@ -146,9 +150,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		case <-statsTicker.C:
 			// explicit tunnelId tag here, so it appears on the metric
 			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
-
-		case <-keepaliveErr:
-			return errors.Wrap(err, "keepalive")
 
 		case <-ctx.Done():
 			return nil
@@ -219,34 +220,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	}
 
 	return signers, nil
-}
-
-func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, options SSHClientOptions, errChan chan<- error) {
-	t := time.NewTicker(options.KeepaliveInterval)
-	defer t.Stop()
-
-	err := func() error {
-		for {
-			deadline := time.Now().Add(options.KeepaliveInterval).Add(options.KeepaliveTimeout)
-			err := conn.SetDeadline(deadline)
-			if err != nil {
-				return errors.Wrap(err, "set deadline")
-			}
-			select {
-			case <-t.C:
-				_, _, err = client.SendRequest("keepalive@passage", true, nil)
-				if err != nil {
-					return errors.Wrap(err, "send keep alive")
-				}
-			case <-ctx.Done():
-				return nil
-			}
-		}
-	}()
-	if err != nil {
-		errChan <- err
-	}
-	close(errChan)
 }
 
 func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
