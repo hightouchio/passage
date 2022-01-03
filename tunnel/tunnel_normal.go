@@ -133,42 +133,46 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			case <-statsTicker.C:
 				// explicit tunnelId tag here, so it appears on the metric
 				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
-
 			}
 		}
 	}()
 
 	// Handle incoming tunnel connections
-	for {
-		select {
-		case tunnelConn := <-incomingConns:
-			go func() {
-				st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
 
-				st.SimpleEvent("accept")
-				st.Incr("accept", nil, 1)
+			case tunnelConn := <-incomingConns:
+				go func() {
+					st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
 
-				atomic.AddInt32(&activeConnections, 1)
-				read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
-				atomic.AddInt32(&activeConnections, -1)
+					st.SimpleEvent("accept")
+					st.Incr("accept", nil, 1)
 
-				// TODO: This is probably wrong because its overriding a shared value.
-				st.Gauge("read", float64(read), nil, 1)
-				st.Gauge("write", float64(written), nil, 1)
+					atomic.AddInt32(&activeConnections, 1)
+					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
+					atomic.AddInt32(&activeConnections, -1)
 
-				st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
-				if err != nil {
-					st.ErrorEvent("error", err)
-					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-					return
-				}
-				st.SimpleEvent("close")
-			}()
+					// TODO: This is probably wrong because its overriding a shared value.
+					st.Gauge("read", float64(read), nil, 1)
+					st.Gauge("write", float64(written), nil, 1)
 
-		case <-ctx.Done():
-			return nil
+					st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
+					if err != nil {
+						st.ErrorEvent("error", err)
+						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+						return
+					}
+					st.SimpleEvent("close")
+				}()
+			}
 		}
-	}
+	}()
+
+	<-ctx.Done()
+	return nil
 }
 
 // handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
@@ -187,7 +191,7 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.C
 	defer serviceConn.Close()
 
 	// copyConn copies all bytes from io.Reader to io.Writer, records
-	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan <- error) {
+	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
 		defer g.Done()
 
 		byteCount, err := io.Copy(dst, src)
