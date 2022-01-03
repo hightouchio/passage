@@ -13,10 +13,10 @@ services:
 
       # Configure keystore via minio
       AWS_ACCESS_KEY_ID: 'passage'
-      AWS_SECRET_ACCESS_KEY: 'passage'
+      AWS_SECRET_ACCESS_KEY: 'passage123'
       PASSAGE_KEYSTORE_S3_BUCKET_NAME: 'keystore'
       PASSAGE_KEYSTORE_S3_BUCKET_REGION: 'us-east-1'
-      PASSAGE_KEYSTORE_S3_ENDPOINT: 'http://minio:9000'
+      PASSAGE_KEYSTORE_S3_ENDPOINT: 'http://minio:9079'
       PASSAGE_KEYSTORE_S3_DISABLE_SSL: 'true'
       PASSAGE_KEYSTORE_S3_FORCE_PATH_STYLE: 'true'
 
@@ -55,15 +55,18 @@ services:
     image: minio/minio:RELEASE.2021-12-20T22-07-16Z
     environment:
       MINIO_ROOT_USER: passage
-      MINIO_ROOT_PASSWORD: passage
+      MINIO_ROOT_PASSWORD: passage123
     networks:
       - passage_dev
+    ports:
+      - "9079:9079"
+      - "9080:9080"
     volumes:
       - minio:/data
     entrypoint:
       - "sh"
       - "-c"
-      - "mkdir -p /data/keystore && minio server /data"
+      - "mkdir -p /data/keystore && minio server --address \":9079\" --console-address \":9080\" /data"
     restart: always
 
 volumes:
