@@ -171,7 +171,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 }
 
-// handleTunnelConnection TODO write more
+// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
 func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -211,13 +211,12 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.C
 		// Copy data bidirectionally.
 		go copyConn(g, serviceConn, tunnelConn, &read, readErr)
 		go copyConn(g, tunnelConn, serviceConn, &written, writeErr)
-
 		g.Wait()
-		// Close serviceConn before the end of the function so we get a bytes written count
+
+		// Close serviceConn before the end of the function, so we get a count of bytes written
 		serviceConn.Close()
 	}()
 
-	// Wait for an error or connection completion
 	select {
 	case err := <-readErr:
 		return read, written, errors.Wrap(err, "read error")
