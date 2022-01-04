@@ -170,9 +170,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 					atomic.AddInt32(&activeConnections, -1)
 					// TODO: This is probably wrong because its overriding a shared value.
-					st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
-					st.Gauge("read", float64(read), nil, 1)
-					st.Gauge("write", float64(written), nil, 1)
+					st = st.WithEventTags(stats.Tags{"read_bytes": read, "write_bytes": written})
+					st.Gauge("read_bytes", float64(read), nil, 1)
+					st.Gauge("write_bytes", float64(written), nil, 1)
 					if err != nil {
 						st.ErrorEvent("error", err)
 						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
