@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -56,19 +55,25 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		sshUser = t.clientOptions.User
 	}
 
-	// Dial remote SSH server
+	// Resolve dial address
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return errors.Wrapf(err, "could not resolve addr %s", addr)
+	}
+	// Dial external SSH server
 	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
-	sshConn, err := net.DialTimeout("tcp", addr, t.clientOptions.DialTimeout)
+	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
 		return errors.Wrap(err, "dial remote")
 	}
-	defer func() {
-		sshConn.Close()
-	}()
+	defer sshConn.Close()
+	// Configure TCP keepalive for SSH connection
+	sshConn.SetKeepAlive(true)
+	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh")
+	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh_connect")
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -78,117 +83,168 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "ssh")
+		return errors.Wrap(err, "ssh connect")
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 
-	// Start connection Keepalive.
-	keepaliveErr := make(chan error)
-	go sshKeepalive(ctx, sshClient, sshConn, t.clientOptions, keepaliveErr)
+	// Resolve tunnel listener addr.
+	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
+	listenTcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
+	if err != nil {
+		return errors.Wrap(err, "resolve tunnel listen addr")
+	}
 
 	// Listen for incoming tunnel connections.
-	st.WithEventTags(stats.Tags{"port": t.TunnelPort}).SimpleEvent("listener.start")
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", options.BindHost, t.TunnelPort))
+	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
+	listener, err := net.ListenTCP("tcp", listenTcpAddr)
 	if err != nil {
-		return errors.Wrap(err, "listen")
+		return errors.Wrap(err, "tunnel listen")
 	}
-	defer func() {
-		listener.Close()
+	defer listener.Close()
+
+	// Start sending keepalive packets to the SSH server
+	keepaliveErr := make(chan error)
+	go func() {
+		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
+			keepaliveErr <- err
+		}
 	}()
-	incomingConns := make(chan net.Conn)
+
+	// Accept incoming connections and push them to this channel
+	incomingConns := make(chan *net.TCPConn)
 	go func() {
 		for {
 			select {
-			default:
-				// Accept incoming tunnel connections
-				conn, err := listener.Accept()
-				if err != nil && !isContextCancelled(ctx) {
-					t.logger().WithError(err).Error("tunnel conn accept error")
-					break
-				}
-				incomingConns <- conn
-
 			case <-ctx.Done():
 				return
+
+			default:
+				// Accept incoming tunnel connections
+				conn, err := listener.AcceptTCP()
+				if err != nil {
+					break
+				}
+
+				incomingConns <- conn
 			}
 		}
 	}()
 
-	statsTicker := time.NewTicker(1 * time.Second)
-	defer statsTicker.Stop()
+	// Report active connections every tick
 	var activeConnections int32
-	for {
-		select {
-		// Handle incoming tunnel connections.
-		case tunnelConn := <-incomingConns:
-			go func() {
-				st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
-				ctx := stats.InjectContext(ctx, st)
+	go func() {
+		statsTicker := time.NewTicker(1 * time.Second)
+		defer statsTicker.Stop()
 
-				st.SimpleEvent("accept")
-				st.Incr("accept", nil, 1)
+		for {
+			select {
+			case <-ctx.Done():
+				return
 
-				atomic.AddInt32(&activeConnections, 1)
-				read, written, err := t.handleTunnelConnection(ctx, sshClient, tunnelConn)
-				atomic.AddInt32(&activeConnections, -1)
-				st.Gauge("read", float64(read), nil, 1)
-				st.Gauge("write", float64(written), nil, 1)
-				st = st.WithEventTags(stats.Tags{"read": read, "write": written})
-
-				if err != nil {
-					st.ErrorEvent("error", err)
-					tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-					return
-				}
-				st.SimpleEvent("close")
-			}()
-
-		case <-statsTicker.C:
-			// explicit tunnelId tag here, so it appears on the metric
-			st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
-
-		case <-keepaliveErr:
-			return errors.Wrap(err, "keepalive")
-
-		case <-ctx.Done():
-			return nil
+			case <-statsTicker.C:
+				// explicit tunnelId tag here, so it appears on the metric
+				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+			}
 		}
+	}()
+
+	// Handle incoming tunnel connections
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case tunnelConn := <-incomingConns:
+				go func() {
+					st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
+					st.SimpleEvent("accept")
+					st.Incr("accept", nil, 1)
+					atomic.AddInt32(&activeConnections, 1)
+
+					// Configure keepalive
+					tunnelConn.SetKeepAlive(true)
+					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
+					// Tunnel connection
+					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
+
+					atomic.AddInt32(&activeConnections, -1)
+					// TODO: This is probably wrong because its overriding a shared value.
+					st = st.WithEventTags(stats.Tags{"bytes_read": read, "bytes_written": written})
+					st.Gauge("read", float64(read), nil, 1)
+					st.Gauge("write", float64(written), nil, 1)
+					if err != nil {
+						st.ErrorEvent("error", err)
+						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
+						return
+					}
+					st.SimpleEvent("close")
+				}()
+			}
+		}
+	}()
+
+	select {
+	case err := <-keepaliveErr:
+		st.ErrorEvent("keepalive_failed", err)
+
+	case <-ctx.Done():
 	}
+
+	return nil
 }
 
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
+// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	st := stats.GetStats(ctx)
 
 	// Dial upstream service.
-	st.WithEventTags(stats.Tags{"upstream_host": t.ServiceHost, "upstream_port": t.ServicePort}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshConn.Dial("tcp", fmt.Sprintf("%s:%d", t.ServiceHost, t.ServicePort))
+	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
+	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
+	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "dial upstream")
 	}
 	defer serviceConn.Close()
 
-	copy := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64) error {
+	// copyConn copies all bytes from io.Reader to io.Writer, records
+	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
 		defer g.Done()
+
 		byteCount, err := io.Copy(dst, src)
+		if err != nil {
+			errors <- err
+		}
+		// Record number of bytes written in this direction
 		*written = byteCount
-		return err
 	}
 
 	var read, written int64
+	readErr := make(chan error)
+	writeErr := make(chan error)
+
+	// Copy all bytes from tunnel to service and service to tunnel
 	go func() {
 		defer cancel()
 		g := new(sync.WaitGroup)
 		g.Add(2)
+
 		// Copy data bidirectionally.
-		go copy(g, tunnelConn, serviceConn, &written)
-		go copy(g, serviceConn, tunnelConn, &read)
+		go copyConn(g, serviceConn, tunnelConn, &read, readErr)
+		go copyConn(g, tunnelConn, serviceConn, &written, writeErr)
 		g.Wait()
+
+		// Close serviceConn before the end of the function, so we get a count of bytes written
+		serviceConn.Close()
 	}()
 
-	// Wait for an error or connection completion
 	select {
+	case err := <-readErr:
+		return read, written, errors.Wrap(err, "read error")
+	case err := <-writeErr:
+		return read, written, errors.Wrap(err, "write error")
 	case <-ctx.Done():
 		return read, written, nil
 	}
@@ -219,34 +275,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	}
 
 	return signers, nil
-}
-
-func sshKeepalive(ctx context.Context, client *ssh.Client, conn net.Conn, options SSHClientOptions, errChan chan<- error) {
-	t := time.NewTicker(options.KeepaliveInterval)
-	defer t.Stop()
-
-	err := func() error {
-		for {
-			deadline := time.Now().Add(options.KeepaliveInterval).Add(options.KeepaliveTimeout)
-			err := conn.SetDeadline(deadline)
-			if err != nil {
-				return errors.Wrap(err, "set deadline")
-			}
-			select {
-			case <-t.C:
-				_, _, err = client.SendRequest("keepalive@passage", true, nil)
-				if err != nil {
-					return errors.Wrap(err, "send keep alive")
-				}
-			case <-ctx.Done():
-				return nil
-			}
-		}
-	}()
-	if err != nil {
-		errChan <- err
-	}
-	close(errChan)
 }
 
 func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
