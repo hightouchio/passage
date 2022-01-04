@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"runtime/debug"
@@ -11,8 +12,9 @@ import (
 // written HTTP status code to be captured for logging.
 type responseWriter struct {
 	http.ResponseWriter
-	status      int
-	wroteHeader bool
+	status       int
+	wroteHeader  bool
+	bytesWritten int
 }
 
 func wrapResponseWriter(w http.ResponseWriter) *responseWriter {
@@ -21,6 +23,12 @@ func wrapResponseWriter(w http.ResponseWriter) *responseWriter {
 
 func (rw *responseWriter) Status() int {
 	return rw.status
+}
+
+func (rw *responseWriter) Write(b []byte) (n int, err error) {
+	n, err = rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
@@ -46,15 +54,35 @@ func LoggingMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
 				}
 			}()
 
+			// Inject a function to allow a request handler to pass the request error to this logger
+			var err error
+			ctx := context.WithValue(r.Context(), "_set_error_func", func(e error) {
+				err = e
+			})
+
+			// Record response
+			responseRecorder := wrapResponseWriter(w)
+
+			// Perform request with timing
 			start := time.Now()
-			wrapped := wrapResponseWriter(w)
-			next.ServeHTTP(wrapped, r)
-			logger.WithFields(logrus.Fields{
-				"status":   wrapped.status,
-				"method":   r.Method,
-				"path":     r.URL.EscapedPath(),
-				"duration": time.Since(start).Seconds(),
-			}).Info("http request")
+			next.ServeHTTP(responseRecorder, r.WithContext(ctx))
+			duration := time.Since(start)
+
+			l := logger.WithFields(logrus.Fields{
+				"remote_addr":     r.RemoteAddr,
+				"method":          r.Method,
+				"path":            r.URL.EscapedPath(),
+				"content_length":  r.ContentLength,
+				"status":          responseRecorder.status,
+				"duration":        duration.Round(time.Millisecond).Seconds(),
+				"response_length": responseRecorder.bytesWritten,
+			})
+
+			if err != nil {
+				l.WithError(err).Error("http request")
+			} else {
+				l.Info("http request")
+			}
 		}
 
 		return http.HandlerFunc(fn)
