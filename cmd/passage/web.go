@@ -53,7 +53,7 @@ func LoggingMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
 				"status":   wrapped.status,
 				"method":   r.Method,
 				"path":     r.URL.EscapedPath(),
-				"duration": time.Since(start),
+				"duration": time.Since(start).Seconds(),
 			}).Info("http request")
 		}
 
