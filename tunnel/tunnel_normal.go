@@ -61,7 +61,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	if err != nil {
 		return errors.Wrapf(err, "could not resolve addr %s", addr)
 	}
-
 	// Dial external SSH server
 	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
 	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
@@ -69,8 +68,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "dial remote")
 	}
 	defer sshConn.Close()
-
-	// Configure TCP keepalive.
+	// Configure TCP keepalive for SSH connection
 	sshConn.SetKeepAlive(true)
 	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
@@ -85,7 +83,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "ssh")
+		return errors.Wrap(err, "ssh connect")
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 
@@ -95,7 +93,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "resolve tunnel listen addr")
 	}
-
 	// Listen for incoming tunnel connections.
 	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
 	listener, err := net.ListenTCP("tcp", listenTcpAddr)
@@ -103,6 +100,14 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "tunnel listen")
 	}
 	defer listener.Close()
+
+	// Start sending keepalive packets to the SSH server
+	keepaliveErr := make(chan error)
+	go func() {
+		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
+			keepaliveErr <- err
+		}
+	}()
 
 	// Accept incoming connections and push them to this channel
 	incomingConns := make(chan *net.TCPConn)
@@ -179,12 +184,18 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-keepaliveErr:
+		st.ErrorEvent("keepalive_failed", err)
+
+	case <-ctx.Done():
+	}
+
 	return nil
 }
 
 // handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	st := stats.GetStats(ctx)
@@ -192,7 +203,7 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshConn *ssh.C
 	// Dial upstream service.
 	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
 	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshConn.Dial("tcp", upstreamAddr)
+	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "dial upstream")
 	}
