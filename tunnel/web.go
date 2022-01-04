@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -34,6 +35,7 @@ func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 		case postgres.ErrTunnelNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
+			logWebError(r, err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -55,6 +57,7 @@ func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
 		case postgres.ErrTunnelNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
+			logWebError(r, err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -76,6 +79,7 @@ func (s API) handleWebTunnelUpdate(w http.ResponseWriter, r *http.Request) {
 
 	response, err := s.UpdateTunnel(r.Context(), request)
 	if err != nil {
+		logWebError(r, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -96,6 +100,7 @@ func (s API) handleWebTunnelDelete(w http.ResponseWriter, r *http.Request) {
 		case postgres.ErrTunnelNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
+			logWebError(r, err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -113,6 +118,7 @@ func (s API) handleWebCreateNormalTunnel(w http.ResponseWriter, r *http.Request)
 
 	response, err := s.CreateNormalTunnel(r.Context(), request)
 	if err != nil {
+		logWebError(r, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -129,6 +135,7 @@ func (s API) handleWebCreateReverseTunnel(w http.ResponseWriter, r *http.Request
 
 	response, err := s.CreateReverseTunnel(r.Context(), request)
 	if err != nil {
+		logWebError(r, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -153,6 +160,10 @@ func getTunnelID(r *http.Request, id *uuid.UUID) error {
 
 func read(r *http.Request, req interface{}) error {
 	return json.NewDecoder(r.Body).Decode(&req)
+}
+
+func logWebError(r *http.Request, err error) {
+	logrus.WithField("path", r.URL.EscapedPath()).WithError(err).Error("error in web handler")
 }
 
 func renderJSON(w http.ResponseWriter, ret interface{}) {
