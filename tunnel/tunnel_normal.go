@@ -93,6 +93,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "resolve tunnel listen addr")
 	}
+
 	// Listen for incoming tunnel connections.
 	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
 	listener, err := net.ListenTCP("tcp", listenTcpAddr)
@@ -120,8 +121,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			default:
 				// Accept incoming tunnel connections
 				conn, err := listener.AcceptTCP()
-				if err != nil && !isContextCancelled(ctx) {
-					t.logger().WithError(err).Error("tunnel conn accept error")
+				if err != nil {
 					break
 				}
 
