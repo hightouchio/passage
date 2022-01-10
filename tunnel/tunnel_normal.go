@@ -142,8 +142,8 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				return
 
 			case <-statsTicker.C:
-				// explicit tunnelId tag here, so it appears on the metric
-				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(atomic.LoadInt32(&activeConnections)), nil, 1)
+				tActiveConns := atomic.LoadInt32(&activeConnections)
+				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(tActiveConns), nil, 1)
 			}
 		}
 	}()
@@ -157,7 +157,10 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 			case tunnelConn := <-incomingConns:
 				go func() {
-					st := st.WithEventTags(stats.Tags{"remote_addr": tunnelConn.RemoteAddr().String()}).WithPrefix("conn")
+					st := st.WithEventTags(stats.Tags{
+						"remote_addr": tunnelConn.RemoteAddr().String(),
+						"session_id":  uuid.New(),
+					}).WithPrefix("conn")
 					st.SimpleEvent("accept")
 					st.Incr("accept", nil, 1)
 					atomic.AddInt32(&activeConnections, 1)
