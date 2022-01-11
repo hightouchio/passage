@@ -181,13 +181,18 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 					// Handle connection handle error
 					if err != nil {
-						st.ErrorEvent("error", err)
-
-						// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown.
-						if err := tunnelConn.SetLinger(0); err != nil {
-							st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
+						switch err.(type) {
+						case upstreamConnectionError:
+							// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
+							if err := tunnelConn.SetLinger(0); err != nil {
+								st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
+							}
 						}
+
+						st.ErrorEvent("error", err)
+						return
 					}
+
 					st.SimpleEvent("close")
 				}()
 			}
@@ -224,6 +229,7 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh
 	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
 	if err != nil {
+		// Return upstreamConnectionError to indicate that the connection should be forcibly closed.
 		return 0, 0, upstreamConnectionError{err: err}
 	}
 	defer serviceConn.Close()
