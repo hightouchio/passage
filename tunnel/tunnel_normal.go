@@ -129,27 +129,43 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}()
 
 	// Keep record of active connections.
-	tunnelConns := connectionRegistry{
+	tunnelRegistry := connectionRegistry{
 		conns: make(map[uuid.UUID]tunnelConnection),
 	}
-	reportTunnelConnections := func() {
-		tunnelConns.mux.RLock()
-		defer tunnelConns.mux.RUnlock()
-		st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(len(tunnelConns.conns)), nil, 1)
+	reportTunnelConnections := func(logConnections bool) {
+		tunnelRegistry.mux.RLock()
+		defer tunnelRegistry.mux.RUnlock()
+
+		ids := make([]uuid.UUID, 0)
+		for id, _ := range tunnelRegistry.conns {
+			ids = append(ids, id)
+		}
+
+		st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(len(tunnelRegistry.conns)), nil, 1)
+		if logConnections {
+			t.logger().WithField("active_connections", ids).Trace("tunnel active connections")
+		}
 	}
 
 	go func() {
 		statsTicker := time.NewTicker(1 * time.Second)
 		defer statsTicker.Stop()
 
+		connectionsTicker := time.NewTicker(10 * time.Second)
+		defer connectionsTicker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 
-				// Report tunnel state on every tick
+			// Report tunnel state on every tick
 			case <-statsTicker.C:
-				reportTunnelConnections()
+				reportTunnelConnections(false)
+
+			// Report tunnel state on every tick
+			case <-connectionsTicker.C:
+				reportTunnelConnections(true)
 			}
 		}
 	}()
@@ -174,8 +190,8 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 					defer st.SimpleEvent("close")
 
 					// Register connection for visibility.
-					tunnelConns.RegisterConnection(sessionId, time.Now())
-					defer tunnelConns.DeregisterConnection(sessionId)
+					tunnelRegistry.RegisterConnection(sessionId, time.Now())
+					defer tunnelRegistry.DeregisterConnection(sessionId)
 
 					// Configure networking parameters.
 					tunnelConn.SetKeepAlive(true)
@@ -287,6 +303,7 @@ type NormalTunnelServices struct {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 	Keystore keystore.Keystore
+	Logger   *logrus.Logger
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {
@@ -351,7 +368,7 @@ func (t NormalTunnel) GetID() uuid.UUID {
 }
 
 func (t NormalTunnel) logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
+	return t.services.Logger.WithFields(logrus.Fields{
 		"tunnel_type": Normal,
 		"tunnel_id":   t.ID.String(),
 	})
