@@ -3,14 +3,12 @@ package tunnel
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"io"
 	"net"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -130,8 +128,16 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	// Report active connections every tick
-	var activeConnections int32
+	// Keep record of active connections.
+	tunnelConns := connectionRegistry{
+		conns: make(map[uuid.UUID]tunnelConnection),
+	}
+	reportTunnelConnections := func() {
+		tunnelConns.mux.RLock()
+		defer tunnelConns.mux.RUnlock()
+		st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(len(tunnelConns.conns)), nil, 1)
+	}
+
 	go func() {
 		statsTicker := time.NewTicker(1 * time.Second)
 		defer statsTicker.Stop()
@@ -141,9 +147,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			case <-ctx.Done():
 				return
 
+				// Report tunnel state on every tick
 			case <-statsTicker.C:
-				tActiveConns := atomic.LoadInt32(&activeConnections)
-				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(tActiveConns), nil, 1)
+				reportTunnelConnections()
 			}
 		}
 	}()
@@ -159,29 +165,34 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				go func() {
 					defer tunnelConn.Close()
 
+					sessionId := uuid.New()
 					st := st.WithEventTags(stats.Tags{
 						"remote_addr": tunnelConn.RemoteAddr().String(),
-						"session_id":  uuid.New(),
+						"session_id":  sessionId,
 					}).WithPrefix("conn")
 					st.SimpleEvent("accept")
-					st.Incr("accept", nil, 1)
-					atomic.AddInt32(&activeConnections, 1)
+					defer st.SimpleEvent("close")
 
-					// Configure keepalive
+					// Register connection for visibility.
+					tunnelConns.RegisterConnection(sessionId, time.Now())
+					defer tunnelConns.DeregisterConnection(sessionId)
+
+					// Configure networking parameters.
 					tunnelConn.SetKeepAlive(true)
 					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
-					// Tunnel connection
+
+					// Connect upstream and forward bytes
 					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
 
-					atomic.AddInt32(&activeConnections, -1)
-					// TODO: This is probably wrong because its overriding a shared value.
+					// Record bytes read and written on
 					st = st.WithEventTags(stats.Tags{"read_bytes": read, "write_bytes": written})
 					st.Gauge("read_bytes", float64(read), nil, 1)
 					st.Gauge("write_bytes", float64(written), nil, 1)
 
-					// Handle connection handle error
+					// Handle connection errors
 					if err != nil {
 						switch err.(type) {
+						// Handle errors in which we couldn't even connect to the upstream port
 						case upstreamConnectionError:
 							// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 							if err := tunnelConn.SetLinger(0); err != nil {
@@ -192,8 +203,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 						st.ErrorEvent("error", err)
 						return
 					}
-
-					st.SimpleEvent("close")
 				}()
 			}
 		}
@@ -209,73 +218,28 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	return nil
 }
 
-// upstreamConnectionError wraps an error connecting to an upstream service
-type upstreamConnectionError struct {
-	err error
+// tunnelConnection is a representation of an active connection for visibility
+type tunnelConnection struct {
+	startAt time.Time
 }
 
-func (e upstreamConnectionError) Error() string {
-	return fmt.Sprintf("could not connect to upstream: %s", e.err.Error())
+type connectionRegistry struct {
+	conns map[uuid.UUID]tunnelConnection
+	mux   sync.RWMutex
 }
 
-// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (r, w int64, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	st := stats.GetStats(ctx)
-
-	// Dial upstream service.
-	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
-	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
-	if err != nil {
-		// Return upstreamConnectionError to indicate that the connection should be forcibly closed.
-		return 0, 0, upstreamConnectionError{err: err}
-	}
-	defer serviceConn.Close()
-
-	// Pass data bidirectionally from tunnel to service net.Conn, wait for errors, and record read/write
-	done := make(chan struct{})
-	go func() {
-		r, w, err = bidirectionalReadWrite(tunnelConn, serviceConn)
-		close(done)
-	}()
-
-	// Wait for completion or for context cancellation
-	select {
-	case <-done:
-		return
-	case <-ctx.Done():
-		return
+func (r *connectionRegistry) RegisterConnection(sessionId uuid.UUID, startAt time.Time) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+	r.conns[sessionId] = tunnelConnection{
+		startAt: startAt,
 	}
 }
 
-func bidirectionalReadWrite(a, b io.ReadWriter) (ra, rb int64, err error) {
-	copyConn := func(src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
-		byteCount, err := io.Copy(dst, src)
-		*written = byteCount // Record number of bytes written in this direction
-		errors <- err
-	}
-
-	// Copy data bidirectionally.
-	errA := make(chan error)
-	go copyConn(a, b, &ra, errA)
-	errB := make(chan error)
-	go copyConn(b, a, &rb, errB)
-
-	// Wait for either side A or B to close, and return ero
-	select {
-	case err = <-errA:
-		if err != nil {
-			err = errors.Wrap(err, "read A")
-		}
-	case err = <-errB:
-		if err != nil {
-			err = errors.Wrap(err, "read B")
-		}
-	}
-
-	return
+func (r *connectionRegistry) DeregisterConnection(sessionId uuid.UUID) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+	delete(r.conns, sessionId)
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
