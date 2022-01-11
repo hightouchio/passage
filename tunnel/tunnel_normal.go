@@ -3,13 +3,13 @@ package tunnel
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"io"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -157,6 +157,8 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 			case tunnelConn := <-incomingConns:
 				go func() {
+					defer tunnelConn.Close()
+
 					st := st.WithEventTags(stats.Tags{
 						"remote_addr": tunnelConn.RemoteAddr().String(),
 						"session_id":  uuid.New(),
@@ -176,10 +178,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 					st = st.WithEventTags(stats.Tags{"read_bytes": read, "write_bytes": written})
 					st.Gauge("read_bytes", float64(read), nil, 1)
 					st.Gauge("write_bytes", float64(written), nil, 1)
+
+					// Handle connection handle error
 					if err != nil {
 						st.ErrorEvent("error", err)
-						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-						return
+
+						// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown.
+						if err := tunnelConn.SetLinger(0); err != nil {
+							st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
+						}
 					}
 					st.SimpleEvent("close")
 				}()
@@ -197,8 +204,17 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	return nil
 }
 
+// upstreamConnectionError wraps an error connecting to an upstream service
+type upstreamConnectionError struct {
+	err error
+}
+
+func (e upstreamConnectionError) Error() string {
+	return fmt.Sprintf("could not connect to upstream: %s", e.err.Error())
+}
+
 // handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
+func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (r, w int64, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	st := stats.GetStats(ctx)
@@ -208,49 +224,52 @@ func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh
 	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
 	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "dial upstream")
+		return 0, 0, upstreamConnectionError{err: err}
 	}
 	defer serviceConn.Close()
 
-	// copyConn copies all bytes from io.Reader to io.Writer, records
-	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
-		defer g.Done()
-
-		byteCount, err := io.Copy(dst, src)
-		if err != nil {
-			errors <- err
-		}
-		// Record number of bytes written in this direction
-		*written = byteCount
-	}
-
-	var read, written int64
-	readErr := make(chan error)
-	writeErr := make(chan error)
-
-	// Copy all bytes from tunnel to service and service to tunnel
+	// Pass data bidirectionally from tunnel to service net.Conn, wait for errors, and record read/write
+	done := make(chan struct{})
 	go func() {
-		defer cancel()
-		g := new(sync.WaitGroup)
-		g.Add(2)
-
-		// Copy data bidirectionally.
-		go copyConn(g, serviceConn, tunnelConn, &read, readErr)
-		go copyConn(g, tunnelConn, serviceConn, &written, writeErr)
-		g.Wait()
-
-		// Close serviceConn before the end of the function, so we get a count of bytes written
-		serviceConn.Close()
+		r, w, err = bidirectionalReadWrite(tunnelConn, serviceConn)
+		close(done)
 	}()
 
+	// Wait for completion or for context cancellation
 	select {
-	case err := <-readErr:
-		return read, written, errors.Wrap(err, "read error")
-	case err := <-writeErr:
-		return read, written, errors.Wrap(err, "write error")
+	case <-done:
+		return
 	case <-ctx.Done():
-		return read, written, nil
+		return
 	}
+}
+
+func bidirectionalReadWrite(a, b io.ReadWriter) (ra, rb int64, err error) {
+	copyConn := func(src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
+		byteCount, err := io.Copy(dst, src)
+		*written = byteCount // Record number of bytes written in this direction
+		errors <- err
+	}
+
+	// Copy data bidirectionally.
+	errA := make(chan error)
+	go copyConn(a, b, &ra, errA)
+	errB := make(chan error)
+	go copyConn(b, a, &rb, errB)
+
+	// Wait for either side A or B to close, and return ero
+	select {
+	case err = <-errA:
+		if err != nil {
+			err = errors.Wrap(err, "read A")
+		}
+	case err = <-errB:
+		if err != nil {
+			err = errors.Wrap(err, "read B")
+		}
+	}
+
+	return
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
