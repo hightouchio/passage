@@ -123,7 +123,9 @@ func logNormalTunnelInstanceState(i *normalTunnelInstance, st stats.Stats, logge
 	}
 
 	st.Gauge("active_connections", float64(len(i.conns)), nil, 1)
-	logger.WithField("active_connections", ids).Trace("tunnel active connections")
+	if len(i.conns) > 0 {
+		logger.WithField("active_connections", ids).Trace("tunnel active connections")
+	}
 }
 
 // BidirectionalPipeline passes bytes bidirectionally from io.ReadWriters a and b, and records the number of bytes written to each.
