@@ -189,13 +189,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 					st.SimpleEvent("accept")
 					defer st.SimpleEvent("close")
 
-					// Register connection for visibility.
-					tunnelRegistry.RegisterConnection(sessionId, time.Now())
-					defer tunnelRegistry.DeregisterConnection(sessionId)
-
 					// Configure networking parameters.
 					tunnelConn.SetKeepAlive(true)
 					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
+
+					// Register connection for visibility.
+					tunnelRegistry.RegisterConnection(sessionId, time.Now())
+					defer tunnelRegistry.DeregisterConnection(sessionId)
 
 					// Connect upstream and forward bytes
 					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
@@ -278,7 +278,7 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 
-		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("using ssh key")
+		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("upstream connection with SSH key")
 		signers[i] = signer
 	}
 

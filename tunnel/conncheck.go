@@ -31,7 +31,7 @@ type CheckTunnelResponse struct {
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
 func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
-	s.Stats.SimpleEvent("status_check")
+	s.Stats.WithTags(stats.Tags{"tunnel_id": req.ID}).SimpleEvent("status_check")
 	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
