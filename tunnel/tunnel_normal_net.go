@@ -41,9 +41,9 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 	bytesWritten = new(int64)
 	defer func() {
 		// Record pipeline metrics to logs and statsd
-		st.WithEventTags(stats.Tags{"read_bytes": *bytesRead, "write_bytes": *bytesWritten}).SimpleEvent("close")
 		st.Count("read_bytes", *bytesRead, nil, 1)
 		st.Count("write_bytes", *bytesWritten, nil, 1)
+		st.WithEventTags(stats.Tags{"read_bytes": *bytesRead, "write_bytes": *bytesWritten}).SimpleEvent("close")
 	}()
 
 	// Register connection for visibility.
