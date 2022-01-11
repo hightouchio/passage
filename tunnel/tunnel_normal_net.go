@@ -2,80 +2,171 @@ package tunnel
 
 import (
 	"context"
-	"fmt"
+	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"net"
-	"strconv"
+	"sync"
+	"time"
 )
 
-// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (r, w int64, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	st := stats.GetStats(ctx)
+type normalTunnelInstance struct {
+	upstreamAddr     string
+	sshClient        *ssh.Client
+	sshClientOptions SSHClientOptions
 
-	// Dial upstream service.
-	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
-	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
-	if err != nil {
-		// Return upstreamConnectionError to indicate that the connection should be forcibly closed.
-		return 0, 0, upstreamConnectionError{err: err}
-	}
-	defer serviceConn.Close()
+	conns map[uuid.UUID]tunnelConnection
+	mux   sync.RWMutex
+}
 
-	// Pass data bidirectionally from tunnel to service net.Conn, wait for errors, and record read/write
-	done := make(chan struct{})
-	go func() {
-		r, w, err = bidirectionalReadWrite(tunnelConn, serviceConn)
-		close(done)
+// tunnelConnection is a representation of an active connection for visibility
+type tunnelConnection struct {
+	startAt time.Time
+}
+
+func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.TCPConn) {
+	sessionId := uuid.New()
+	st := stats.GetStats(ctx).WithEventTags(stats.Tags{"session_id": sessionId}).WithPrefix("conn")
+	ctx = stats.InjectContext(ctx, st)
+	st.WithEventTags(stats.Tags{"remote_addr": conn.RemoteAddr().String()}).SimpleEvent("accept")
+	defer conn.Close()
+
+	// Establish pointers to store read and written bytes
+	var bytesRead, bytesWritten *int64
+	// Set defaults so we never nil dereference.
+	bytesRead = new(int64)
+	bytesWritten = new(int64)
+	defer func() {
+		// Record pipeline metrics to logs and statsd
+		st.WithEventTags(stats.Tags{"read_bytes": *bytesRead, "write_bytes": *bytesWritten}).SimpleEvent("close")
+		st.Count("read_bytes", *bytesRead, nil, 1)
+		st.Count("write_bytes", *bytesWritten, nil, 1)
 	}()
 
-	// Wait for completion or for context cancellation
-	select {
-	case <-done:
+	// Register connection for visibility.
+	i.registerConnection(sessionId, time.Now())
+	defer i.deregisterConnection(sessionId)
+
+	// Configure networking parameters.
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(i.sshClientOptions.KeepaliveInterval)
+
+	// Connect upstream.
+	upstream, err := i.dialUpstream(ctx)
+	if err != nil {
+		// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
+		if err := conn.SetLinger(0); err != nil {
+			st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
+		}
+
+		st.ErrorEvent("error", errors.Wrap(err, "upstream connection error"))
 		return
+	}
+	defer upstream.Close()
+
+	// Forward bytes.
+	done := make(chan struct{})
+	pipeline := NewBidirectionalPipeline(conn, upstream)
+	go func() {
+		if err := pipeline.Run(); err != nil {
+			st.ErrorEvent("error", errors.Wrap(err, "pipeline error"))
+		}
+		close(done)
+	}()
+	bytesRead = &pipeline.writtenA
+	bytesWritten = &pipeline.writtenB
+
+	// Block on context cancellation or on pipeline completion.
+	select {
 	case <-ctx.Done():
-		return
+	case <-done:
 	}
 }
 
-// upstreamConnectionError wraps an error connecting to an upstream service
-type upstreamConnectionError struct {
-	err error
+// dialUpstream connects to the upstream service
+func (i *normalTunnelInstance) dialUpstream(ctx context.Context) (net.Conn, error) {
+	// Dial upstream service.
+	stats.GetStats(ctx).WithEventTags(stats.Tags{"upstream_addr": i.upstreamAddr}).SimpleEvent("upstream.dial")
+	serviceConn, err := i.sshClient.Dial("tcp", i.upstreamAddr)
+	if err != nil {
+		return nil, err
+	}
+	return serviceConn, err
 }
 
-func (e upstreamConnectionError) Error() string {
-	return fmt.Sprintf("could not connect to upstream: %s", e.err.Error())
+// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
+func (i *normalTunnelInstance) registerConnection(sessionId uuid.UUID, startAt time.Time) {
+	i.mux.Lock()
+	defer i.mux.Unlock()
+	i.conns[sessionId] = tunnelConnection{
+		startAt: startAt,
+	}
 }
 
-func bidirectionalReadWrite(a, b io.ReadWriter) (ra, rb int64, err error) {
-	copyConn := func(src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
-		byteCount, err := io.Copy(dst, src)
-		*written = byteCount // Record number of bytes written in this direction
-		errors <- err
+func (i *normalTunnelInstance) deregisterConnection(sessionId uuid.UUID) {
+	i.mux.Lock()
+	defer i.mux.Unlock()
+	delete(i.conns, sessionId)
+}
+
+// logNormalTunnelInstanceState is a helper function for recording the state of a normalTunnelInstance to logger and statsd
+func logNormalTunnelInstanceState(i *normalTunnelInstance, st stats.Stats, logger *logrus.Entry) {
+	i.mux.RLock()
+	defer i.mux.RUnlock()
+
+	ids := make([]uuid.UUID, 0)
+	for id, _ := range i.conns {
+		ids = append(ids, id)
 	}
 
+	st.Gauge("active_connections", float64(len(i.conns)), nil, 1)
+	logger.WithField("active_connections", ids).Trace("tunnel active connections")
+}
+
+// BidirectionalPipeline passes bytes bidirectionally from io.ReadWriters a and b, and records the number of bytes written to each.
+type BidirectionalPipeline struct {
+	a, b               io.ReadWriter
+	writtenA, writtenB int64
+}
+
+func NewBidirectionalPipeline(a, b io.ReadWriter) *BidirectionalPipeline {
+	return &BidirectionalPipeline{a: a, b: b}
+}
+
+// Run starts the bidirectional copying of bytes, and blocks until completion.
+func (p *BidirectionalPipeline) Run() error {
+	// Buffered error channel to allow both sides to send an error without blocking and leaking goroutines.
+	cerr := make(chan error, 1)
 	// Copy data bidirectionally.
-	errA := make(chan error)
-	go copyConn(a, b, &ra, errA)
-	errB := make(chan error)
-	go copyConn(b, a, &rb, errB)
+	go func() {
+		cerr <- copyWithCounter(p.a, p.b, &p.writtenB)
+	}()
+	go func() {
+		cerr <- copyWithCounter(p.b, p.a, &p.writtenA)
+	}()
 
-	// Wait for either side A or B to close, and return ero
-	select {
-	case err = <-errA:
-		if err != nil {
-			err = errors.Wrap(err, "read A")
-		}
-	case err = <-errB:
-		if err != nil {
-			err = errors.Wrap(err, "read B")
-		}
-	}
+	// Wait for either side A or B to close, and return err
+	return <-cerr
+}
 
-	return
+// copyWithCounter performs an io.Copy from src to dst, and keeps track of the number of bytes written by writing to the *written pointer.
+func copyWithCounter(src io.Reader, dst io.Writer, written *int64) error {
+	count, err := io.Copy(io.MultiWriter(dst, CounterWriter{written}), src)
+	*written = count
+	return err
+}
+
+// CounterWriter is a no-op Writer that records how many bytes have been written to it
+type CounterWriter struct {
+	written *int64
+}
+
+// Write does nothing with the input byte slice but records the length
+func (b CounterWriter) Write(p []byte) (n int, err error) {
+	count := len(p)
+	*b.written += int64(count)
+	return count, nil
 }

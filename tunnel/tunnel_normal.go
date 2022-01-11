@@ -8,7 +8,6 @@ import (
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"net"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,6 +83,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "ssh connect")
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
+	// Start sending keepalive packets to the upstream SSH server
+	sshKeepaliveErr := make(chan error)
+	go func() {
+		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
+			sshKeepaliveErr <- err
+		}
+	}()
 
 	// Resolve tunnel listener addr.
 	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
@@ -99,17 +105,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "tunnel listen")
 	}
 	defer listener.Close()
+	// tunnelInstance is the stateful connection handler
+	tunnelInstance := &normalTunnelInstance{
+		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
+		sshClient:        sshClient,
+		sshClientOptions: t.clientOptions,
+		conns:            make(map[uuid.UUID]tunnelConnection),
+	}
 
-	// Start sending keepalive packets to the SSH server
-	keepaliveErr := make(chan error)
-	go func() {
-		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			keepaliveErr <- err
-		}
-	}()
-
-	// Accept incoming connections and push them to this channel
-	incomingConns := make(chan *net.TCPConn)
+	// Accept incoming connections and pass them off to tunnelInstance
 	go func() {
 		for {
 			select {
@@ -122,140 +126,35 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				if err != nil {
 					break
 				}
-
-				incomingConns <- conn
+				// Pass connections off to tunnel connection handler.
+				go tunnelInstance.HandleConnection(ctx, conn)
 			}
 		}
 	}()
 
-	// Keep record of active connections.
-	tunnelRegistry := connectionRegistry{
-		conns: make(map[uuid.UUID]tunnelConnection),
-	}
-	reportTunnelConnections := func(logConnections bool) {
-		tunnelRegistry.mux.RLock()
-		defer tunnelRegistry.mux.RUnlock()
-
-		ids := make([]uuid.UUID, 0)
-		for id, _ := range tunnelRegistry.conns {
-			ids = append(ids, id)
-		}
-
-		st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(len(tunnelRegistry.conns)), nil, 1)
-		if logConnections {
-			t.logger().WithField("active_connections", ids).Trace("tunnel active connections")
-		}
-	}
-
+	// Report tunnel state on every tick
 	go func() {
-		statsTicker := time.NewTicker(1 * time.Second)
+		statsTicker := time.NewTicker(10 * time.Second)
 		defer statsTicker.Stop()
 
-		connectionsTicker := time.NewTicker(10 * time.Second)
-		defer connectionsTicker.Stop()
-
 		for {
 			select {
 			case <-ctx.Done():
 				return
-
-			// Report tunnel state on every tick
 			case <-statsTicker.C:
-				reportTunnelConnections(false)
-
-			// Report tunnel state on every tick
-			case <-connectionsTicker.C:
-				reportTunnelConnections(true)
-			}
-		}
-	}()
-
-	// Handle incoming tunnel connections
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case tunnelConn := <-incomingConns:
-				go func() {
-					defer tunnelConn.Close()
-
-					sessionId := uuid.New()
-					st := st.WithEventTags(stats.Tags{
-						"remote_addr": tunnelConn.RemoteAddr().String(),
-						"session_id":  sessionId,
-					}).WithPrefix("conn")
-					st.SimpleEvent("accept")
-					defer st.SimpleEvent("close")
-
-					// Configure networking parameters.
-					tunnelConn.SetKeepAlive(true)
-					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
-
-					// Register connection for visibility.
-					tunnelRegistry.RegisterConnection(sessionId, time.Now())
-					defer tunnelRegistry.DeregisterConnection(sessionId)
-
-					// Connect upstream and forward bytes
-					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
-
-					// Record bytes read and written on
-					st = st.WithEventTags(stats.Tags{"read_bytes": read, "write_bytes": written})
-					st.Gauge("read_bytes", float64(read), nil, 1)
-					st.Gauge("write_bytes", float64(written), nil, 1)
-
-					// Handle connection errors
-					if err != nil {
-						switch err.(type) {
-						// Handle errors in which we couldn't even connect to the upstream port
-						case upstreamConnectionError:
-							// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
-							if err := tunnelConn.SetLinger(0); err != nil {
-								st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
-							}
-						}
-
-						st.ErrorEvent("error", err)
-						return
-					}
-				}()
+				logNormalTunnelInstanceState(tunnelInstance, st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}), t.logger())
 			}
 		}
 	}()
 
 	select {
-	case err := <-keepaliveErr:
+	case err := <-sshKeepaliveErr:
 		st.ErrorEvent("keepalive_failed", err)
 
 	case <-ctx.Done():
 	}
 
 	return nil
-}
-
-// tunnelConnection is a representation of an active connection for visibility
-type tunnelConnection struct {
-	startAt time.Time
-}
-
-type connectionRegistry struct {
-	conns map[uuid.UUID]tunnelConnection
-	mux   sync.RWMutex
-}
-
-func (r *connectionRegistry) RegisterConnection(sessionId uuid.UUID, startAt time.Time) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
-	r.conns[sessionId] = tunnelConnection{
-		startAt: startAt,
-	}
-}
-
-func (r *connectionRegistry) DeregisterConnection(sessionId uuid.UUID) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
-	delete(r.conns, sessionId)
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
