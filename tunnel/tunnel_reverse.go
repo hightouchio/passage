@@ -62,10 +62,6 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		errs <- server.ListenAndServe()
 	}()
 
-	// Register lifecycle hooks
-	lifecycle.Open()
-	defer lifecycle.Close()
-
 	select {
 	case <-ctx.Done():
 		return nil
@@ -128,15 +124,18 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 
 	// request session handler
 	server.Handler = func(s ssh.Session) {
+		lifecycle.Open()
+		defer func() {
+			lifecycle.SessionEvent("", "session_end", stats.Tags{})
+			lifecycle.Close()
+		}()
+
 		lifecycle.SessionEvent("", "session_start", stats.Tags{
 			"remote_addr": s.RemoteAddr().String(),
 		})
 
-		select {
-		case <-s.Context().Done():
-			lifecycle.SessionEvent("", "session_end", stats.Tags{})
-			return
-		}
+		// Block until session ends
+		<-s.Context().Done()
 	}
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
