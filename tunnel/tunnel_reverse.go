@@ -39,8 +39,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	server := &ssh.Server{
 		Addr: serverAddr,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"session":      ssh.DefaultSessionHandler,
-			"direct-tcpip": ssh.DirectTCPIPHandler,
+			"session": ssh.DefaultSessionHandler,
 		},
 	}
 
@@ -115,14 +114,7 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
 
-	// add request handlers
-	forwardHandler := &ssh.ForwardedTCPHandler{}
-	server.RequestHandlers = map[string]ssh.RequestHandler{
-		"tcpip-forward":        forwardHandler.HandleSSHRequest,
-		"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
-	}
-
-	// request session handler
+	// SSH session handler. Hold connections open until cancelled.
 	server.Handler = func(s ssh.Session) {
 		lifecycle.Open()
 		defer func() {
@@ -134,8 +126,17 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 			"remote_addr": s.RemoteAddr().String(),
 		})
 
-		// Block until session ends
-		<-s.Context().Done()
+		select {
+		case <-s.Context().Done(): // Block until session ends
+		case <-ctx.Done(): // or until server closes
+		}
+	}
+
+	// Add request handlers for reverse port forwarding
+	forwardHandler := &ForwardedTCPHandler{}
+	server.RequestHandlers = map[string]ssh.RequestHandler{
+		"tcpip-forward":        forwardHandler.HandleSSHRequest,
+		"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
 	}
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
