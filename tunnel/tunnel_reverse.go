@@ -228,7 +228,7 @@ func (t ReverseTunnel) GetID() uuid.UUID {
 }
 
 func (t ReverseTunnel) logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
+	return t.services.Logger.WithFields(logrus.Fields{
 		"tunnel_type": Reverse,
 		"tunnel_id":   t.ID.String(),
 	})
