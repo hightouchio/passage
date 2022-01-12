@@ -286,6 +286,8 @@ func newConfig() (*viper.Viper, error) {
 func newLogger(config *viper.Viper) *logrus.Logger {
 	logger := logrus.New()
 	switch config.GetString(ConfigLogLevel) {
+	case "trace":
+		logger.SetLevel(logrus.TraceLevel)
 	case "debug":
 		logger.SetLevel(logrus.DebugLevel)
 	case "info":

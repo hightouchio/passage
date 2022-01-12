@@ -9,7 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"strings"
+	"strconv"
 	"time"
 )
 
@@ -18,8 +18,6 @@ const (
 	conncheckDialTimeout      = 5 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
 	conncheckReadMaxBytes     = 256
-
-	conncheckErrorPrefix = "passage-error"
 )
 
 type CheckTunnelRequest struct {
@@ -33,7 +31,7 @@ type CheckTunnelResponse struct {
 
 // CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
 func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
-	s.Stats.SimpleEvent("status_check")
+	s.Stats.WithTags(stats.Tags{"tunnel_id": req.ID}).SimpleEvent("status_check")
 	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
@@ -54,7 +52,7 @@ func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTun
 // checkConnectivity
 func checkConnectivity(ctx context.Context, details ConnectionDetails) error {
 	dialer := &net.Dialer{Timeout: conncheckDialTimeout}
-	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", details.Host, details.Port))
+	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf(net.JoinHostPort(details.Host, strconv.Itoa(details.Port))))
 	if err != nil {
 		return errors.Wrap(err, "dial error")
 	}
@@ -83,19 +81,11 @@ func waitForTunnelError(ctx context.Context, reader io.ReadCloser, waitDuration 
 
 	// read in a context-aware fashion
 	go func() {
-		data, err := ioutil.ReadAll(io.LimitReader(reader, conncheckReadMaxBytes))
+		_, err := ioutil.ReadAll(io.LimitReader(reader, conncheckReadMaxBytes))
 		if err != nil {
 			done <- errors.Wrap(err, "read error")
 			return
 		}
-
-		// check if the bytes we read were an error
-		message := string(data)
-		if strings.HasPrefix(message, conncheckErrorPrefix) {
-			done <- errors.New(message)
-			return
-		}
-
 		done <- nil
 	}()
 

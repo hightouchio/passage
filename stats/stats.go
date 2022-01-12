@@ -47,6 +47,10 @@ type Event struct {
 	Tags Tags
 }
 
+func (s Stats) Count(name string, value int64, tags Tags, rate float64) {
+	s.client.Count(joinPrefixes(s.prefix, name), value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
+}
+
 func (s Stats) Incr(name string, tags Tags, rate float64) {
 	s.client.Incr(joinPrefixes(s.prefix, name), convertTags(mergeTags([]Tags{s.tags, tags})), rate)
 }

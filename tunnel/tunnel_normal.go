@@ -6,11 +6,8 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"io"
 	"net"
 	"strconv"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,6 +83,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "ssh connect")
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
+	// Start sending keepalive packets to the upstream SSH server
+	sshKeepaliveErr := make(chan error)
+	go func() {
+		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
+			sshKeepaliveErr <- err
+		}
+	}()
 
 	// Resolve tunnel listener addr.
 	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
@@ -101,17 +105,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "tunnel listen")
 	}
 	defer listener.Close()
+	// tunnelInstance is the stateful connection handler
+	tunnelInstance := &normalTunnelInstance{
+		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
+		sshClient:        sshClient,
+		sshClientOptions: t.clientOptions,
+		conns:            make(map[uuid.UUID]tunnelConnection),
+	}
 
-	// Start sending keepalive packets to the SSH server
-	keepaliveErr := make(chan error)
-	go func() {
-		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			keepaliveErr <- err
-		}
-	}()
-
-	// Accept incoming connections and push them to this channel
-	incomingConns := make(chan *net.TCPConn)
+	// Accept incoming connections and pass them off to tunnelInstance
 	go func() {
 		for {
 			select {
@@ -124,133 +126,35 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				if err != nil {
 					break
 				}
-
-				incomingConns <- conn
+				// Pass connections off to tunnel connection handler.
+				go tunnelInstance.HandleConnection(ctx, conn)
 			}
 		}
 	}()
 
-	// Report active connections every tick
-	var activeConnections int32
+	// Report tunnel state on every tick
 	go func() {
-		statsTicker := time.NewTicker(1 * time.Second)
+		statsTicker := time.NewTicker(10 * time.Second)
 		defer statsTicker.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
 				return
-
 			case <-statsTicker.C:
-				tActiveConns := atomic.LoadInt32(&activeConnections)
-				st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}).Gauge("active_connections", float64(tActiveConns), nil, 1)
-			}
-		}
-	}()
-
-	// Handle incoming tunnel connections
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case tunnelConn := <-incomingConns:
-				go func() {
-					st := st.WithEventTags(stats.Tags{
-						"remote_addr": tunnelConn.RemoteAddr().String(),
-						"session_id":  uuid.New(),
-					}).WithPrefix("conn")
-					st.SimpleEvent("accept")
-					st.Incr("accept", nil, 1)
-					atomic.AddInt32(&activeConnections, 1)
-
-					// Configure keepalive
-					tunnelConn.SetKeepAlive(true)
-					tunnelConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
-					// Tunnel connection
-					read, written, err := t.handleTunnelConnection(stats.InjectContext(ctx, st), sshClient, tunnelConn)
-
-					atomic.AddInt32(&activeConnections, -1)
-					// TODO: This is probably wrong because its overriding a shared value.
-					st = st.WithEventTags(stats.Tags{"read_bytes": read, "write_bytes": written})
-					st.Gauge("read_bytes", float64(read), nil, 1)
-					st.Gauge("write_bytes", float64(written), nil, 1)
-					if err != nil {
-						st.ErrorEvent("error", err)
-						tunnelConn.Write([]byte(errors.Wrap(err, conncheckErrorPrefix).Error()))
-						return
-					}
-					st.SimpleEvent("close")
-				}()
+				logNormalTunnelInstanceState(tunnelInstance, st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}), t.logger())
 			}
 		}
 	}()
 
 	select {
-	case err := <-keepaliveErr:
+	case err := <-sshKeepaliveErr:
 		st.ErrorEvent("keepalive_failed", err)
 
 	case <-ctx.Done():
 	}
 
 	return nil
-}
-
-// handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (t NormalTunnel) handleTunnelConnection(ctx context.Context, sshClient *ssh.Client, tunnelConn net.Conn) (int64, int64, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	st := stats.GetStats(ctx)
-
-	// Dial upstream service.
-	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
-	st.WithEventTags(stats.Tags{"upstream_addr": upstreamAddr}).SimpleEvent("upstream.dial")
-	serviceConn, err := sshClient.Dial("tcp", upstreamAddr)
-	if err != nil {
-		return 0, 0, errors.Wrap(err, "dial upstream")
-	}
-	defer serviceConn.Close()
-
-	// copyConn copies all bytes from io.Reader to io.Writer, records
-	copyConn := func(g *sync.WaitGroup, src io.Reader, dst io.Writer, written *int64, errors chan<- error) {
-		defer g.Done()
-
-		byteCount, err := io.Copy(dst, src)
-		if err != nil {
-			errors <- err
-		}
-		// Record number of bytes written in this direction
-		*written = byteCount
-	}
-
-	var read, written int64
-	readErr := make(chan error)
-	writeErr := make(chan error)
-
-	// Copy all bytes from tunnel to service and service to tunnel
-	go func() {
-		defer cancel()
-		g := new(sync.WaitGroup)
-		g.Add(2)
-
-		// Copy data bidirectionally.
-		go copyConn(g, serviceConn, tunnelConn, &read, readErr)
-		go copyConn(g, tunnelConn, serviceConn, &written, writeErr)
-		g.Wait()
-
-		// Close serviceConn before the end of the function, so we get a count of bytes written
-		serviceConn.Close()
-	}()
-
-	select {
-	case err := <-readErr:
-		return read, written, errors.Wrap(err, "read error")
-	case err := <-writeErr:
-		return read, written, errors.Wrap(err, "write error")
-	case <-ctx.Done():
-		return read, written, nil
-	}
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
@@ -273,7 +177,7 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 
-		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("using ssh key")
+		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("upstream connection with SSH key")
 		signers[i] = signer
 	}
 
@@ -298,6 +202,7 @@ type NormalTunnelServices struct {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 	Keystore keystore.Keystore
+	Logger   *logrus.Logger
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {
@@ -362,7 +267,7 @@ func (t NormalTunnel) GetID() uuid.UUID {
 }
 
 func (t NormalTunnel) logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
+	return t.services.Logger.WithFields(logrus.Fields{
 		"tunnel_type": Normal,
 		"tunnel_id":   t.ID.String(),
 	})

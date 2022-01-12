@@ -183,6 +183,7 @@ type ReverseTunnelServices struct {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 	Keystore keystore.Keystore
+	Logger   *logrus.Logger
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
@@ -227,7 +228,7 @@ func (t ReverseTunnel) GetID() uuid.UUID {
 }
 
 func (t ReverseTunnel) logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
+	return t.services.Logger.WithFields(logrus.Fields{
 		"tunnel_type": Reverse,
 		"tunnel_id":   t.ID.String(),
 	})
