@@ -34,14 +34,15 @@ type NormalTunnel struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
-	st := stats.GetStats(ctx)
+	lifecycle := getCtxLifecycle(ctx)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Get a list of key signers to use for authentication
 	keySigners, err := t.getAuthSigners(ctx)
 	if err != nil {
-		return errors.Wrap(err, "generate key signers")
+		return bootError{event: "generate_auth_signers", err: err}
 	}
 
 	// Determine SSH user to use, either from the database or from the config.
@@ -52,17 +53,16 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		sshUser = t.clientOptions.User
 	}
 
-	// Resolve dial address
+	// Dial external SSH server
+	lifecycle.BootEvent("remote_dial", stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort})
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
-		return errors.Wrapf(err, "could not resolve addr %s", addr)
+		return bootError{event: "remote_dial", err: errors.Wrapf(err, "resolve addr %s", addr)}
 	}
-	// Dial external SSH server
-	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
 	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		return errors.Wrap(err, "dial remote")
+		return bootError{event: "remote_dial", err: err}
 	}
 	defer sshConn.Close()
 	// Configure TCP keepalive for SSH connection
@@ -70,7 +70,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh_connect")
+	lifecycle.BootEvent("ssh_connect", stats.Tags{"ssh_user": sshUser, "ssh_auth_method_count": len(keySigners)})
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -80,7 +80,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "ssh connect")
+		return bootError{event: "ssh_connect", err: err}
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
 	// Start sending keepalive packets to the upstream SSH server
@@ -91,28 +91,30 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	// Resolve tunnel listener addr.
+	// Listen for incoming tunnel connections.
 	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
+	lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": listenAddr})
 	listenTcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
 	if err != nil {
-		return errors.Wrap(err, "resolve tunnel listen addr")
+		return bootError{event: "listener_start", err: errors.Wrap(err, "resolve addr")}
 	}
-
-	// Listen for incoming tunnel connections.
-	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
 	listener, err := net.ListenTCP("tcp", listenTcpAddr)
 	if err != nil {
-		return errors.Wrap(err, "tunnel listen")
+		return bootError{event: "listener_start", err: err}
 	}
 	defer listener.Close()
+
+	// Trigger lifecycle
+	lifecycle.Open()
+	defer lifecycle.Close()
+
 	// tunnelInstance is the stateful connection handler
 	tunnelInstance := &normalTunnelInstance{
 		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
 		sshClient:        sshClient,
 		sshClientOptions: t.clientOptions,
-		conns:            make(map[uuid.UUID]tunnelConnection),
+		conns:            make(map[string]tunnelConnection),
 	}
-
 	// Accept incoming connections and pass them off to tunnelInstance
 	go func() {
 		for {
@@ -142,14 +144,14 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			case <-ctx.Done():
 				return
 			case <-statsTicker.C:
-				logNormalTunnelInstanceState(tunnelInstance, st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}), t.logger())
+				logNormalTunnelInstanceState(ctx, tunnelInstance)
 			}
 		}
 	}()
 
 	select {
 	case err := <-sshKeepaliveErr:
-		st.ErrorEvent("keepalive_failed", err)
+		lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
 
 	case <-ctx.Done():
 	}
@@ -177,7 +179,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 
-		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("upstream connection with SSH key")
 		signers[i] = signer
 	}
 
@@ -264,11 +265,4 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 
 func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
-}
-
-func (t NormalTunnel) logger() *logrus.Entry {
-	return t.services.Logger.WithFields(logrus.Fields{
-		"tunnel_type": Normal,
-		"tunnel_id":   t.ID.String(),
-	})
 }

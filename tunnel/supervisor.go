@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"github.com/hightouchio/passage/stats"
-	"github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -50,12 +49,26 @@ func (s *Supervisor) Start(ctx context.Context) {
 				case <-initialRun:
 				}
 
-				// Inject prefixed stats into the context.
-				ctx = stats.InjectContext(ctx, s.Stats.WithPrefix("tunnel"))
+				// Build visibility interfaces
+				st := s.Stats.
+					WithPrefix("tunnel").
+					WithTags(stats.Tags{
+						"tunnel_id": s.Tunnel.GetID().String(),
+					})
+				lifecycle := lifecycleLogger{st}
+
+				// Inject visibility interfaces into context
+				ctx = stats.InjectContext(ctx, st)
+				ctx = injectCtxLifecycle(ctx, lifecycle)
+
+				lifecycle.Start()
 				if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-					s.Stats.ErrorEvent("tunnel.error", err)
-				} else {
-					s.Stats.SimpleEvent("tunnel.stop")
+					switch err.(type) {
+					case bootError:
+						lifecycle.BootError(err)
+					default:
+						lifecycle.Error(err)
+					}
 				}
 			}
 		}
@@ -67,10 +80,4 @@ func (s *Supervisor) Start(ctx context.Context) {
 
 func (s *Supervisor) Stop() {
 	close(s.stop)
-}
-
-func (s Supervisor) logger() *logrus.Entry {
-	return logrus.WithFields(logrus.Fields{
-		"tunnel_id": s.Tunnel.GetID().String(),
-	})
 }

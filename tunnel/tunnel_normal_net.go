@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"net"
@@ -18,7 +17,7 @@ type normalTunnelInstance struct {
 	sshClient        *ssh.Client
 	sshClientOptions SSHClientOptions
 
-	conns map[uuid.UUID]tunnelConnection
+	conns map[string]tunnelConnection
 	mux   sync.RWMutex
 }
 
@@ -28,10 +27,11 @@ type tunnelConnection struct {
 }
 
 func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.TCPConn) {
-	sessionId := uuid.New()
-	st := stats.GetStats(ctx).WithEventTags(stats.Tags{"session_id": sessionId}).WithPrefix("conn")
-	ctx = stats.InjectContext(ctx, st)
-	st.WithEventTags(stats.Tags{"remote_addr": conn.RemoteAddr().String()}).SimpleEvent("accept")
+	lifecycle := getCtxLifecycle(ctx)
+	st := stats.GetStats(ctx)
+
+	sessionId := uuid.New().String()
+	lifecycle.SessionEvent(sessionId, "open", stats.Tags{"remote_addr": conn.RemoteAddr().String()})
 	defer conn.Close()
 
 	// Establish pointers to store read and written bytes
@@ -43,7 +43,10 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 		// Record pipeline metrics to logs and statsd
 		st.Count("read_bytes", *bytesRead, nil, 1)
 		st.Count("write_bytes", *bytesWritten, nil, 1)
-		st.WithEventTags(stats.Tags{"read_bytes": *bytesRead, "write_bytes": *bytesWritten}).SimpleEvent("close")
+		lifecycle.SessionEvent(sessionId, "close", stats.Tags{
+			"read_bytes":  *bytesRead,
+			"write_bytes": *bytesWritten,
+		})
 	}()
 
 	// Register connection for visibility.
@@ -55,14 +58,15 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 	conn.SetKeepAlivePeriod(i.sshClientOptions.KeepaliveInterval)
 
 	// Connect upstream.
+	lifecycle.SessionEvent(sessionId, "dial_upstream", stats.Tags{})
 	upstream, err := i.dialUpstream(ctx)
 	if err != nil {
 		// Set SO_LINGER=0 so the TCP connection does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 		if err := conn.SetLinger(0); err != nil {
-			st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
+			lifecycle.SessionError(sessionId, errors.Wrap(err, "set linger"))
 		}
 
-		st.ErrorEvent("error", errors.Wrap(err, "upstream connection error"))
+		lifecycle.SessionError(sessionId, errors.Wrap(err, "dial upstream"))
 		return
 	}
 	defer upstream.Close()
@@ -72,7 +76,7 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 	pipeline := NewBidirectionalPipeline(conn, upstream)
 	go func() {
 		if err := pipeline.Run(); err != nil {
-			st.ErrorEvent("error", errors.Wrap(err, "pipeline error"))
+			lifecycle.SessionError(sessionId, errors.Wrap(err, "pipeline"))
 		}
 		close(done)
 	}()
@@ -89,7 +93,6 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 // dialUpstream connects to the upstream service
 func (i *normalTunnelInstance) dialUpstream(ctx context.Context) (net.Conn, error) {
 	// Dial upstream service.
-	stats.GetStats(ctx).WithEventTags(stats.Tags{"upstream_addr": i.upstreamAddr}).SimpleEvent("upstream.dial")
 	serviceConn, err := i.sshClient.Dial("tcp", i.upstreamAddr)
 	if err != nil {
 		return nil, err
@@ -98,7 +101,7 @@ func (i *normalTunnelInstance) dialUpstream(ctx context.Context) (net.Conn, erro
 }
 
 // handleTunnelConnection handles incoming TCP connections on the tunnel listen port, dials the tunneled upstream, and copies bytes bidirectionally
-func (i *normalTunnelInstance) registerConnection(sessionId uuid.UUID, startAt time.Time) {
+func (i *normalTunnelInstance) registerConnection(sessionId string, startAt time.Time) {
 	i.mux.Lock()
 	defer i.mux.Unlock()
 	i.conns[sessionId] = tunnelConnection{
@@ -106,26 +109,25 @@ func (i *normalTunnelInstance) registerConnection(sessionId uuid.UUID, startAt t
 	}
 }
 
-func (i *normalTunnelInstance) deregisterConnection(sessionId uuid.UUID) {
+func (i *normalTunnelInstance) deregisterConnection(sessionId string) {
 	i.mux.Lock()
 	defer i.mux.Unlock()
 	delete(i.conns, sessionId)
 }
 
 // logNormalTunnelInstanceState is a helper function for recording the state of a normalTunnelInstance to logger and statsd
-func logNormalTunnelInstanceState(i *normalTunnelInstance, st stats.Stats, logger *logrus.Entry) {
+func logNormalTunnelInstanceState(ctx context.Context, i *normalTunnelInstance) {
+	st := stats.GetStats(ctx)
+
 	i.mux.RLock()
 	defer i.mux.RUnlock()
 
-	ids := make([]uuid.UUID, 0)
+	ids := make([]string, 0)
 	for id, _ := range i.conns {
 		ids = append(ids, id)
 	}
 
 	st.Gauge("active_connections", float64(len(i.conns)), nil, 1)
-	if len(i.conns) > 0 {
-		logger.WithField("active_connections", ids).Trace("tunnel active connections")
-	}
 }
 
 // BidirectionalPipeline passes bytes bidirectionally from io.ReadWriters a and b, and records the number of bytes written to each.
