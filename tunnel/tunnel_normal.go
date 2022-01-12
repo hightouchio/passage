@@ -105,6 +105,19 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return errors.Wrap(err, "tunnel listen")
 	}
 	defer listener.Close()
+
+	// Register tunnel with service discovery
+	if err := t.services.Discovery.RegisterTunnel(t.ID, discovery.LocalConnectionDetails{
+		Port: t.TunnelPort,
+	}); err != nil {
+		return errors.Wrap(err, "could not register service discovery")
+	}
+	defer func() {
+		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+			t.logger().WithError(err).Error("could not deregister service discovery")
+		}
+	}()
+
 	// tunnelInstance is the stateful connection handler
 	tunnelInstance := &normalTunnelInstance{
 		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
@@ -112,7 +125,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		sshClientOptions: t.clientOptions,
 		conns:            make(map[uuid.UUID]tunnelConnection),
 	}
-
 	// Accept incoming connections and pass them off to tunnelInstance
 	go func() {
 		for {
@@ -201,8 +213,9 @@ type NormalTunnelServices struct {
 	SQL interface {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
-	Keystore keystore.Keystore
-	Logger   *logrus.Logger
+	Discovery discovery.DiscoveryService
+	Keystore  keystore.Keystore
+	Logger    *logrus.Logger
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {

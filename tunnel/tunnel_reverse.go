@@ -47,6 +47,18 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		errs <- sshd.ListenAndServe()
 	}()
 
+	// Register tunnel with service discovery
+	if err := t.services.Discovery.RegisterTunnel(t.ID, discovery.LocalConnectionDetails{
+		Port: t.TunnelPort,
+	}); err != nil {
+		return errors.Wrap(err, "could not register service discovery")
+	}
+	defer func() {
+		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+			t.logger().WithError(err).Error("could not deregister service discovery")
+		}
+	}()
+
 	select {
 	case <-ctx.Done():
 		return nil
@@ -182,8 +194,9 @@ type ReverseTunnelServices struct {
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
-	Keystore keystore.Keystore
-	Logger   *logrus.Logger
+	Keystore  keystore.Keystore
+	Logger    *logrus.Logger
+	Discovery discovery.DiscoveryService
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {

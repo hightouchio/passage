@@ -8,10 +8,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
+	consulAPI "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
 
 	"github.com/hightouchio/passage/tunnel/discovery"
+	discoveryConsul "github.com/hightouchio/passage/tunnel/discovery/consul"
 	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
 	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
 
@@ -55,6 +57,9 @@ const (
 	ConfigDiscoverySrvRegistry = "discovery.srv.registry"
 	ConfigDiscoverySrvPrefix   = "discovery.srv.prefix"
 	ConfigDiscoveryStaticHost  = "discovery.static.host"
+
+	ConfigDiscoveryConsulAddr        = "discovery.consul.addr"
+	ConfigDiscoveryConsulServiceName = "discovery.consul.service_name"
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
@@ -176,6 +181,23 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 			Host: config.GetString(ConfigDiscoveryStaticHost),
 		}
 		break
+
+	case "consul":
+		consulClient, err := consulAPI.NewClient(&consulAPI.Config{
+			Address: config.GetString(ConfigDiscoveryConsulAddr),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "could not init consul client")
+		}
+		serviceName := config.GetString(ConfigDiscoveryConsulServiceName)
+		if serviceName == "" {
+			return nil, newConfigError(ConfigDiscoveryConsulServiceName, "must be set")
+		}
+
+		discoveryService = discoveryConsul.Discovery{
+			Consul:      consulClient,
+			ServiceName: serviceName,
+		}
 
 	default:
 		return nil, configError{"unknown discovery type"}
