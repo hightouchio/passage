@@ -31,6 +31,17 @@ type TCPForwarder struct {
 	sync.RWMutex
 }
 
+type TunnelSession struct {
+	*net.TCPConn
+	id string
+
+	bytesSent, bytesReceived uint64
+}
+
+func (s *TunnelSession) ID() string {
+	return s.id
+}
+
 func (f *TCPForwarder) Listen() error {
 	f.close = make(chan struct{})
 
@@ -57,8 +68,20 @@ func (f *TCPForwarder) Listen() error {
 				// TODO: Make sure that accept errors are logged.
 				break
 			}
+
+			// Configure keepalive
+			conn.SetKeepAlive(true)
+			conn.SetKeepAlivePeriod(f.KeepaliveInterval)
+
 			// Pass connections off to tunnel connection handler.
-			go f.handleConnection(conn)
+			go func() {
+				session := &TunnelSession{
+					TCPConn: conn,
+					id:      uuid.New().String(),
+				}
+
+				f.handleSession(session)
+			}()
 		}
 	}()
 
@@ -71,57 +94,51 @@ func (f *TCPForwarder) Close() error {
 	return nil
 }
 
-// handleConnection takes a net.TCPConn, representing a tunnel connection, then initiates an upstream connection to our forwarding backend
+// handleSession takes a TunnelSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleConnection(conn *net.TCPConn) {
-	sessionId := uuid.New().String()
-	f.Lifecycle.SessionEvent(sessionId, "open", stats.Tags{"remote_addr": conn.RemoteAddr().String()})
-
-	// Establish pointers to store read and written bytes
-	var bytesRead, bytesWritten *int64
-	// Set defaults so we never nil dereference.
-	bytesRead = new(int64)
-	bytesWritten = new(int64)
+func (f *TCPForwarder) handleSession(session *TunnelSession) {
+	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
 	defer func() {
-		conn.Close()
+		session.Close()
 		// Record pipeline metrics to logs and statsd
-		f.Stats.Count("read_bytes", *bytesRead, nil, 1)
-		f.Stats.Count("write_bytes", *bytesWritten, nil, 1)
-		f.Lifecycle.SessionEvent(sessionId, "close", stats.Tags{
-			"read_bytes":  *bytesRead,
-			"write_bytes": *bytesWritten,
+		f.Stats.Count("bytes_rcvd", int64(session.bytesReceived), nil, 1)
+		f.Stats.Count("bytes_sent", int64(session.bytesSent), nil, 1)
+		f.Lifecycle.SessionEvent(session.ID(), "close", stats.Tags{
+			"bytes_rcvd": session.bytesReceived,
+			"bytes_sent": session.bytesSent,
 		})
 	}()
 
-	// Configure keepalive
-	conn.SetKeepAlive(true)
-	conn.SetKeepAlivePeriod(f.KeepaliveInterval)
-
 	// Get upstream connection.
-	upstream, err := f.GetUpstreamConn(conn)
+	upstream, err := f.GetUpstreamConn(session)
 	if err != nil {
 		// Set SO_LINGER=0 so the tunnel net.TCPConn does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
-		if err := conn.SetLinger(0); err != nil {
-			f.Lifecycle.SessionError(sessionId, errors.Wrap(err, "set linger"))
+		if err := session.SetLinger(0); err != nil {
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "set linger"))
 		}
 
-		f.Lifecycle.SessionError(sessionId, errors.Wrap(err, "dial upstream"))
+		f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "dial upstream"))
 		return
 	}
 	defer upstream.Close()
 
-	// Forward bytes.
+	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TunnelSession
+	pipeline := NewBidirectionalPipeline(session, upstream)
+
 	done := make(chan struct{})
-	pipeline := NewBidirectionalPipeline(conn, upstream)
 	go func() {
+		// Tally up bytes
+		go writeCountTo(pipeline.writeCounterA, &session.bytesReceived)
+		go writeCountTo(pipeline.writeCounterB, &session.bytesSent)
+
+		// Forward bytes.
 		if err := pipeline.Run(); err != nil {
-			f.Lifecycle.SessionError(sessionId, errors.Wrap(err, "pipeline"))
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "pipeline"))
 		}
+
 		close(done)
 	}()
-	bytesRead = &pipeline.writtenA
-	bytesWritten = &pipeline.writtenB
 
 	select {
 	case <-f.close: // Forwarder close
@@ -131,12 +148,19 @@ func (f *TCPForwarder) handleConnection(conn *net.TCPConn) {
 
 // BidirectionalPipeline passes bytes bidirectionally from io.ReadWriters a and b, and records the number of bytes written to each.
 type BidirectionalPipeline struct {
-	a, b               io.ReadWriter
-	writtenA, writtenB int64
+	a, b io.ReadWriteCloser
+
+	writeCounterA, writeCounterB chan uint64
 }
 
-func NewBidirectionalPipeline(a, b io.ReadWriter) *BidirectionalPipeline {
-	return &BidirectionalPipeline{a: a, b: b}
+func NewBidirectionalPipeline(a, b io.ReadWriteCloser) *BidirectionalPipeline {
+	return &BidirectionalPipeline{
+		a:             a,
+		writeCounterA: make(chan uint64),
+
+		b:             b,
+		writeCounterB: make(chan uint64),
+	}
 }
 
 // Run starts the bidirectional copying of bytes, and blocks until completion.
@@ -145,10 +169,18 @@ func (p *BidirectionalPipeline) Run() error {
 	cerr := make(chan error, 1)
 	// Copy data bidirectionally.
 	go func() {
-		cerr <- copyWithCounter(p.a, p.b, &p.writtenB)
+		defer p.a.Close()
+		defer p.b.Close()
+		defer close(p.writeCounterB)
+
+		cerr <- copyWithCounter(p.a, p.b, p.writeCounterB)
 	}()
 	go func() {
-		cerr <- copyWithCounter(p.b, p.a, &p.writtenA)
+		defer p.b.Close()
+		defer p.a.Close()
+		defer close(p.writeCounterA)
+
+		cerr <- copyWithCounter(p.b, p.a, p.writeCounterA)
 	}()
 
 	// Wait for either side A or B to close, and return err
@@ -156,20 +188,29 @@ func (p *BidirectionalPipeline) Run() error {
 }
 
 // copyWithCounter performs an io.Copy from src to dst, and keeps track of the number of bytes written by writing to the *written pointer.
-func copyWithCounter(src io.Reader, dst io.Writer, written *int64) error {
-	count, err := io.Copy(io.MultiWriter(dst, CounterWriter{written}), src)
-	*written = count
+func copyWithCounter(src io.Reader, dst io.Writer, writeCounter chan<- uint64) error {
+	_, err := io.Copy(io.MultiWriter(dst, CounterWriter{writeCounter}), src)
 	return err
 }
 
 // CounterWriter is a no-op Writer that records how many bytes have been written to it
 type CounterWriter struct {
-	written *int64
+	writeCounter chan<- uint64
 }
 
-// Write does nothing with the input byte slice but records the length
+// Write does nothing with the input byte slice but records the length to the WriteCounter
 func (b CounterWriter) Write(p []byte) (n int, err error) {
 	count := len(p)
-	*b.written += int64(count)
+	b.writeCounter <- uint64(count)
 	return count, nil
+}
+
+func writeCountTo(counter <-chan uint64, n *uint64) {
+	for {
+		v, ok := <-counter
+		if !ok {
+			return
+		}
+		*n += v
+	}
 }
