@@ -56,7 +56,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 
 	errs := make(chan error)
 	go func() {
-		lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_addr": serverAddr})
+		lifecycle.BootEvent("sshd_start", stats.Tags{"listen_addr": serverAddr})
 		errs <- server.ListenAndServe()
 	}()
 
