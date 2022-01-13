@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
@@ -24,6 +25,7 @@ type TCPForwarder struct {
 	Lifecycle Lifecycle
 	Stats     stats.Stats
 
+	listener  *net.TCPListener
 	conns     map[string]net.Conn
 	close     chan struct{}
 	closeOnce sync.Once
@@ -43,8 +45,6 @@ func (s *TunnelSession) ID() string {
 }
 
 func (f *TCPForwarder) Listen() error {
-	f.close = make(chan struct{})
-
 	// Open tunnel TCP listener
 	f.Lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": f.BindAddr})
 	listenTcpAddr, err := net.ResolveTCPAddr("tcp", f.BindAddr)
@@ -55,38 +55,46 @@ func (f *TCPForwarder) Listen() error {
 	if err != nil {
 		return bootError{event: "listener_start", err: err}
 	}
-	defer listener.Close()
-
+	f.listener = listener
 	f.Lifecycle.Open()
-	defer f.Lifecycle.Close()
 
+	// Wait for close signal
+	f.close = make(chan struct{})
 	go func() {
-		for {
-			// Accept incoming tunnel connections
-			conn, err := listener.AcceptTCP()
-			if err != nil {
-				// TODO: Make sure that accept errors are logged.
-				break
-			}
-
-			// Configure keepalive
-			conn.SetKeepAlive(true)
-			conn.SetKeepAlivePeriod(f.KeepaliveInterval)
-
-			// Pass connections off to tunnel connection handler.
-			go func() {
-				session := &TunnelSession{
-					TCPConn: conn,
-					id:      uuid.New().String(),
-				}
-
-				f.handleSession(session)
-			}()
-		}
+		<-f.close
+		f.listener.Close()
+		f.Lifecycle.Close()
 	}()
 
-	<-f.close
 	return nil
+}
+
+func (f *TCPForwarder) Serve() error {
+	for {
+		if f.listener == nil {
+			return fmt.Errorf("cannot serve without first starting listener")
+		}
+
+		// Accept incoming tunnel connections
+		conn, err := f.listener.AcceptTCP()
+		if err != nil {
+			return errors.Wrap(err, "accept tcp")
+		}
+
+		// Configure keepalive
+		conn.SetKeepAlive(true)
+		conn.SetKeepAlivePeriod(f.KeepaliveInterval)
+
+		// Pass connections off to tunnel connection handler.
+		go func() {
+			session := &TunnelSession{
+				TCPConn: conn,
+				id:      uuid.New().String(),
+			}
+
+			f.handleSession(session)
+		}()
+	}
 }
 
 func (f *TCPForwarder) Close() error {

@@ -111,18 +111,20 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	}
 	defer forwarder.Close()
 
-	// Start the TCP Forwarder
+	// Start tunnel listener
+	if err := forwarder.Listen(); err != nil {
+		switch err.(type) {
+		case bootError:
+			lifecycle.BootError(err)
+		default:
+			lifecycle.Error(err)
+		}
+	}
+
+	// Start port forwarding
 	go func() {
 		defer cancel()
-
-		if err := forwarder.Listen(); err != nil {
-			switch err.(type) {
-			case bootError:
-				lifecycle.BootError(err)
-			default:
-				lifecycle.Error(err)
-			}
-		}
+		forwarder.Serve()
 	}()
 
 	// Wait for keepalive failure.
@@ -132,21 +134,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
 		}
 	}()
-
-	// Report tunnel state on every tick
-	//go func() {
-	//	statsTicker := time.NewTicker(10 * time.Second)
-	//	defer statsTicker.Stop()
-	//
-	//	for {
-	//		select {
-	//		case <-ctx.Done():
-	//			return
-	//		case <-statsTicker.C:
-	//			logNormalTunnelInstanceState(ctx, tunnelInstance)
-	//		}
-	//	}
-	//}()
 
 	<-ctx.Done()
 	return nil

@@ -100,17 +100,20 @@ func (h *ForwardedTCPHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server,
 			Stats:     h.stats,
 		}
 
-		// Start the TCP Forwarder
-		go func() {
-			if err := h.forwarder.Listen(); err != nil {
-				switch err.(type) {
-				case bootError:
-					h.lifecycle.BootError(err)
-				default:
-					h.lifecycle.Error(err)
-				}
+		// Start tunnel listener
+		if err := h.forwarder.Listen(); err != nil {
+			switch err.(type) {
+			case bootError:
+				h.lifecycle.BootError(err)
+			default:
+				h.lifecycle.Error(err)
 			}
-		}()
+
+			return false, []byte("bind address already in use")
+		}
+
+		// Start port forwarding
+		go h.forwarder.Serve()
 
 		// Graceful shutdown if connection ends
 		go func() {
