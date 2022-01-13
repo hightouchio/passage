@@ -6,6 +6,7 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"io"
 	"net"
 	"strconv"
 	"time"
@@ -91,71 +92,63 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	// Listen for incoming tunnel connections.
-	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
-	lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": listenAddr})
-	listenTcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: errors.Wrap(err, "resolve addr")}
-	}
-	listener, err := net.ListenTCP("tcp", listenTcpAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: err}
-	}
-	defer listener.Close()
+	// Configure TCPForwarder
+	forwarder := &TCPForwarder{
+		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort)),
+		KeepaliveInterval: 5 * time.Second,
 
-	// Trigger lifecycle
-	lifecycle.Open()
-	defer lifecycle.Close()
-
-	// tunnelInstance is the stateful connection handler
-	tunnelInstance := &normalTunnelInstance{
-		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
-		sshClient:        sshClient,
-		sshClientOptions: t.clientOptions,
-		conns:            make(map[string]tunnelConnection),
-	}
-	// Accept incoming connections and pass them off to tunnelInstance
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			default:
-				// Accept incoming tunnel connections
-				conn, err := listener.AcceptTCP()
-				if err != nil {
-					break
-				}
-				// Pass connections off to tunnel connection handler.
-				go tunnelInstance.HandleConnection(ctx, conn)
+		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
+		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
+			serviceConn, err := sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
+			if err != nil {
+				return nil, err
 			}
+			return serviceConn, err
+		},
+
+		Lifecycle: lifecycle,
+		Stats:     stats.GetStats(ctx),
+	}
+	defer forwarder.Close()
+
+	// Start the TCP Forwarder
+	go func() {
+		defer cancel()
+
+		if err := forwarder.Listen(); err != nil {
+			switch err.(type) {
+			case bootError:
+				lifecycle.BootError(err)
+			default:
+				lifecycle.Error(err)
+			}
+		}
+	}()
+
+	// Wait for keepalive failure.
+	go func() {
+		defer cancel()
+		if err := <-sshKeepaliveErr; err != nil {
+			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
 		}
 	}()
 
 	// Report tunnel state on every tick
-	go func() {
-		statsTicker := time.NewTicker(10 * time.Second)
-		defer statsTicker.Stop()
+	//go func() {
+	//	statsTicker := time.NewTicker(10 * time.Second)
+	//	defer statsTicker.Stop()
+	//
+	//	for {
+	//		select {
+	//		case <-ctx.Done():
+	//			return
+	//		case <-statsTicker.C:
+	//			logNormalTunnelInstanceState(ctx, tunnelInstance)
+	//		}
+	//	}
+	//}()
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-statsTicker.C:
-				logNormalTunnelInstanceState(ctx, tunnelInstance)
-			}
-		}
-	}()
-
-	select {
-	case err := <-sshKeepaliveErr:
-		lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
-
-	case <-ctx.Done():
-	}
-
+	<-ctx.Done()
 	return nil
 }
 

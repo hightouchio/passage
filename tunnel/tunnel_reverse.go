@@ -51,7 +51,6 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		return bootError{event: "configure_port_forwarding", err: err}
 	}
 	defer func() {
-		lifecycle.Close()
 		server.Close()
 	}()
 
@@ -82,7 +81,7 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 
 	// Match incoming auth requests against stored public keys.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		lifecycle.SessionEvent(ctx.SessionID(), "auth_request", stats.Tags{
+		lifecycle.BootEvent("auth_request", stats.Tags{
 			"session_id":  ctx.SessionID(),
 			"remote_addr": ctx.RemoteAddr().String(),
 			"user":        ctx.User(),
@@ -93,14 +92,14 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 		// Check if there's a public key match.
 		ok, err := t.isAuthorizedKey(ctx, incomingKey)
 		if err != nil {
-			lifecycle.SessionError(ctx.SessionID(), errors.Wrap(err, "validate authorized key"))
+			lifecycle.BootError(errors.Wrap(err, "validate authorized key"))
 			return false
 		}
 
 		if ok {
-			lifecycle.SessionEvent(ctx.SessionID(), "auth_success", stats.Tags{})
+			lifecycle.BootEvent("auth_success", stats.Tags{"session_id": ctx.SessionID()})
 		} else {
-			lifecycle.SessionEvent(ctx.SessionID(), "auth_reject", stats.Tags{})
+			lifecycle.BootEvent("auth_reject", stats.Tags{"session_id": ctx.SessionID()})
 		}
 
 		return ok
@@ -116,16 +115,6 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 
 	// SSH session handler. Hold connections open until cancelled.
 	server.Handler = func(s ssh.Session) {
-		lifecycle.Open()
-		defer func() {
-			lifecycle.SessionEvent("", "session_end", stats.Tags{})
-			lifecycle.Close()
-		}()
-
-		lifecycle.SessionEvent("", "session_start", stats.Tags{
-			"remote_addr": s.RemoteAddr().String(),
-		})
-
 		select {
 		case <-s.Context().Done(): // Block until session ends
 		case <-ctx.Done(): // or until server closes
@@ -133,7 +122,10 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 	}
 
 	// Add request handlers for reverse port forwarding
-	forwardHandler := &ForwardedTCPHandler{}
+	forwardHandler := &ForwardedTCPHandler{
+		stats:     stats.GetStats(ctx),
+		lifecycle: getCtxLifecycle(ctx),
+	}
 	server.RequestHandlers = map[string]ssh.RequestHandler{
 		"tcpip-forward":        forwardHandler.HandleSSHRequest,
 		"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
@@ -143,7 +135,7 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
 		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
 
-		lifecycle.SessionEvent(ctx.SessionID(), "port_forward_request", stats.Tags{
+		lifecycle.BootEvent("port_forward_request", stats.Tags{
 			"session_id":        ctx.SessionID(),
 			"remote_addr":       ctx.RemoteAddr().String(),
 			"request_bind_host": bindHost,

@@ -28,8 +28,11 @@ type Lifecycle interface {
 	// Error is called when an error causes the tunnel to crash
 	Error(err error)
 
-	// Close is called upon graceful shutdown of the tunnel
+	// Close is called upon the closure of a tunnel listener
 	Close()
+
+	// Stop is called upon graceful shutdown of the tunnel
+	Stop()
 }
 
 type bootError struct {
@@ -111,6 +114,10 @@ func (l lifecycleLogger) Close() {
 	l.st.SimpleEvent("close")
 }
 
+func (l lifecycleLogger) Stop() {
+	l.st.SimpleEvent("stop")
+}
+
 type NoopLifecycle struct {
 }
 
@@ -143,6 +150,10 @@ func (n NoopLifecycle) Error(err error) {
 }
 
 func (n NoopLifecycle) Close() {
+	// no-op
+}
+
+func (n NoopLifecycle) Stop() {
 	// no-op
 }
 

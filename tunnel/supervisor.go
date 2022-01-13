@@ -36,11 +36,9 @@ func (s *Supervisor) Start(ctx context.Context) {
 		ticker := time.NewTicker(s.Retry)
 		defer ticker.Stop()
 
-		s.Stats.SimpleEvent("supervisor.start")
 		for {
 			select {
 			case <-ctx.Done():
-				s.Stats.SimpleEvent("supervisor.stop")
 				return
 
 			default:
@@ -69,7 +67,9 @@ func (s *Supervisor) Start(ctx context.Context) {
 					default:
 						lifecycle.Error(err)
 					}
+					continue
 				}
+				lifecycle.Stop()
 			}
 		}
 	}()

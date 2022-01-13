@@ -2,12 +2,12 @@ package tunnel
 
 import (
 	"github.com/gliderlabs/ssh"
+	"github.com/hightouchio/passage/stats"
+	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
 	"io"
-	"log"
 	"net"
 	"strconv"
-	"sync"
 )
 
 // ForwardedTCPHandler can be enabled by creating a ForwardedTCPHandler and
@@ -16,8 +16,10 @@ import (
 //
 // From github.com/gliderlabs/ssh
 type ForwardedTCPHandler struct {
-	forwards map[string]net.Listener
-	sync.Mutex
+	forwarder *TCPForwarder
+
+	lifecycle Lifecycle
+	stats     stats.Stats
 }
 
 const (
@@ -47,11 +49,6 @@ type remoteForwardChannelData struct {
 
 func (h *ForwardedTCPHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
 	conn := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
-	h.Lock()
-	if h.forwards == nil {
-		h.forwards = make(map[string]net.Listener)
-	}
-	h.Unlock()
 
 	switch req.Type {
 	case "tcpip-forward":
@@ -61,97 +58,79 @@ func (h *ForwardedTCPHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server,
 			// TODO: log parse failure
 			return false, []byte{}
 		}
+
+		// Validate that the requested bind port is allowed for this tunnel.
 		if srv.ReversePortForwardingCallback == nil || !srv.ReversePortForwardingCallback(ctx, reqPayload.BindAddr, reqPayload.BindPort) {
 			return false, []byte("port forwarding is disabled")
 		}
 
-		addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			// TODO: log listen failure
-			return false, []byte{}
-		}
+		// Initiate TCPForwarder to listen for tunnel connections.
+		h.forwarder = &TCPForwarder{
+			BindAddr: net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort))),
 
-		_, destPortStr, _ := net.SplitHostPort(ln.Addr().String())
-		destPort, _ := strconv.Atoi(destPortStr)
+			// Implement GetUpstreamConn by opening a channel on the SSH connection.
+			GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
+				// Address of tunnel client.
+				originAddr, originPortStr, _ := net.SplitHostPort(tConn.RemoteAddr().String())
+				originPort, _ := strconv.Atoi(originPortStr)
 
-		// Register forward
-		h.Lock()
-		h.forwards[addr] = ln
-		h.Unlock()
+				// Construct port forwarding response
+				payload := remoteForwardChannelData{
+					// Tunnel listener address
+					DestAddr: reqPayload.BindAddr,
+					DestPort: reqPayload.BindPort,
 
-		// Wait for channel closure to derregister
-		go func() {
-			<-ctx.Done()
-			h.Lock()
-			ln, ok := h.forwards[addr]
-			h.Unlock()
-			if ok {
-				ln.Close()
-			}
-		}()
-
-		go func() {
-			for {
-				c, err := ln.Accept()
-				if err != nil {
-					// TODO: log accept failure
-					break
-				}
-
-				originAddr, orignPortStr, _ := net.SplitHostPort(c.RemoteAddr().String())
-				originPort, _ := strconv.Atoi(orignPortStr)
-				payload := gossh.Marshal(&remoteForwardChannelData{
-					DestAddr:   reqPayload.BindAddr,
-					DestPort:   uint32(destPort),
+					// Tunnel client address
 					OriginAddr: originAddr,
 					OriginPort: uint32(originPort),
-				})
+				}
 
-				go func() {
-					ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, payload)
-					if err != nil {
-						// TODO: log failure to open channel
-						log.Println(err)
-						c.Close()
-						return
-					}
-					go gossh.DiscardRequests(reqs)
+				// Open SSH channel.
+				ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, gossh.Marshal(payload))
+				if err != nil {
+					return nil, errors.Wrap(err, "could not open channel")
+				}
+				// Discard all other incoming requests.
+				go gossh.DiscardRequests(reqs)
 
-					go func() {
-						defer ch.Close()
-						defer c.Close()
-						io.Copy(ch, c)
-					}()
+				return ch, nil
+			},
 
-					go func() {
-						defer ch.Close()
-						defer c.Close()
-						io.Copy(c, ch)
-					}()
-				}()
+			Lifecycle: h.lifecycle,
+			Stats:     h.stats,
+		}
+
+		// Start the TCP Forwarder
+		go func() {
+			if err := h.forwarder.Listen(); err != nil {
+				switch err.(type) {
+				case bootError:
+					h.lifecycle.BootError(err)
+				default:
+					h.lifecycle.Error(err)
+				}
 			}
-
-			// Clean out forward
-			h.Lock()
-			delete(h.forwards, addr)
-			h.Unlock()
 		}()
-		return true, gossh.Marshal(&remoteForwardSuccess{uint32(destPort)})
+
+		// Graceful shutdown if connection ends
+		go func() {
+			<-ctx.Done()
+			h.forwarder.Close()
+		}()
+
+		return true, gossh.Marshal(&remoteForwardSuccess{reqPayload.BindPort})
 
 	case "cancel-tcpip-forward":
 		var reqPayload remoteForwardCancelRequest
 		if err := gossh.Unmarshal(req.Payload, &reqPayload); err != nil {
-			// TODO: log parse failure
 			return false, []byte{}
 		}
-		addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
-		h.Lock()
-		ln, ok := h.forwards[addr]
-		h.Unlock()
-		if ok {
-			ln.Close()
+		//addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
+
+		if h.forwarder != nil {
+			h.forwarder.Close()
 		}
+
 		return true, nil
 
 	default:
