@@ -1,6 +1,6 @@
 module github.com/hightouchio/passage
 
-go 1.17
+go 1.18
 
 require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
