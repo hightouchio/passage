@@ -13,7 +13,7 @@ type Tunnel interface {
 	GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error)
 
 	GetID() uuid.UUID
-	Equal(interface{}) bool
+	Equal(any) bool
 }
 
 type TunnelOptions struct {

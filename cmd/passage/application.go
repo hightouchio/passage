@@ -95,7 +95,7 @@ func initDefaults(config *viper.Viper) {
 }
 
 // startApplication boots the application dependency injection framework and executes the bootFuncs
-func startApplication(bootFuncs ...interface{}) error {
+func startApplication(bootFuncs ...any) error {
 	app := fx.New(
 		// Define dependencies.
 		fx.Provide(

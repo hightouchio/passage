@@ -85,8 +85,8 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 }
 
 type UpdateTunnelRequest struct {
-	ID           uuid.UUID              `json:"id"`
-	UpdateFields map[string]interface{} `json:"-"`
+	ID           uuid.UUID      `json:"id"`
+	UpdateFields map[string]any `json:"-"`
 }
 
 type UpdateTunnelResponse struct {

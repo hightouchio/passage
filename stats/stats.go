@@ -16,7 +16,7 @@ type Stats struct {
 	eventTags Tags
 }
 
-type Tags map[string]interface{}
+type Tags map[string]any
 
 func New(client statsd.ClientInterface, logger *logrus.Logger) Stats {
 	return Stats{

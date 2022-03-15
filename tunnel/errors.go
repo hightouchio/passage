@@ -10,7 +10,7 @@ func newRequestErrors() *requestErrors {
 	return &requestErrors{make([]error, 0)}
 }
 
-func (e *requestErrors) addError(m string, args ...interface{}) {
+func (e *requestErrors) addError(m string, args ...any) {
 	e.errors = append(e.errors, fmt.Errorf(m, args...))
 }
 
