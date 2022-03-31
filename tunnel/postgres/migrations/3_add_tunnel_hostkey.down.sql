@@ -1,0 +1,1 @@
+ALTER TABLE passage.tunnels DROP COLUMN host_key;
