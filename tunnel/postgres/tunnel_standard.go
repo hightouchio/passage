@@ -21,6 +21,7 @@ type NormalTunnel struct {
 	SSHPort     int            `db:"ssh_port"`
 	ServiceHost string         `db:"service_host"`
 	ServicePort int            `db:"service_port"`
+	HostKey     string         `db:"host_key"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {
@@ -91,3 +92,11 @@ func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, er
 }
 
 var normalTunnelAllowedFields = []string{"enabled", "service_host", "service_port", "ssh_host", "ssh_port", "ssh_user"}
+
+func (c Client) GetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID) ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (c Client) SetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID, key []byte) error {
+	return nil
+}

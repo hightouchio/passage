@@ -1,8 +1,10 @@
 package tunnel
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -77,7 +79,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		&ssh.ClientConfig{
 			User:            sshUser,
 			Auth:            []ssh.AuthMethod{ssh.PublicKeys(keySigners...)},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: t.validateHostKey,
 		},
 	)
 	if err != nil {
@@ -177,10 +179,39 @@ func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService)
 	}, nil
 }
 
+func (t NormalTunnel) validateHostKey(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Host key of remote SSH server.
+	incomingKey := key.Marshal()
+
+	savedKey, err := t.services.SQL.GetNormalTunnelHostKey(ctx, t.ID)
+	if err != nil {
+		return errors.Wrap(err, "could not get saved host key")
+	}
+	// If we haven't seen this server before, we won't have a host key to compare, so we should save the
+	// incoming key and allow the connection.
+	if len(savedKey) == 0 {
+		if err := t.services.SQL.SetNormalTunnelHostKey(ctx, t.ID, incomingKey); err != nil {
+			return errors.Wrap(err, "could not save host key")
+		}
+		return nil
+	}
+	if !bytes.Equal(savedKey, incomingKey) {
+		return fmt.Errorf("unexpected host key from server")
+	}
+
+	return nil
+}
+
 // NormalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type NormalTunnelServices struct {
 	SQL interface {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+
+		GetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID) ([]byte, error)
+		SetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID, key []byte) error
 	}
 	Keystore keystore.Keystore
 	Logger   *logrus.Logger
