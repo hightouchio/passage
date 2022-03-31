@@ -94,9 +94,15 @@ func (c Client) ListNormalActiveTunnels(ctx context.Context) ([]NormalTunnel, er
 var normalTunnelAllowedFields = []string{"enabled", "service_host", "service_port", "ssh_host", "ssh_port", "ssh_user"}
 
 func (c Client) GetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID) ([]byte, error) {
-	return []byte{}, nil
+	var key []byte
+	result := c.db.QueryRowxContext(ctx, `SELECT host_key FROM passage.tunnels WHERE id=$1`, tunnelID)
+	if err := result.Scan(&key); err != nil {
+		return []byte{}, err
+	}
+	return key, nil
 }
 
 func (c Client) SetNormalTunnelHostKey(ctx context.Context, tunnelID uuid.UUID, key []byte) error {
-	return nil
+	_, err := c.db.ExecContext(ctx, "UPDATE passage.tunnels SET host_key=$2 WHERE id=$1;", tunnelID, key)
+	return err
 }
