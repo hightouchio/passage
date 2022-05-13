@@ -43,9 +43,9 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		},
 	}
 
-	if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
-		return bootError{event: "configure_auth", err: err}
-	}
+	//if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
+	//	return bootError{event: "configure_auth", err: err}
+	//}
 
 	if err := t.configurePortForwarding(ctx, server, t.serverOptions, tunnelOptions); err != nil {
 		return bootError{event: "configure_port_forwarding", err: err}
@@ -122,13 +122,10 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 	}
 
 	// Add request handlers for reverse port forwarding
-	forwardHandler := &ForwardedTCPHandler{
-		stats:     stats.GetStats(ctx),
-		lifecycle: getCtxLifecycle(ctx),
-	}
+	handler := sshForwardingHandler(ctx)
 	server.RequestHandlers = map[string]ssh.RequestHandler{
-		"tcpip-forward":        forwardHandler.HandleSSHRequest,
-		"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
+		"tcpip-forward":        handler,
+		"cancel-tcpip-forward": handler,
 	}
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).

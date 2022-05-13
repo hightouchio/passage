@@ -33,18 +33,20 @@ type TCPForwarder struct {
 	sync.RWMutex
 }
 
-type TunnelSession struct {
+type TCPSession struct {
 	*net.TCPConn
 	id string
 
 	bytesSent, bytesReceived uint64
 }
 
-func (s *TunnelSession) ID() string {
+func (s *TCPSession) ID() string {
 	return s.id
 }
 
 func (f *TCPForwarder) Listen() error {
+	f.close = make(chan struct{})
+
 	// Open tunnel TCP listener
 	f.Lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": f.BindAddr})
 	listenTcpAddr, err := net.ResolveTCPAddr("tcp", f.BindAddr)
@@ -59,7 +61,6 @@ func (f *TCPForwarder) Listen() error {
 	f.Lifecycle.Open()
 
 	// Wait for close signal
-	f.close = make(chan struct{})
 	go func() {
 		<-f.close
 		f.listener.Close()
@@ -87,7 +88,7 @@ func (f *TCPForwarder) Serve() error {
 
 		// Pass connections off to tunnel connection handler.
 		go func() {
-			session := &TunnelSession{
+			session := &TCPSession{
 				TCPConn: conn,
 				id:      uuid.New().String(),
 			}
@@ -102,9 +103,9 @@ func (f *TCPForwarder) Close() error {
 	return nil
 }
 
-// handleSession takes a TunnelSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
+// handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleSession(session *TunnelSession) {
+func (f *TCPForwarder) handleSession(session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
 	defer func() {
@@ -131,7 +132,7 @@ func (f *TCPForwarder) handleSession(session *TunnelSession) {
 	}
 	defer upstream.Close()
 
-	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TunnelSession
+	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
 	pipeline := NewBidirectionalPipeline(session, upstream)
 
 	done := make(chan struct{})
