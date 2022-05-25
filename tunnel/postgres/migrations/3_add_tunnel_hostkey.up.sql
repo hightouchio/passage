@@ -1,0 +1,1 @@
+ALTER TABLE passage.tunnels ADD COLUMN host_key TEXT;
