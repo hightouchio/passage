@@ -112,6 +112,7 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 
 func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
+	st := stats.GetStats(ctx)
 
 	// SSH session handler. Hold connections open until cancelled.
 	server.Handler = func(s ssh.Session) {
@@ -122,10 +123,13 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 	}
 
 	// Add request handlers for reverse port forwarding
-	handler := sshForwardingHandler(ctx)
+	handler := &ReverseForwardingHandler{
+		stats:     st,
+		lifecycle: lifecycle,
+	}
 	server.RequestHandlers = map[string]ssh.RequestHandler{
-		"tcpip-forward":        handler,
-		"cancel-tcpip-forward": handler,
+		"tcpip-forward":        handler.HandleSSHRequest,
+		"cancel-tcpip-forward": handler.HandleSSHRequest,
 	}
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
