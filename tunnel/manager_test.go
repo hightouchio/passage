@@ -127,3 +127,7 @@ func (m *mockTunnel) Equal(i interface{}) bool {
 	}
 	return m.id == v.id && m.port == v.port
 }
+
+func (m *mockTunnel) GetError() *string {
+	return nil
+}

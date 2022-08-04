@@ -21,8 +21,9 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int `json:"sshdPort"`
-	TunnelPort int `json:"tunnelPort"`
+	SSHDPort   int     `json:"sshdPort"`
+	TunnelPort int     `json:"tunnelPort"`
+	Error      *string `json:"error"`
 
 	services      ReverseTunnelServices
 	serverOptions SSHServerOptions
@@ -232,4 +233,8 @@ func (t ReverseTunnel) logger() *logrus.Entry {
 		"tunnel_type": Reverse,
 		"tunnel_id":   t.ID.String(),
 	})
+}
+
+func (t ReverseTunnel) GetError() *string {
+	return t.Error
 }
