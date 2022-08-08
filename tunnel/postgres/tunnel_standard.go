@@ -21,6 +21,7 @@ type NormalTunnel struct {
 	SSHPort     int            `db:"ssh_port"`
 	ServiceHost string         `db:"service_host"`
 	ServicePort int            `db:"service_port"`
+	Error       sql.NullString `db:"error"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {

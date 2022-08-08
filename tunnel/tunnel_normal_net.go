@@ -61,7 +61,6 @@ func (i *normalTunnelInstance) HandleConnection(ctx context.Context, conn *net.T
 		if err := conn.SetLinger(0); err != nil {
 			st.ErrorEvent("error", errors.Wrap(err, "error SetLinger"))
 		}
-
 		st.ErrorEvent("error", errors.Wrap(err, "upstream connection error"))
 		return
 	}
