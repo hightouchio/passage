@@ -1,14 +1,12 @@
 package tunnel
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"io"
 	"net"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -115,30 +113,14 @@ func (f *TCPForwarder) Close() error {
 func (f *TCPForwarder) handleSession(session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
-	// If we're running in proxy mode, lets first read a CONNECT request from the byte stream, then forward subsequent data on
+	// If we're running in proxy mode, lets first read a CONNECT request from the client, then forward subsequent data on
 	// 	to the upstream.
 	if f.HTTPSProxyEnabled {
-		// Read the initial HTTP request from the tunnel client.
-		req, err := http.ReadRequest(bufio.NewReader(session))
-		if err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not read request"))
+		if err := handleProxyConnect(session); err != nil {
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not handle proxy CONNECT"))
 			return
 		}
-
-		// Assert that we receive a CONNECT request
-		if req.Method != "CONNECT" {
-			f.Lifecycle.SessionError(session.ID(), errors.Errorf("expected HTTP CONNECT request, received HTTP %s", req.Method))
-			return
-		}
-		f.Lifecycle.SessionEvent(session.ID(), "received HTTP CONNECT request", stats.Tags{})
-
-		// Respond with 200 OK to allow client to continue sending data
-		writer := bufio.NewWriter(session)
-		if _, err := writer.Write([]byte("HTTP/1.1 200 OK\n\n")); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not write OK response"))
-			return
-		}
-		writer.Flush()
+		f.Lifecycle.SessionEvent(session.ID(), "HTTP proxy connection established", stats.Tags{})
 	}
 
 	defer func() {
