@@ -121,7 +121,7 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 		}
 	}()
 
-	// Forwarding initiator (simulate reverse tunnel host)
+	// Forwarding initiator (simulate tunnel client)
 	go func() {
 		<-listenerOpened
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", bindHost, tunnelPort))
