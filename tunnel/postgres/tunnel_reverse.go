@@ -15,7 +15,7 @@ type ReverseTunnel struct {
 	Enabled    bool         `db:"enabled"`
 	TunnelPort int          `db:"tunnel_port"`
 	SSHDPort   int          `db:"sshd_port"`
-	HTTPSProxy bool         `db:"https_proxy"`
+	HTTPProxy  bool         `db:"http_proxy"`
 	LastUsedAt sql.NullTime `db:"last_used_at"`
 }
 

@@ -12,10 +12,10 @@ import (
 )
 
 type ReverseForwardingHandler struct {
-	httpsProxyEnabled bool
-	stats             stats.Stats
-	lifecycle         Lifecycle
-	forwards          map[string]*TCPForwarder
+	httpProxyEnabled bool
+	stats            stats.Stats
+	lifecycle        Lifecycle
+	forwards         map[string]*TCPForwarder
 	sync.Mutex
 }
 
@@ -45,8 +45,8 @@ func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Se
 
 		// Initiate TCPForwarder to listen for tunnel connections.
 		forwarder := &TCPForwarder{
-			BindAddr:          bindAddr,
-			HTTPSProxyEnabled: h.httpsProxyEnabled,
+			BindAddr:         bindAddr,
+			HTTPProxyEnabled: h.httpProxyEnabled,
 
 			// Implement GetUpstreamConn by opening a channel on the SSH connection.
 			GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
