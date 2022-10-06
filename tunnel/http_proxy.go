@@ -17,7 +17,7 @@ func handleProxyConnect(rw io.ReadWriter) error {
 	}
 
 	// Assert that we receive a CONNECT request
-	if req.Method != "CONNECT" {
+	if req.Method != http.MethodConnect {
 		return errors.Errorf("expected HTTP CONNECT request, received HTTP %s", req.Method)
 	}
 
