@@ -1,12 +1,14 @@
 package tunnel
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -70,6 +72,8 @@ func (f *TCPForwarder) Listen() error {
 	return nil
 }
 
+const httpProxyEnabled = true
+
 func (f *TCPForwarder) Serve() error {
 	for {
 		if f.listener == nil {
@@ -107,6 +111,25 @@ func (f *TCPForwarder) Close() error {
 // and forwards packets between the two.
 func (f *TCPForwarder) handleSession(session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
+
+	if httpProxyEnabled {
+		req, err := http.ReadRequest(bufio.NewReader(session))
+		if err != nil {
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not read request"))
+			return
+		}
+
+		if req.Method == "CONNECT" {
+			f.Lifecycle.SessionEvent(session.ID(), "received CONNECT request", stats.Tags{})
+
+			writer := bufio.NewWriter(session)
+			if _, err := writer.Write([]byte("HTTP/1.1 200 OK\n\n")); err != nil {
+				f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not write OK response"))
+				return
+			}
+			writer.Flush()
+		}
+	}
 
 	defer func() {
 		session.Close()
