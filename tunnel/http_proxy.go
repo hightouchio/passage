@@ -8,17 +8,26 @@ import (
 	"net/http/httputil"
 )
 
-// handleProxyConnect reads a HTTP CONNECT request from the incoming io.ReadWriter and errors if it doesn't find that request
-func handleProxyConnect(rw io.ReadWriter) error {
+// handleHttpProxy proxies HTTP requests by passing bytes directly to the upstream, or by handling an initial CONNECT request
+func handleHttpProxy(rw io.ReadWriter, upstream io.Writer) error {
 	// Read the initial HTTP request from the tunnel client.
 	req, err := http.ReadRequest(bufio.NewReader(rw))
 	if err != nil {
 		return errors.Wrap(err, "could not read request")
 	}
 
-	// Assert that we receive a CONNECT request
+	// If we didn't receive a CONNECT request, just pass the bytes on to the upstream like before
 	if req.Method != http.MethodConnect {
-		return errors.Errorf("expected HTTP CONNECT request, received HTTP %s", req.Method)
+		requestBytes, err := httputil.DumpRequest(req, true)
+		if err != nil {
+			return errors.Wrap(err, "could not dump initial request bytes")
+		}
+		if _, err := upstream.Write(requestBytes); err != nil {
+			return errors.Wrap(err, "could not proxy initial request to upstream")
+		}
+
+		// If we've successfully written the original request to the upstream, we can stop proxying.
+		return nil
 	}
 
 	// Respond with 200 OK to allow client to continue sending data

@@ -113,16 +113,6 @@ func (f *TCPForwarder) Close() error {
 func (f *TCPForwarder) handleSession(session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
-	// If we're running in proxy mode, lets first read a CONNECT request from the client, then forward subsequent data on
-	// 	to the upstream.
-	if f.HTTPSProxyEnabled {
-		if err := handleProxyConnect(session); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not handle proxy CONNECT"))
-			return
-		}
-		f.Lifecycle.SessionEvent(session.ID(), "HTTP proxy connection established", stats.Tags{})
-	}
-
 	defer func() {
 		session.Close()
 		// Record pipeline metrics to logs and statsd
@@ -149,6 +139,16 @@ func (f *TCPForwarder) handleSession(session *TCPSession) {
 
 	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
 	pipeline := NewBidirectionalPipeline(session, upstream)
+
+	// If we're running in proxy mode, lets first read a CONNECT request from the client, then forward subsequent data on
+	// 	to the upstream.
+	if f.HTTPSProxyEnabled {
+		if err := handleHttpProxy(session, upstream); err != nil {
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not handle proxy CONNECT"))
+			return
+		}
+		f.Lifecycle.SessionEvent(session.ID(), "HTTP proxy connection established", stats.Tags{})
+	}
 
 	done := make(chan struct{})
 	go func() {
