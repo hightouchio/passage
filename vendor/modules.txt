@@ -134,6 +134,9 @@ github.com/mitchellh/mapstructure
 # github.com/pelletier/go-toml v1.9.3
 ## explicit; go 1.12
 github.com/pelletier/go-toml
+# github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
+## explicit
+github.com/phayes/freeport
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
