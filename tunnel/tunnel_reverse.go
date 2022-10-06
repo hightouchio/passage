@@ -22,8 +22,9 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int `json:"sshdPort"`
-	TunnelPort int `json:"tunnelPort"`
+	SSHDPort   int  `json:"sshdPort"`
+	TunnelPort int  `json:"tunnelPort"`
+	HTTPSProxy bool `json:"httpsProxy"`
 
 	services      ReverseTunnelServices
 	serverOptions SSHServerOptions
@@ -124,8 +125,9 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 
 	// Add request handlers for reverse port forwarding
 	handler := &ReverseForwardingHandler{
-		stats:     st,
-		lifecycle: lifecycle,
+		httpsProxyEnabled: t.HTTPSProxy,
+		stats:             st,
+		lifecycle:         lifecycle,
 	}
 	server.RequestHandlers = map[string]ssh.RequestHandler{
 		"tcpip-forward":        handler.HandleSSHRequest,
@@ -225,7 +227,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
+	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPSProxy == t2.HTTPSProxy
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -236,6 +238,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		Enabled:    record.Enabled,
 		TunnelPort: record.TunnelPort,
 		SSHDPort:   record.SSHDPort,
+		HTTPSProxy: record.HTTPSProxy,
 	}
 }
 

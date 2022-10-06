@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE passage.tunnels ADD COLUMN https_proxy BOOLEAN DEFAULT FALSE;
+ALTER TABLE passage.reverse_tunnels ADD COLUMN https_proxy BOOLEAN DEFAULT FALSE;
+
+COMMIT;

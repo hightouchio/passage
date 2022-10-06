@@ -27,6 +27,10 @@ type TCPForwarder struct {
 	Lifecycle Lifecycle
 	Stats     stats.Stats
 
+	// HTTPSProxyEnabled determines if this forwarder should run as an HTTPS proxy
+	//	https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
+	HTTPSProxyEnabled bool
+
 	listener  *net.TCPListener
 	conns     map[string]net.Conn
 	close     chan struct{}
@@ -72,8 +76,6 @@ func (f *TCPForwarder) Listen() error {
 	return nil
 }
 
-const httpProxyEnabled = true
-
 func (f *TCPForwarder) Serve() error {
 	for {
 		if f.listener == nil {
@@ -96,6 +98,7 @@ func (f *TCPForwarder) Serve() error {
 				TCPConn: conn,
 				id:      uuid.New().String(),
 			}
+			defer session.Close()
 
 			f.handleSession(session)
 		}()
@@ -112,23 +115,30 @@ func (f *TCPForwarder) Close() error {
 func (f *TCPForwarder) handleSession(session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
-	if httpProxyEnabled {
+	// If we're running in proxy mode, lets first read a CONNECT request from the byte stream, then forward subsequent data on
+	// 	to the upstream.
+	if f.HTTPSProxyEnabled {
+		// Read the initial HTTP request from the tunnel client.
 		req, err := http.ReadRequest(bufio.NewReader(session))
 		if err != nil {
 			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not read request"))
 			return
 		}
 
-		if req.Method == "CONNECT" {
-			f.Lifecycle.SessionEvent(session.ID(), "received CONNECT request", stats.Tags{})
-
-			writer := bufio.NewWriter(session)
-			if _, err := writer.Write([]byte("HTTP/1.1 200 OK\n\n")); err != nil {
-				f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not write OK response"))
-				return
-			}
-			writer.Flush()
+		// Assert that we receive a CONNECT request
+		if req.Method != "CONNECT" {
+			f.Lifecycle.SessionError(session.ID(), errors.Errorf("expected HTTP CONNECT request, received HTTP %s", req.Method))
+			return
 		}
+		f.Lifecycle.SessionEvent(session.ID(), "received HTTP CONNECT request", stats.Tags{})
+
+		// Respond with 200 OK to allow client to continue sending data
+		writer := bufio.NewWriter(session)
+		if _, err := writer.Write([]byte("HTTP/1.1 200 OK\n\n")); err != nil {
+			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not write OK response"))
+			return
+		}
+		writer.Flush()
 	}
 
 	defer func() {
