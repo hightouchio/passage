@@ -22,6 +22,7 @@ type NormalTunnel struct {
 	ServiceHost string         `db:"service_host"`
 	ServicePort int            `db:"service_port"`
 	HTTPProxy   bool           `db:"http_proxy"`
+	Error       sql.NullString `db:"error"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {

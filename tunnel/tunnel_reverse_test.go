@@ -32,18 +32,18 @@ func TestReverseTunnel_Basic(t *testing.T) {
 	)
 }
 
+const (
+	bindHost = "0.0.0.0"
+)
+
 func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions []testInstruction) {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const (
-		sshdPort   = 5678
-		tunnelPort = 6789
-
-		bindHost = "0.0.0.0"
-	)
+	sshdPort := getFreePort()
+	tunnelPort := getFreePort()
 
 	// Server
 	go func() {
@@ -121,7 +121,7 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 		}
 	}()
 
-	// Forwarding initiator (simulate reverse tunnel host)
+	// Forwarding initiator (simulate tunnel client)
 	go func() {
 		<-listenerOpened
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", bindHost, tunnelPort))

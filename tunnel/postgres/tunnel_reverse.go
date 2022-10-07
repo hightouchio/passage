@@ -10,13 +10,14 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID         uuid.UUID    `db:"id"`
-	CreatedAt  time.Time    `db:"created_at"`
-	Enabled    bool         `db:"enabled"`
-	TunnelPort int          `db:"tunnel_port"`
-	SSHDPort   int          `db:"sshd_port"`
-	HTTPProxy  bool         `db:"http_proxy"`
-	LastUsedAt sql.NullTime `db:"last_used_at"`
+	ID         uuid.UUID      `db:"id"`
+	CreatedAt  time.Time      `db:"created_at"`
+	Enabled    bool           `db:"enabled"`
+	TunnelPort int            `db:"tunnel_port"`
+	SSHDPort   int            `db:"sshd_port"`
+	HTTPProxy  bool           `db:"http_proxy"`
+	Error      sql.NullString `db:"error"`
+	LastUsedAt sql.NullTime   `db:"last_used_at"`
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {

@@ -37,12 +37,9 @@ func runNormalTunnelTest(t *testing.T, clientInstructions, serviceInstructions [
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	const (
-		bindHost    = "0.0.0.0"
-		tunnelPort  = 4567
-		sshdPort    = 5678
-		servicePort = 6789
-	)
+	tunnelPort := getFreePort()
+	sshdPort := getFreePort()
+	servicePort := getFreePort()
 
 	tunnelClientConn := make(chan net.Conn)
 	tunnelServiceConn := make(chan net.Conn)
@@ -144,4 +141,9 @@ type MockNormalDatabase struct {
 
 func (d MockNormalDatabase) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error) {
 	return []postgres.Key{}, nil
+}
+
+func (d MockNormalDatabase) UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error {
+	// no op
+	return nil
 }

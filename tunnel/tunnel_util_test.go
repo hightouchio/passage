@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"bufio"
+	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -65,4 +66,13 @@ func (tc tunneledConn) runAssertions(t *testing.T, wg *sync.WaitGroup, instructi
 			return
 		}
 	}
+}
+
+// get a free port from the OS
+func getFreePort() int {
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		panic(errors.Wrap(err, "could not get free port"))
+	}
+	return port
 }

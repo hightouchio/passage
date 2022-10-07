@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/pkg/errors"
 	"net/http"
 	"time"
@@ -30,6 +29,7 @@ func (m *healthcheckManager) CheckHealth(ctx context.Context) error {
 		for name, check := range m.healthchecks {
 			if err := check(ctx); err != nil {
 				cerr <- errors.Wrapf(err, "%s is unhealthy", name)
+				return
 			}
 		}
 		cerr <- nil
@@ -37,7 +37,7 @@ func (m *healthcheckManager) CheckHealth(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("context cancelled")
+		return ctx.Err()
 	case err := <-cerr:
 		return err
 	}
