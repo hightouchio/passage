@@ -30,11 +30,24 @@ type NormalTunnel struct {
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
 
+	Error *string `json:"error"`
+
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
+	err := t.start(ctx, options)
+	if err != nil {
+		if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, err.Error()); err != nil {
+			return errors.Wrap(err, "failed to persist tunnel start error")
+		}
+		return err
+	}
+	return nil
+}
+
+func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -84,11 +97,12 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		return bootError{event: "ssh_connect", err: err}
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
+
 	// Start sending keepalive packets to the upstream SSH server
-	sshKeepaliveErr := make(chan error)
 	go func() {
 		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			sshKeepaliveErr <- err
+			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
+			cancel()
 		}
 	}()
 
@@ -127,13 +141,10 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		forwarder.Serve()
 	}()
 
-	// Wait for keepalive failure.
-	go func() {
-		defer cancel()
-		if err := <-sshKeepaliveErr; err != nil {
-			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
-		}
-	}()
+	// Set tunnel error to empty once it successfully initialized the session
+	if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, ""); err != nil {
+		return errors.Wrap(err, "failed to unset tunnel error to empty")
+	}
 
 	<-ctx.Done()
 	return nil
@@ -181,6 +192,7 @@ func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService)
 type NormalTunnelServices struct {
 	SQL interface {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+		UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error
 	}
 	Keystore keystore.Keystore
 	Logger   *logrus.Logger
@@ -245,4 +257,8 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 
 func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
+}
+
+func (t NormalTunnel) GetError() *string {
+	return t.Error
 }

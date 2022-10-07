@@ -27,6 +27,8 @@ type ReverseTunnel struct {
 
 	services      ReverseTunnelServices
 	serverOptions SSHServerOptions
+
+	Error *string `json:"error"`
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
@@ -43,9 +45,9 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		},
 	}
 
-	//if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
-	//	return bootError{event: "configure_auth", err: err}
-	//}
+	if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
+		return bootError{event: "configure_auth", err: err}
+	}
 
 	if err := t.configurePortForwarding(ctx, server, t.serverOptions, tunnelOptions); err != nil {
 		return bootError{event: "configure_port_forwarding", err: err}
@@ -241,4 +243,8 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 
 func (t ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
+}
+
+func (t ReverseTunnel) GetError() *string {
+	return t.Error
 }

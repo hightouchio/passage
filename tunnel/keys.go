@@ -18,10 +18,10 @@ func (k KeyPair) Base64PrivateKey() string {
 	return base64.StdEncoding.EncodeToString(k.PrivateKey)
 }
 
-const clientKeyPairBits = 2048
+const privateKeyBits = 4096
 
 func GenerateKeyPair() (KeyPair, error) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, clientKeyPairBits)
+	privateKey, err := rsa.GenerateKey(rand.Reader, privateKeyBits)
 	if err != nil {
 		return KeyPair{}, err
 	}
@@ -38,7 +38,7 @@ func GenerateKeyPair() (KeyPair, error) {
 	return KeyPair{
 		PublicKey: ssh.MarshalAuthorizedKey(publicKey),
 		PrivateKey: pem.EncodeToMemory(&pem.Block{
-			Type:    "RSA PRIVATE KEY",
+			Type:    "OPENSSH PRIVATE KEY",
 			Headers: nil,
 			Bytes:   x509.MarshalPKCS1PrivateKey(privateKey),
 		}),
