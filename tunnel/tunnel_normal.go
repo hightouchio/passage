@@ -23,14 +23,14 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int    `json:"tunnelPort"`
-	SSHUser     string `json:"sshUser"`
-	SSHHost     string `json:"sshHost"`
-	SSHPort     int    `json:"sshPort"`
-	ServiceHost string `json:"serviceHost"`
-	ServicePort int    `json:"servicePort"`
-
-	Error *string `json:"error"`
+	TunnelPort  int     `json:"tunnelPort"`
+	SSHUser     string  `json:"sshUser"`
+	SSHHost     string  `json:"sshHost"`
+	SSHPort     int     `json:"sshPort"`
+	ServiceHost string  `json:"serviceHost"`
+	ServicePort int     `json:"servicePort"`
+	HTTPProxy   bool    `json:"httpProxy"`
+	Error       *string `json:"error"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
@@ -109,6 +109,7 @@ func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 	// Configure TCPForwarder
 	forwarder := &TCPForwarder{
 		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort)),
+		HTTPProxyEnabled:  t.HTTPProxy,
 		KeepaliveInterval: 5 * time.Second,
 
 		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
@@ -226,7 +227,8 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHPort == t2.SSHPort &&
 		t.TunnelPort == t2.TunnelPort &&
 		t.ServiceHost == t2.ServiceHost &&
-		t.ServicePort == t2.ServicePort
+		t.ServicePort == t2.ServicePort &&
+		t.HTTPProxy == t2.HTTPProxy
 }
 
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
@@ -237,6 +239,7 @@ func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 		SSHPort:     tunnel.SSHPort,
 		ServiceHost: tunnel.ServiceHost,
 		ServicePort: tunnel.ServicePort,
+		HTTPProxy:   tunnel.HTTPProxy,
 	}
 }
 
@@ -252,6 +255,7 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
+		HTTPProxy:   record.HTTPProxy,
 	}
 }
 

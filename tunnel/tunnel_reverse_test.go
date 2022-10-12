@@ -57,7 +57,7 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 		keystore := keystoreInMemory.New()
 		database := MockReverseDatabase{}
 
-		var tunnel = &ReverseTunnel{
+		tunnel := &ReverseTunnel{
 			ID:         uuid.New(),
 			SSHDPort:   sshdPort,
 			TunnelPort: tunnelPort,

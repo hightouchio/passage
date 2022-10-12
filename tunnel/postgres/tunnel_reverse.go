@@ -15,8 +15,9 @@ type ReverseTunnel struct {
 	Enabled    bool           `db:"enabled"`
 	TunnelPort int            `db:"tunnel_port"`
 	SSHDPort   int            `db:"sshd_port"`
-	LastUsedAt sql.NullTime   `db:"last_used_at"`
+	HTTPProxy  bool           `db:"http_proxy"`
 	Error      sql.NullString `db:"error"`
+	LastUsedAt sql.NullTime   `db:"last_used_at"`
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {
