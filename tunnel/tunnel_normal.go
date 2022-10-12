@@ -23,15 +23,14 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int    `json:"tunnelPort"`
-	SSHUser     string `json:"sshUser"`
-	SSHHost     string `json:"sshHost"`
-	SSHPort     int    `json:"sshPort"`
-	ServiceHost string `json:"serviceHost"`
-	ServicePort int    `json:"servicePort"`
-	HTTPProxy   bool   `json:"httpProxy"`
-
-	Error *string `json:"error"`
+	TunnelPort  int     `json:"tunnelPort"`
+	SSHUser     string  `json:"sshUser"`
+	SSHHost     string  `json:"sshHost"`
+	SSHPort     int     `json:"sshPort"`
+	ServiceHost string  `json:"serviceHost"`
+	ServicePort int     `json:"servicePort"`
+	HTTPProxy   bool    `json:"httpProxy"`
+	Error       *string `json:"error"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
