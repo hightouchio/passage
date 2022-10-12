@@ -10,8 +10,9 @@ import (
 )
 
 type SSHServerOptions struct {
-	BindHost string
-	HostKey  []byte
+	BindHost     string
+	HostKey      []byte
+	AuthDisabled bool
 }
 
 func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {

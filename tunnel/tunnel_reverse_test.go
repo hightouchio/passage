@@ -57,7 +57,7 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 		keystore := keystoreInMemory.New()
 		database := MockReverseDatabase{}
 
-		tunnel := &ReverseTunnel{
+		var tunnel = &ReverseTunnel{
 			ID:         uuid.New(),
 			SSHDPort:   sshdPort,
 			TunnelPort: tunnelPort,
@@ -67,7 +67,8 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 				Logger:   logrus.New(),
 			},
 			serverOptions: SSHServerOptions{
-				BindHost: bindHost,
+				BindHost:     bindHost,
+				AuthDisabled: true,
 			},
 		}
 		if err := tunnel.Start(ctx, TunnelOptions{BindHost: bindHost}); err != nil {

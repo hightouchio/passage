@@ -45,8 +45,10 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		},
 	}
 
-	if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
-		return bootError{event: "configure_auth", err: err}
+	if !t.serverOptions.AuthDisabled {
+		if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
+			return bootError{event: "configure_auth", err: err}
+		}
 	}
 
 	if err := t.configurePortForwarding(ctx, server, t.serverOptions, tunnelOptions); err != nil {
