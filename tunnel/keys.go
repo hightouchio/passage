@@ -38,7 +38,7 @@ func GenerateKeyPair() (KeyPair, error) {
 	return KeyPair{
 		PublicKey: ssh.MarshalAuthorizedKey(publicKey),
 		PrivateKey: pem.EncodeToMemory(&pem.Block{
-			Type:    "OPENSSH PRIVATE KEY",
+			Type:    "RSA PRIVATE KEY",
 			Headers: nil,
 			Bytes:   x509.MarshalPKCS1PrivateKey(privateKey),
 		}),
