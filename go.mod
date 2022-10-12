@@ -1,6 +1,6 @@
 module github.com/hightouchio/passage
 
-go 1.17
+go 1.18
 
 require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.0
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1

@@ -6,6 +6,7 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"io"
 	"net"
 	"strconv"
 	"time"
@@ -22,13 +23,14 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int     `json:"tunnelPort"`
-	SSHUser     string  `json:"sshUser"`
-	SSHHost     string  `json:"sshHost"`
-	SSHPort     int     `json:"sshPort"`
-	ServiceHost string  `json:"serviceHost"`
-	ServicePort int     `json:"servicePort"`
-	Error       *string `json:"error"`
+	TunnelPort  int    `json:"tunnelPort"`
+	SSHUser     string `json:"sshUser"`
+	SSHHost     string `json:"sshHost"`
+	SSHPort     int    `json:"sshPort"`
+	ServiceHost string `json:"serviceHost"`
+	ServicePort int    `json:"servicePort"`
+
+	Error *string `json:"error"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
@@ -46,14 +48,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 }
 
 func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
-	st := stats.GetStats(ctx)
+	lifecycle := getCtxLifecycle(ctx)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Get a list of key signers to use for authentication
 	keySigners, err := t.getAuthSigners(ctx)
 	if err != nil {
-		return errors.Wrap(err, "generate key signers")
+		return bootError{event: "generate_auth_signers", err: err}
 	}
 
 	// Determine SSH user to use, either from the database or from the config.
@@ -64,17 +67,16 @@ func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 		sshUser = t.clientOptions.User
 	}
 
-	// Resolve dial address
+	// Dial external SSH server
+	lifecycle.BootEvent("remote_dial", stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort})
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
-		return errors.Wrapf(err, "could not resolve addr %s", addr)
+		return bootError{event: "remote_dial", err: errors.Wrapf(err, "resolve addr %s", addr)}
 	}
-	// Dial external SSH server
-	st.WithEventTags(stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort}).SimpleEvent("dial")
 	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		return errors.Wrap(err, "dial remote")
+		return bootError{event: "remote_dial", err: err}
 	}
 	defer sshConn.Close()
 	// Configure TCP keepalive for SSH connection
@@ -82,7 +84,7 @@ func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	st.WithEventTags(stats.Tags{"ssh_user": sshUser, "auth_method_count": len(keySigners)}).SimpleEvent("ssh_connect")
+	lifecycle.BootEvent("ssh_connect", stats.Tags{"ssh_user": sshUser, "ssh_auth_method_count": len(keySigners)})
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -92,84 +94,59 @@ func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 		},
 	)
 	if err != nil {
-		return errors.Wrap(err, "ssh connect")
+		return bootError{event: "ssh_connect", err: err}
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
+
 	// Start sending keepalive packets to the upstream SSH server
-	sshKeepaliveErr := make(chan error)
 	go func() {
 		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			sshKeepaliveErr <- err
+			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
+			cancel()
 		}
 	}()
 
-	// Resolve tunnel listener addr.
-	listenAddr := net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort))
-	listenTcpAddr, err := net.ResolveTCPAddr("tcp", listenAddr)
-	if err != nil {
-		return errors.Wrap(err, "resolve tunnel listen addr")
-	}
+	// Configure TCPForwarder
+	forwarder := &TCPForwarder{
+		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort)),
+		KeepaliveInterval: 5 * time.Second,
 
-	// Listen for incoming tunnel connections.
-	st.WithEventTags(stats.Tags{"listen_addr": listenAddr}).SimpleEvent("listener.start")
-	listener, err := net.ListenTCP("tcp", listenTcpAddr)
-	if err != nil {
-		return errors.Wrap(err, "tunnel listen")
-	}
-	defer listener.Close()
-	// tunnelInstance is the stateful connection handler
-	tunnelInstance := &normalTunnelInstance{
-		upstreamAddr:     net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)),
-		sshClient:        sshClient,
-		sshClientOptions: t.clientOptions,
-		conns:            make(map[uuid.UUID]tunnelConnection),
-	}
-
-	// Accept incoming connections and pass them off to tunnelInstance
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			default:
-				// Accept incoming tunnel connections
-				conn, err := listener.AcceptTCP()
-				if err != nil {
-					break
-				}
-				// Pass connections off to tunnel connection handler.
-				go tunnelInstance.HandleConnection(ctx, conn)
+		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
+		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
+			serviceConn, err := sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
+			if err != nil {
+				return nil, err
 			}
-		}
-	}()
+			return serviceConn, err
+		},
 
-	// Report tunnel state on every tick
+		Lifecycle: lifecycle,
+		Stats:     stats.GetStats(ctx),
+	}
+	defer forwarder.Close()
+
+	// Start tunnel listener
+	if err := forwarder.Listen(); err != nil {
+		switch err.(type) {
+		case bootError:
+			lifecycle.BootError(err)
+		default:
+			lifecycle.Error(err)
+		}
+	}
+
+	// Start port forwarding
 	go func() {
-		statsTicker := time.NewTicker(10 * time.Second)
-		defer statsTicker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-statsTicker.C:
-				logNormalTunnelInstanceState(tunnelInstance, st.WithTags(stats.Tags{"tunnel_id": t.ID.String()}), t.logger())
-			}
-		}
+		defer cancel()
+		forwarder.Serve()
 	}()
 
 	// Set tunnel error to empty once it successfully initialized the session
 	if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, ""); err != nil {
 		return errors.Wrap(err, "failed to unset tunnel error to empty")
 	}
-	select {
-	case err := <-sshKeepaliveErr:
-		st.ErrorEvent("keepalive_failed", err)
 
-	case <-ctx.Done():
-	}
-
+	<-ctx.Done()
 	return nil
 }
 
@@ -193,7 +170,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 
-		t.logger().WithField("fingerprint", ssh.FingerprintSHA256(signer.PublicKey())).Debug("upstream connection with SSH key")
 		signers[i] = signer
 	}
 
@@ -276,26 +252,11 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
-		Error:       convertString(record.Error),
 	}
-}
-
-func convertString(s sql.NullString) *string {
-	if s.Valid {
-		return &s.String
-	}
-	return nil
 }
 
 func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
-}
-
-func (t NormalTunnel) logger() *logrus.Entry {
-	return t.services.Logger.WithFields(logrus.Fields{
-		"tunnel_type": Normal,
-		"tunnel_id":   t.ID.String(),
-	})
 }
 
 func (t NormalTunnel) GetError() *string {
