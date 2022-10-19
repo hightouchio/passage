@@ -247,7 +247,7 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 
 	// Conditionally enable pprof profiling
 	if config.GetBool(ConfigPprofEnabled) {
-		router.HandleFunc("/debug/pprof/", pprof.Index)
+		router.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
 		router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
 		router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
