@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
+	"net/http/pprof"
 
 	"github.com/hightouchio/passage/tunnel/discovery"
 	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
@@ -34,9 +35,10 @@ import (
 )
 
 const (
-	ConfigEnv        = "env"
-	ConfigHTTPAddr   = "http.addr"
-	ConfigApiEnabled = "api.enabled"
+	ConfigEnv          = "env"
+	ConfigHTTPAddr     = "http.addr"
+	ConfigApiEnabled   = "api.enabled"
+	ConfigPprofEnabled = "pprof.enabled"
 
 	ConfigTunnelBindHost        = "tunnel.bind_host"
 	ConfigTunnelRefreshInterval = "tunnel.refresh_interval"
@@ -242,6 +244,15 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 
 	// Log every request.
 	router.Use(LoggingMiddleware(logger))
+
+	// Conditionally enable pprof profiling
+	if config.GetBool(ConfigPprofEnabled) {
+		router.HandleFunc("/debug/pprof/", pprof.Index)
+		router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
