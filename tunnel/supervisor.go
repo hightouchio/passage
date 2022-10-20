@@ -47,29 +47,32 @@ func (s *Supervisor) Start(ctx context.Context) {
 				case <-initialRun:
 				}
 
-				// Build visibility interfaces
-				st := s.Stats.
-					WithPrefix("tunnel").
-					WithTags(stats.Tags{
-						"tunnel_id": s.Tunnel.GetID().String(),
-					})
-				lifecycle := lifecycleLogger{st}
+				func() {
+					// Build visibility interfaces
+					st := s.Stats.
+						WithPrefix("tunnel").
+						WithTags(stats.Tags{
+							"tunnel_id": s.Tunnel.GetID().String(),
+						})
+					lifecycle := lifecycleLogger{st}
+					lifecycle.Start()
+					defer lifecycle.Stop()
 
-				// Inject visibility interfaces into context
-				ctx = stats.InjectContext(ctx, st)
-				ctx = injectCtxLifecycle(ctx, lifecycle)
+					// Inject visibility interfaces into context
+					ctx, cancel := context.WithCancel(ctx)
+					defer cancel()
+					ctx = stats.InjectContext(ctx, st)
+					ctx = injectCtxLifecycle(ctx, lifecycle)
 
-				lifecycle.Start()
-				if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-					switch err.(type) {
-					case bootError:
-						lifecycle.BootError(err)
-					default:
-						lifecycle.Error(err)
+					if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
+						switch err.(type) {
+						case bootError:
+							lifecycle.BootError(err)
+						default:
+							lifecycle.Error(err)
+						}
 					}
-					continue
-				}
-				lifecycle.Stop()
+				}()
 			}
 		}
 	}()
