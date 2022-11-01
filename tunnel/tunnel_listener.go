@@ -66,16 +66,6 @@ func (l *TCPListener) Start(ctx context.Context) error {
 			l.conns <- conn
 		}
 	}
-
-	//f.listener = listener
-	//f.Lifecycle.Open()
-
-	// Wait for close signal
-	//go func() {
-	//	<-f.close
-	//	f.listener.Close()
-	//	f.Lifecycle.Close()
-	//}()
 }
 
 // Accept gets the next available net.Conn
