@@ -52,73 +52,75 @@ func (s *Supervisor) Start(ctx context.Context) {
 				case <-initialRun:
 				}
 
-				func() {
-					// Build visibility interfaces
-					st := s.Stats.
-						WithPrefix("tunnel").
-						WithTags(stats.Tags{
-							"tunnel_id": s.Tunnel.GetID().String(),
-						})
-					lifecycle := lifecycleLogger{st}
-
-					// Inject visibility interfaces into context
-					ctx := stats.InjectContext(ctx, st)
-					ctx = injectCtxLifecycle(ctx, lifecycle)
-
-					lifecycle.Start()
-					defer lifecycle.Stop()
-
-					errs := make(chan error)
-
-					// Start SSH tunnel
-					go func() {
-						if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-							errs <- err
-						}
-					}()
-
-					// Start tunnel client listener
-					listener := &TCPListener{
-						BindHost:          s.TunnelOptions.BindHost,
-						KeepaliveInterval: 5 * time.Second,
-						Lifecycle:         lifecycle,
-						conns:             make(chan net.Conn),
-					}
-					go func() {
-						if err := listener.Start(ctx); err != nil {
-							errs <- err
-						}
-					}()
-
-					// Create a TCP forwarder between the two
-					forwarder := &TCPForwarder{
-						Listener: listener,
-						GetUpstreamConn: func(c net.Conn) (io.ReadWriteCloser, error) {
-							return s.Tunnel.Dial(c, "localhost:3000")
-						},
-						Lifecycle: lifecycle,
-						Stats:     st,
-					}
-					go func() {
-						if err := forwarder.Start(ctx); err != nil {
-							errs <- err
-						}
-					}()
-
-					select {
-					case err := <-errs:
-						lifecycle.BootError(err)
-						return
-					case <-ctx.Done():
-						return
-					}
-				}()
+				// Run the tunnel once. If the tunnel goes down, this will return, at which point we'll retry.
+				runTunnel(ctx, s.Tunnel, s.TunnelOptions, s.Stats)
 			}
 		}
 	}()
 
 	initialRun <- true
 	<-s.stop
+}
+
+func runTunnel(ctx context.Context, tunnel Tunnel, tunnelOptions TunnelOptions, st stats.Stats) {
+	// Build visibility interfaces
+	st = st.
+		WithPrefix("tunnel").
+		WithTags(stats.Tags{
+			"tunnel_id": tunnel.GetID().String(),
+		})
+	ctx = stats.InjectContext(ctx, st)
+
+	// Create a lifecycle logger
+	lifecycle := lifecycleLogger{st}
+	ctx = injectCtxLifecycle(ctx, lifecycle)
+
+	lifecycle.Start()
+	defer lifecycle.Stop()
+
+	errs := make(chan error)
+
+	// Start SSH tunnel
+	go func() {
+		if err := tunnel.Start(ctx, tunnelOptions); err != nil {
+			errs <- err
+		}
+	}()
+
+	// Start tunnel client listener
+	listener := &TCPListener{
+		BindHost:          tunnelOptions.BindHost,
+		KeepaliveInterval: 5 * time.Second,
+		Lifecycle:         lifecycle,
+		conns:             make(chan net.Conn),
+	}
+	go func() {
+		if err := listener.Start(ctx); err != nil {
+			errs <- err
+		}
+	}()
+
+	forwarder := &TCPForwarder{
+		Listener: listener,
+		GetUpstreamConn: func(c net.Conn) (io.ReadWriteCloser, error) {
+			return tunnel.Dial(c, "localhost:3000")
+		},
+		Lifecycle: lifecycle,
+		Stats:     st,
+	}
+	go func() {
+		if err := forwarder.Start(ctx); err != nil {
+			errs <- err
+		}
+	}()
+
+	select {
+	case err := <-errs:
+		lifecycle.BootError(err)
+		return
+	case <-ctx.Done():
+		return
+	}
 }
 
 func (s *Supervisor) Stop() {
