@@ -2,9 +2,11 @@ package tunnel
 
 import (
 	"context"
+	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"io"
 	"net"
 	"strconv"
 	"time"
@@ -22,58 +24,69 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int  `json:"sshdPort"`
-	TunnelPort int  `json:"tunnelPort"`
-	HTTPProxy  bool `json:"httpProxy"`
-
+	SSHDPort      int `json:"sshdPort"`
+	TunnelPort    int `json:"tunnelPort"`
 	services      ReverseTunnelServices
 	serverOptions SSHServerOptions
 
-	Error *string `json:"error"`
+	upstream  *reverseTunnelUpstream
+	sshServer *ssh.Server
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
+func (t *ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Configure SSHD
 	serverAddr := net.JoinHostPort(t.serverOptions.BindHost, strconv.Itoa(t.SSHDPort))
-	server := &ssh.Server{
+	t.sshServer = &ssh.Server{
 		Addr: serverAddr,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
 			"session": ssh.DefaultSessionHandler,
 		},
 	}
+	defer t.sshServer.Close()
 
-	if !t.serverOptions.AuthDisabled {
-		if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
-			return bootError{event: "configure_auth", err: err}
-		}
-	}
+	// TODO: Re-enable auth
+	//if err := t.configureAuth(ctx, t.serverOptions); err != nil {
+	//	return nil, bootError{event: "configure_auth", err: err}
+	//}
 
-	if err := t.configurePortForwarding(ctx, server, t.serverOptions, tunnelOptions); err != nil {
+	forwardingHandler, err := t.configurePortForwarding(ctx, t.serverOptions, tunnelOptions)
+	if err != nil {
 		return bootError{event: "configure_port_forwarding", err: err}
 	}
+	t.upstream = forwardingHandler.upstream
+	defer t.upstream.Close()
 
-	defer server.Close()
+	lifecycle.BootEvent("sshd_start", stats.Tags{"listen_addr": serverAddr})
 
 	errs := make(chan error)
 	go func() {
-		lifecycle.BootEvent("sshd_start", stats.Tags{"listen_addr": serverAddr})
-		errs <- server.ListenAndServe()
+		if err := t.sshServer.ListenAndServe(); err != nil {
+			errs <- bootError{event: "sshd_start", err: errors.Wrap(err, "could not start SSH server")}
+		}
 	}()
 
 	select {
-	case <-ctx.Done():
-		return nil
-
 	case err := <-errs:
 		return err
+	case <-ctx.Done():
+		return nil
 	}
 }
 
-func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions) error {
+// Dial creates a new upstream connection to a given address
+func (t *ReverseTunnel) Dial(downstream net.Conn, addr string) (io.ReadWriteCloser, error) {
+	if t.upstream == nil {
+		return nil, fmt.Errorf("reverse tunnel does not have an upstream yet")
+	}
+
+	return t.upstream.Dial(downstream, addr)
+}
+
+func (t *ReverseTunnel) configureAuth(ctx context.Context, serverOptions SSHServerOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
 
 	// Init host key signing
@@ -81,10 +94,10 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 	if err != nil {
 		return errors.Wrap(err, "could not get host signers")
 	}
-	server.HostSigners = hostSigners
+	t.sshServer.HostSigners = hostSigners
 
 	// Match incoming auth requests against stored public keys.
-	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
+	if err := t.sshServer.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		lifecycle.BootEvent("auth_request", stats.Tags{
 			"session_id":  ctx.SessionID(),
 			"remote_addr": ctx.RemoteAddr().String(),
@@ -114,12 +127,12 @@ func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, se
 	return nil
 }
 
-func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) error {
+func (t *ReverseTunnel) configurePortForwarding(ctx context.Context, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) (*ReverseForwardingHandler, error) {
 	lifecycle := getCtxLifecycle(ctx)
 	st := stats.GetStats(ctx)
 
 	// SSH session handler. Hold connections open until cancelled.
-	server.Handler = func(s ssh.Session) {
+	t.sshServer.Handler = func(s ssh.Session) {
 		select {
 		case <-s.Context().Done(): // Block until session ends
 		case <-ctx.Done(): // or until server closes
@@ -128,17 +141,20 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 
 	// Add request handlers for reverse port forwarding
 	handler := &ReverseForwardingHandler{
-		httpProxyEnabled: t.HTTPProxy,
-		stats:            st,
-		lifecycle:        lifecycle,
+		tlsConfig: tunnelOptions.TLSConfig,
+		stats:     st,
+		lifecycle: lifecycle,
+		upstream:  &reverseTunnelUpstream{},
 	}
-	server.RequestHandlers = map[string]ssh.RequestHandler{
+	t.sshServer.RequestHandlers = map[string]ssh.RequestHandler{
 		"tcpip-forward":        handler.HandleSSHRequest,
 		"cancel-tcpip-forward": handler.HandleSSHRequest,
 	}
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
-	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
+	t.sshServer.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
+		// TODO: Reimplement reverse port forwarding check
+		return true
 		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
 
 		lifecycle.BootEvent("port_forward_request", stats.Tags{
@@ -154,11 +170,11 @@ func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.
 		return success
 	}
 
-	return nil
+	return handler, nil
 }
 
 // compare incoming connection key to the key authorized for this tunnel configuration
-func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
+func (t *ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
 	authorizedKeys, err := t.services.SQL.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get keys from db")
@@ -186,7 +202,7 @@ func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKe
 	return false, nil
 }
 
-func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
+func (t *ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
 	tunnelHost, err := discovery.ResolveTunnelHost(Reverse, t.ID)
 	if err != nil {
 		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
@@ -207,7 +223,7 @@ type ReverseTunnelServices struct {
 	Logger   *logrus.Logger
 }
 
-func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
+func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]*ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
 		sts, err := f(ctx)
 		if err != nil {
@@ -224,31 +240,26 @@ func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunne
 	}
 }
 
-func (t ReverseTunnel) Equal(v interface{}) bool {
-	t2, ok := v.(ReverseTunnel)
+func (t *ReverseTunnel) Equal(v interface{}) bool {
+	t2, ok := v.(*ReverseTunnel)
 	if !ok {
 		return false
 	}
 
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPProxy == t2.HTTPProxy
+	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
-func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
-	return ReverseTunnel{
+func reverseTunnelFromSQL(record postgres.ReverseTunnel) *ReverseTunnel {
+	return &ReverseTunnel{
 		ID:         record.ID,
 		CreatedAt:  record.CreatedAt,
 		Enabled:    record.Enabled,
 		TunnelPort: record.TunnelPort,
 		SSHDPort:   record.SSHDPort,
-		HTTPProxy:  record.HTTPProxy,
 	}
 }
 
-func (t ReverseTunnel) GetID() uuid.UUID {
+func (t *ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
-}
-
-func (t ReverseTunnel) GetError() *string {
-	return t.Error
 }

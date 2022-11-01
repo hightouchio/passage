@@ -20,14 +20,14 @@ type API struct {
 }
 
 // GetNormalTunnels is a ListFunc which returns the set of NormalTunnel[] that should be run.
-func (s API) GetNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
+func (s API) GetNormalTunnels(ctx context.Context) ([]*NormalTunnel, error) {
 	normalTunnels, err := s.SQL.ListNormalActiveTunnels(ctx)
 	if err != nil {
-		return []NormalTunnel{}, err
+		return []*NormalTunnel{}, err
 	}
 
 	// convert all the SQL records to our primary struct
-	tunnels := make([]NormalTunnel, len(normalTunnels))
+	tunnels := make([]*NormalTunnel, len(normalTunnels))
 	for i, record := range normalTunnels {
 		tunnel := normalTunnelFromSQL(record)
 		tunnels[i] = tunnel
@@ -37,14 +37,14 @@ func (s API) GetNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
 }
 
 // GetReverseTunnels is a ListFunc which returns the set of ReverseTunnel[] that should be run.
-func (s API) GetReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
+func (s API) GetReverseTunnels(ctx context.Context) ([]*ReverseTunnel, error) {
 	reverseTunnels, err := s.SQL.ListReverseActiveTunnels(ctx)
 	if err != nil {
-		return []ReverseTunnel{}, err
+		return []*ReverseTunnel{}, err
 	}
 
 	// convert all the SQL records to our primary struct
-	tunnels := make([]ReverseTunnel, len(reverseTunnels))
+	tunnels := make([]*ReverseTunnel, len(reverseTunnels))
 	for i, record := range reverseTunnels {
 		tunnel := reverseTunnelFromSQL(record)
 		tunnels[i] = tunnel

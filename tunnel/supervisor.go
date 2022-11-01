@@ -2,7 +2,10 @@ package tunnel
 
 import (
 	"context"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
+	"io"
+	"net"
 	"time"
 )
 
@@ -11,16 +14,18 @@ type Supervisor struct {
 	Tunnel        Tunnel
 	TunnelOptions TunnelOptions
 	Retry         time.Duration
+	Consul        *consul.Client
 	Stats         stats.Stats
 
 	stop chan bool
 }
 
-func NewSupervisor(tunnel Tunnel, st stats.Stats, options TunnelOptions, retry time.Duration) *Supervisor {
+func NewSupervisor(tunnel Tunnel, consul *consul.Client, st stats.Stats, options TunnelOptions, retry time.Duration) *Supervisor {
 	return &Supervisor{
 		Tunnel:        tunnel,
 		TunnelOptions: options,
 		Retry:         retry,
+		Consul:        consul,
 		Stats:         st,
 
 		stop: make(chan bool),
@@ -60,15 +65,52 @@ func (s *Supervisor) Start(ctx context.Context) {
 				ctx = injectCtxLifecycle(ctx, lifecycle)
 
 				lifecycle.Start()
-				if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-					switch err.(type) {
-					case bootError:
-						lifecycle.BootError(err)
-					default:
-						lifecycle.Error(err)
+
+				errs := make(chan error)
+
+				// Start SSH tunnel
+				go func() {
+					if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
+						errs <- err
 					}
+				}()
+
+				// Start tunnel client listener
+				listener := &TCPListener{
+					BindHost:          s.TunnelOptions.BindHost,
+					KeepaliveInterval: 5 * time.Second,
+					Lifecycle:         lifecycle,
+					conns:             make(chan net.Conn),
+				}
+				go func() {
+					if err := listener.Start(ctx); err != nil {
+						errs <- err
+					}
+				}()
+
+				// Create a TCP forwarder between the two
+				forwarder := &TCPForwarder{
+					Listener: listener,
+					GetUpstreamConn: func(c net.Conn) (io.ReadWriteCloser, error) {
+						return s.Tunnel.Dial(c, "localhost:3000")
+					},
+					Lifecycle: lifecycle,
+					Stats:     st,
+				}
+				go func() {
+					if err := forwarder.Start(ctx); err != nil {
+						errs <- err
+					}
+				}()
+
+				select {
+				case err := <-errs:
+					lifecycle.BootError(err)
+					continue
+				case <-ctx.Done():
 					continue
 				}
+
 				lifecycle.Stop()
 			}
 		}

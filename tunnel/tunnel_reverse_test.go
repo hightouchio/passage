@@ -67,8 +67,7 @@ func runReverseTunnelTest(t *testing.T, clientInstructions, serviceInstructions 
 				Logger:   logrus.New(),
 			},
 			serverOptions: SSHServerOptions{
-				BindHost:     bindHost,
-				AuthDisabled: true,
+				BindHost: bindHost,
 			},
 		}
 		if err := tunnel.Start(ctx, TunnelOptions{BindHost: bindHost}); err != nil {

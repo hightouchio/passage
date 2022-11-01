@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -17,6 +18,8 @@ type ListFunc func(ctx context.Context) ([]Tunnel, error)
 type Manager struct {
 	// ListFunc is the function that will list all Tunnels that should be running
 	ListFunc
+
+	Consul *consul.Client
 
 	// TunnelOptions are the config options for the tunnel server we run.
 	TunnelOptions
@@ -35,10 +38,11 @@ type Manager struct {
 	stop chan bool
 }
 
-func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(st stats.Stats, consul *consul.Client, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
 		Stats:    st,
 		ListFunc: listFunc,
+		Consul:   consul,
 
 		TunnelOptions:         tunnelOptions,
 		RefreshDuration:       refreshDuration,
@@ -102,7 +106,7 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 			st := m.Stats.WithEventTags(stats.Tags{"tunnel_id": tunnelID.String()})
 			ctx = stats.InjectContext(ctx, st)
 
-			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)
+			supervisor := NewSupervisor(tunnel, m.Consul, st, m.TunnelOptions, m.TunnelRestartInterval)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}

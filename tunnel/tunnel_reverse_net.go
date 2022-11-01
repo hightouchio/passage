@@ -1,6 +1,8 @@
 package tunnel
 
 import (
+	"crypto/tls"
+	"fmt"
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
@@ -12,22 +14,94 @@ import (
 )
 
 type ReverseForwardingHandler struct {
-	httpProxyEnabled bool
-	stats            stats.Stats
-	lifecycle        Lifecycle
-	forwards         map[string]*TCPForwarder
+	tlsConfig *tls.Config
+	stats     stats.Stats
+	lifecycle Lifecycle
+	upstream  *reverseTunnelUpstream
 	sync.Mutex
 }
 
-func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
-	h.Lock()
-	if h.forwards == nil {
-		h.forwards = make(map[string]*TCPForwarder)
+type reverseTunnelUpstream struct {
+	conns map[string]*gossh.ServerConn
+	mux   sync.RWMutex
+}
+
+// Register an SSH connection as a forwarding target for an upstream address
+func (r *reverseTunnelUpstream) Register(addr string, conn *gossh.ServerConn) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+	if r.conns == nil {
+		r.conns = make(map[string]*gossh.ServerConn)
 	}
-	h.Unlock()
+	r.conns[addr] = conn
+}
+
+// Deregister the reverse tunnel upstream for an address
+func (r *reverseTunnelUpstream) Deregister(addr string) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+	conn, ok := r.conns[addr]
+	if !ok {
+		return
+	}
+	delete(r.conns, addr)
+	conn.Close()
+}
+
+func (r *reverseTunnelUpstream) Close() {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+	for addr, conn := range r.conns {
+		conn.Close()
+		delete(r.conns, addr)
+	}
+}
+
+func (r *reverseTunnelUpstream) Dial(downstream net.Conn, addr string) (io.ReadWriteCloser, error) {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+
+	// Find the corresponding SSH connection to use to forward this connection
+	conn, ok := r.conns[addr]
+	if !ok {
+		return nil, fmt.Errorf("forwarding not configured for addr %s", addr)
+	}
+
+	// Address of requested upstream connection.
+	destAddr, destPortStr, _ := net.SplitHostPort(addr)
+	destPort, _ := strconv.Atoi(destPortStr)
+
+	// Address of tunnel client.
+	originAddr, originPortStr, _ := net.SplitHostPort(downstream.RemoteAddr().String())
+	originPort, _ := strconv.Atoi(originPortStr)
+
+	// Construct port forwarding response
+	payload := remoteForwardChannelData{
+		// Tunnel listener address
+		DestAddr: destAddr,
+		DestPort: uint32(destPort),
+
+		// Tunnel client address
+		OriginAddr: originAddr,
+		OriginPort: uint32(originPort),
+	}
+
+	// Open SSH channel.
+	ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, gossh.Marshal(payload))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not open channel")
+	}
+	// Discard all other incoming requests.
+	go gossh.DiscardRequests(reqs)
+
+	return ch, nil
+}
+
+func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
 	conn := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
 
 	switch req.Type {
+	// Handle a remote forwarding request
 	case sshTCPForwardOpenEvent:
 		// Parse remote forward request
 		var reqPayload remoteForwardRequest
@@ -43,88 +117,18 @@ func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Se
 
 		bindAddr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
 
-		// Initiate TCPForwarder to listen for tunnel connections.
-		forwarder := &TCPForwarder{
-			BindAddr:         bindAddr,
-			HTTPProxyEnabled: h.httpProxyEnabled,
-
-			// Implement GetUpstreamConn by opening a channel on the SSH connection.
-			GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
-				// Address of tunnel client.
-				originAddr, originPortStr, _ := net.SplitHostPort(tConn.RemoteAddr().String())
-				originPort, _ := strconv.Atoi(originPortStr)
-
-				// Construct port forwarding response
-				payload := remoteForwardChannelData{
-					// Tunnel listener address
-					DestAddr: reqPayload.BindAddr,
-					DestPort: reqPayload.BindPort,
-
-					// Tunnel client address
-					OriginAddr: originAddr,
-					OriginPort: uint32(originPort),
-				}
-
-				// Open SSH channel.
-				ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, gossh.Marshal(payload))
-				if err != nil {
-					return nil, errors.Wrap(err, "could not open channel")
-				}
-				// Discard all other incoming requests.
-				go gossh.DiscardRequests(reqs)
-
-				return ch, nil
-			},
-
-			Lifecycle: h.lifecycle,
-			Stats:     h.stats,
-		}
-
-		// Start tunnel listener
-		if err := forwarder.Listen(); err != nil {
-			switch err.(type) {
-			case bootError:
-				h.lifecycle.BootError(err)
-			default:
-				h.lifecycle.Error(err)
-			}
-
-			return false, []byte("bind address already in use")
-		}
-
-		h.Lock()
-		h.forwards[bindAddr] = forwarder
-		h.Unlock()
-
-		// Start port forwarding
-		go forwarder.Serve()
-
-		// Graceful shutdown if connection ends
-		go func() {
-			<-ctx.Done()
-			h.Lock()
-			f, ok := h.forwards[bindAddr]
-			h.Unlock()
-			if ok {
-				f.Close()
-			}
-		}()
+		// Register this connection as available for forwarding to the given BindAddr
+		h.upstream.Register(bindAddr, conn)
 
 		return true, gossh.Marshal(&remoteForwardSuccess{reqPayload.BindPort})
 
+	// Handle a remote forwarding close request
 	case sshTCPForwardCloseEvent:
 		var reqPayload remoteForwardCancelRequest
 		if err := gossh.Unmarshal(req.Payload, &reqPayload); err != nil {
 			return false, []byte{}
 		}
-
-		addr := net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort)))
-		h.Lock()
-		ln, ok := h.forwards[addr]
-		h.Unlock()
-		if ok {
-			ln.Close()
-		}
+		h.upstream.Deregister(net.JoinHostPort(reqPayload.BindAddr, strconv.Itoa(int(reqPayload.BindPort))))
 		return true, nil
 
 	default:

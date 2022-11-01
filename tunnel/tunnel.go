@@ -2,14 +2,19 @@ package tunnel
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
+	"io"
+	"net"
 )
 
 type Tunnel interface {
 	Start(context.Context, TunnelOptions) error
+	Dial(downstream net.Conn, addr string) (io.ReadWriteCloser, error)
+
 	GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error)
 
 	GetID() uuid.UUID
@@ -18,7 +23,8 @@ type Tunnel interface {
 }
 
 type TunnelOptions struct {
-	BindHost string
+	BindHost  string
+	TLSConfig *tls.Config
 }
 
 // ConnectionDetails describes how the SaaS will use the tunnel

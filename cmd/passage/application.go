@@ -21,6 +21,8 @@ import (
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
 
+	consul "github.com/hashicorp/consul/api"
+
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -120,6 +122,8 @@ func startApplication(bootFuncs ...interface{}) error {
 			newConfig,
 			// Logger.
 			newLogger,
+			// Consul
+			newConsulAPI,
 		),
 
 		// Execute entrypoint functions.
@@ -270,6 +274,12 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 	})
 
 	return router
+}
+
+// newConsulAPI initialises a Consul API client
+func newConsulAPI(lc fx.Lifecycle, logger *logrus.Logger) (*consul.Client, error) {
+	consulApi, err := consul.NewClient(consul.DefaultConfig())
+	return consulApi, err
 }
 
 type configError struct {
