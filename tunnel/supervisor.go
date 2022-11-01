@@ -106,12 +106,12 @@ func (s *Supervisor) Start(ctx context.Context) {
 				select {
 				case err := <-errs:
 					lifecycle.BootError(err)
+					lifecycle.Stop()
 					continue
 				case <-ctx.Done():
+					lifecycle.Stop()
 					continue
 				}
-
-				lifecycle.Stop()
 			}
 		}
 	}()

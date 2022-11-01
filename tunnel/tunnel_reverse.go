@@ -153,8 +153,6 @@ func (t *ReverseTunnel) configurePortForwarding(ctx context.Context, serverOptio
 
 	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
 	t.sshServer.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		// TODO: Reimplement reverse port forwarding check
-		return true
 		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
 
 		lifecycle.BootEvent("port_forward_request", stats.Tags{
@@ -262,4 +260,9 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) *ReverseTunnel {
 
 func (t *ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
+}
+
+func (t *ReverseTunnel) GetError() *string {
+	// TODO: Implement
+	return nil
 }

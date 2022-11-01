@@ -4,10 +4,13 @@ import (
 	"context"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"io"
+	"net"
 	"testing"
 	"time"
 )
@@ -28,7 +31,7 @@ func Test_Manager_restartTunnel(t *testing.T) {
 		return t, nil
 	}
 
-	manager := NewManager(stats.New(&statsd.NoOpClient{}, logrus.New()), listFunc, TunnelOptions{}, 50*time.Millisecond, 50*time.Millisecond)
+	manager := NewManager(stats.New(&statsd.NoOpClient{}, logrus.New()), &consul.Client{}, listFunc, TunnelOptions{}, 50*time.Millisecond, 50*time.Millisecond)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -63,6 +66,10 @@ type mockTunnel struct {
 	started bool
 	stopped bool
 	port    int
+}
+
+func (m *mockTunnel) Dial(downstream net.Conn, addr string) (io.ReadWriteCloser, error) {
+	panic("call not expected")
 }
 
 func newMockTunnel(port int) *mockTunnel {

@@ -229,3 +229,8 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) *NormalTunnel {
 func (t *NormalTunnel) GetID() uuid.UUID {
 	return t.ID
 }
+
+func (t *NormalTunnel) GetError() *string {
+	// TODO: Fix this
+	return nil
+}
