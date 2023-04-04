@@ -48,6 +48,7 @@ func (t *ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) 
 	}
 	defer t.sshServer.Close()
 
+	// TODO: Re-enable auth
 	if err := t.configureAuth(ctx, t.serverOptions); err != nil {
 		return bootError{event: "configure_auth", err: err}
 	}
