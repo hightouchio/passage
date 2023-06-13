@@ -82,9 +82,6 @@ func (s Stats) Event(event Event) {
 	statsEvent.Title = joinPrefixes(s.prefix, event.Title)
 	statsEvent.Tags = convertTags(tags)
 
-	// report stats event
-	s.client.Event(&statsEvent)
-
 	// prepare for logging
 	var level logrus.Level
 	switch statsEvent.AlertType {
