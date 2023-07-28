@@ -161,7 +161,7 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	signers := make([]ssh.Signer, len(keys))
 
 	// parse private keys and prepare for SSH
-	for i, key := range keys {
+	for _, key := range keys {
 		contents, err := t.services.Keystore.Get(ctx, key.ID)
 		if err != nil {
 			return []ssh.Signer{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
@@ -171,10 +171,32 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
 		}
 
-		signers[i] = signer
+		signers = append(signers, getSigners(signer)...)
 	}
 
 	return signers, nil
+}
+
+func getSigners(signer ssh.Signer) []ssh.Signer {
+	signers := make([]ssh.Signer, 3)
+	if signer.PublicKey().Type() == "ssh-rsa" {
+		signers = append(signers,
+			&wrapSigner{
+				Signer:    signer,
+				algorithm: ssh.SigAlgoRSASHA2512,
+			},
+			&wrapSigner{
+				Signer:    signer,
+				algorithm: ssh.SigAlgoRSASHA2256,
+			},
+			&wrapSigner{
+				Signer:    signer,
+				algorithm: ssh.SigAlgoRSA,
+			},
+		)
+	}
+	signers = append(signers, signer)
+	return signers
 }
 
 func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
