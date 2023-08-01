@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Start Docker Compose environment
+        run: docker-compose -f test/docker-compose.yml up -d
+
+      - name: Run E2E test
+        run: docker-compose -f test/docker-compose.yml up -d
+
+      - name: Stop Docker Compose environment
+        run: docker-compose -f test/docker-compose.yml down
+
