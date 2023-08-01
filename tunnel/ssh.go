@@ -18,12 +18,16 @@ type SSHServerOptions struct {
 func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {
 	var hostSigners []ssh.Signer
 	if len(o.HostKey) != 0 {
-		hostSigner, err := gossh.ParsePrivateKey(o.HostKey)
+		signers, err := getSignersForPrivateKey(o.HostKey)
 		if err != nil {
-			return []ssh.Signer{}, err
+			return hostSigners, err
 		}
-		hostSigners = []ssh.Signer{hostSigner}
+		for _, signer := range signers {
+			// Convert from `x/crypto/ssh` Signer to `gliderlabs/ssh` Signer
+			hostSigners = append(hostSigners, signer)
+		}
 	}
+
 	return hostSigners, nil
 }
 

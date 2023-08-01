@@ -6,7 +6,7 @@ require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
 	github.com/Masterminds/squirrel v1.5.0
 	github.com/aws/aws-sdk-go v1.42.4
-	github.com/gliderlabs/ssh v0.3.1
+	github.com/gliderlabs/ssh v0.3.5
 	github.com/golang-migrate/migrate/v4 v4.15.1
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	go.uber.org/dig v1.12.0
 	go.uber.org/fx v1.14.2
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/crypto v0.11.0
 )
 
 require (
@@ -47,8 +47,8 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
-	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/text v0.11.0 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect

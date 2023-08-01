@@ -158,20 +158,23 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	if err != nil {
 		return []ssh.Signer{}, errors.Wrap(err, "could not look up private keys")
 	}
-	signers := make([]ssh.Signer, len(keys))
+
+	var signers []ssh.Signer
 
 	// parse private keys and prepare for SSH
-	for i, key := range keys {
-		contents, err := t.services.Keystore.Get(ctx, key.ID)
+	for _, key := range keys {
+		privateKeyBytes, err := t.services.Keystore.Get(ctx, key.ID)
 		if err != nil {
 			return []ssh.Signer{}, errors.Wrapf(err, "could not get contents for key %s", key.ID)
 		}
-		signer, err := ssh.ParsePrivateKey(contents)
+
+		// Generate ssh.Signers for the private key
+		keySigners, err := getSignersForPrivateKey(privateKeyBytes)
 		if err != nil {
-			return []ssh.Signer{}, errors.Wrapf(err, "could not parse key %s", key.ID)
+			return []ssh.Signer{}, errors.Wrap(err, "could not generate public key signers")
 		}
 
-		signers[i] = signer
+		signers = append(signers, keySigners...)
 	}
 
 	return signers, nil
