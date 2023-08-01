@@ -2,7 +2,6 @@
 [![Build](https://github.com/hightouchio/passage/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/hightouchio/passage/actions/workflows/build.yml)
 ![Go Version](https://shields.io/github/go-mod/go-version/hightouchio/passage)
 [![GitHub Releases](https://shields.io/github/v/release/hightouchio/passage?display_name=tag&include_prereleases)](https://github.com/hightouchio/passage/releases)
-[![Docker Hub](https://shields.io/docker/v/hightouchio/passage?label=docker&sort=semver)](https://hub.docker.com/r/hightouchio/passage)
 
 Secure private tunnels as a service 🔐
 
