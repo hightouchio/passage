@@ -1,4 +1,4 @@
-name: Build
+name: E2E Test
 
 on:
   push:
