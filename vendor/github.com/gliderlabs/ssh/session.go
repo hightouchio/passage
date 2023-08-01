@@ -2,7 +2,6 @@ package ssh
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -14,7 +13,7 @@ import (
 
 // Session provides access to information about an SSH session and methods
 // to read and write to the SSH channel with an embedded Channel interface from
-// cypto/ssh.
+// crypto/ssh.
 //
 // When Command() returns an empty slice, the user requested a shell. Otherwise
 // the user is performing an exec with those command arguments.
@@ -60,7 +59,7 @@ type Session interface {
 	//
 	// The context is canceled when the client's connection closes or I/O
 	// operation fails.
-	Context() context.Context
+	Context() Context
 
 	// Permissions returns a copy of the Permissions object that was available for
 	// setup in the auth handlers via the Context.
@@ -159,7 +158,7 @@ func (sess *session) Permissions() Permissions {
 	return *perms
 }
 
-func (sess *session) Context() context.Context {
+func (sess *session) Context() Context {
 	return sess.ctx
 }
 
