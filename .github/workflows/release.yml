@@ -10,7 +10,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
+  publish-tag:
     runs-on: ubuntu-latest
 
     permissions:
@@ -31,7 +31,7 @@ jobs:
       - name: Build image
         run: |
           VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v\([0-9].*\)/\1/')
-          docker build --build-arg version=$VERSION --tag ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.ref_name }} .
+          docker build --build-arg version=$VERSION --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} .
 
       - name: Push image
-        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.ref_name }}
+        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
