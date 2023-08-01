@@ -1,4 +1,4 @@
-name: E2E Test
+name: Build
 
 on:
   push:
@@ -7,6 +7,18 @@ on:
     branches: [ master ]
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build image
+        run: docker build --target builder --tag build-image .
+
+      - name: Run tests
+        run: docker run --rm build-image go test -v ./...
+
   e2e-test:
     runs-on: ubuntu-latest
     steps:
