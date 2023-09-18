@@ -16,12 +16,15 @@ type Discovery struct {
 
 func (d Discovery) ResolveTunnelHost(tunnelType string, tunnelID uuid.UUID) (string, error) {
 	lookup := func(name string) (string, error) {
-		addrs, err := net.LookupAddr(name)
+		ips, err := net.LookupIP(name)
 		if err != nil {
 			return "", errors.Wrap(err, "could not resolve addr")
 		}
+		if len(ips) == 0 {
+			return "", errors.New("no addresses found")
+		}
 		// Always return the first address
-		return addrs[0], nil
+		return ips[0].String(), nil
 	}
 
 	switch tunnelType {

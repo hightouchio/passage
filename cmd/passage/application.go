@@ -58,8 +58,8 @@ const (
 	ConfigDiscoverySrvRegistry    = "discovery.srv.registry"
 	ConfigDiscoverySrvPrefix      = "discovery.srv.prefix"
 	ConfigDiscoveryStaticHost     = "discovery.static.host"
-	ConfigDiscoveryDnsHostNormal  = "discovery.dns.hostname_normal"
-	ConfigDiscoveryDnsHostReverse = "discovery.dns.hostname_reverse"
+	ConfigDiscoveryDnsHostNormal  = "discovery.dns.host_normal"
+	ConfigDiscoveryDnsHostReverse = "discovery.dns.host_reverse"
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
