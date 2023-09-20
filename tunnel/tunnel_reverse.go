@@ -2,19 +2,15 @@ package tunnel
 
 import (
 	"context"
-	"github.com/hightouchio/passage/stats"
+	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"net"
-	"strconv"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	gossh "golang.org/x/crypto/ssh"
 )
 
 type ReverseTunnel struct {
@@ -26,164 +22,51 @@ type ReverseTunnel struct {
 	TunnelPort int  `json:"tunnelPort"`
 	HTTPProxy  bool `json:"httpProxy"`
 
-	services      ReverseTunnelServices
-	serverOptions SSHServerOptions
+	services ReverseTunnelServices
 
 	Error *string `json:"error"`
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
-	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Configure SSHD
-	serverAddr := net.JoinHostPort(t.serverOptions.BindHost, strconv.Itoa(t.SSHDPort))
-	server := &ssh.Server{
-		Addr: serverAddr,
-		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"session": ssh.DefaultSessionHandler,
-		},
-	}
-
-	if !t.serverOptions.AuthDisabled {
-		if err := t.configureAuth(ctx, server, t.serverOptions); err != nil {
-			return bootError{event: "configure_auth", err: err}
-		}
-	}
-
-	if err := t.configurePortForwarding(ctx, server, t.serverOptions, tunnelOptions); err != nil {
-		return bootError{event: "configure_port_forwarding", err: err}
-	}
-
-	defer server.Close()
-
-	errs := make(chan error)
-	go func() {
-		lifecycle.BootEvent("sshd_start", stats.Tags{"listen_addr": serverAddr})
-		errs <- server.ListenAndServe()
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil
-
-	case err := <-errs:
-		return err
-	}
-}
-
-func (t ReverseTunnel) configureAuth(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions) error {
-	lifecycle := getCtxLifecycle(ctx)
-
-	// Init host key signing
-	hostSigners, err := serverOptions.GetHostSigners()
+	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
-		return errors.Wrap(err, "could not get host signers")
+		return bootError{event: "get_authorized_keys", err: err}
 	}
-	server.HostSigners = hostSigners
 
-	// Match incoming auth requests against stored public keys.
-	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		lifecycle.BootEvent("auth_request", stats.Tags{
-			"session_id":  ctx.SessionID(),
-			"remote_addr": ctx.RemoteAddr().String(),
-			"user":        ctx.User(),
-			"key_type":    incomingKey.Type(),
-			"fingerprint": gossh.FingerprintSHA256(incomingKey),
-		})
+	t.services.SSHServer.RegisterForwarder(t.ID, t.TunnelPort, authorizedKeys)
+	defer t.services.SSHServer.DeregisterForwarder(t.ID)
 
-		// Check if there's a public key match.
-		ok, err := t.isAuthorizedKey(ctx, incomingKey)
-		if err != nil {
-			lifecycle.BootError(errors.Wrap(err, "validate authorized key"))
-			return false
-		}
-
-		if ok {
-			lifecycle.BootEvent("auth_success", stats.Tags{"session_id": ctx.SessionID()})
-		} else {
-			lifecycle.BootEvent("auth_reject", stats.Tags{"session_id": ctx.SessionID()})
-		}
-
-		return ok
-	})); err != nil {
-		return err
-	}
+	// Wait for tunnel closure
+	<-ctx.Done()
 
 	return nil
 }
 
-func (t ReverseTunnel) configurePortForwarding(ctx context.Context, server *ssh.Server, serverOptions SSHServerOptions, tunnelOptions TunnelOptions) error {
-	lifecycle := getCtxLifecycle(ctx)
-	st := stats.GetStats(ctx)
-
-	// SSH session handler. Hold connections open until cancelled.
-	server.Handler = func(s ssh.Session) {
-		select {
-		case <-s.Context().Done(): // Block until session ends
-		case <-ctx.Done(): // or until server closes
-		}
-	}
-
-	// Add request handlers for reverse port forwarding
-	handler := &ReverseForwardingHandler{
-		httpProxyEnabled: t.HTTPProxy,
-		stats:            st,
-		lifecycle:        lifecycle,
-	}
-	server.RequestHandlers = map[string]ssh.RequestHandler{
-		"tcpip-forward":        handler.HandleSSHRequest,
-		"cancel-tcpip-forward": handler.HandleSSHRequest,
-	}
-
-	// Validate incoming port forward requests. SSH clients should only be able to forward to their assigned tunnel port (bind port).
-	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		success := bindHost == t.serverOptions.BindHost && int(bindPort) == t.TunnelPort
-
-		lifecycle.BootEvent("port_forward_request", stats.Tags{
-			"session_id":        ctx.SessionID(),
-			"remote_addr":       ctx.RemoteAddr().String(),
-			"request_bind_host": bindHost,
-			"request_bind_port": bindPort,
-			"config_bind_host":  t.serverOptions.BindHost,
-			"config_bind_port":  t.TunnelPort,
-			"success":           success,
-		})
-
-		return success
-	}
-
-	return nil
-}
-
-// compare incoming connection key to the key authorized for this tunnel configuration
-func (t ReverseTunnel) isAuthorizedKey(ctx context.Context, testKey ssh.PublicKey) (bool, error) {
-	authorizedKeys, err := t.services.SQL.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
+func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, error) {
+	registeredKeys, err := t.services.SQL.GetReverseTunnelAuthorizedKeys(ctx, t.ID)
 	if err != nil {
-		return false, errors.Wrap(err, "could not get keys from db")
+		return []ssh.PublicKey{}, errors.Wrap(err, "could not read keys from database")
 	}
 
-	// check all authorized keys configured for this tunnel
-	for _, authorizedKey := range authorizedKeys {
-		id := authorizedKey.ID
-		// retrieve key contents
-		key, err := t.services.Keystore.Get(ctx, id)
+	authorizedKeys := make([]ssh.PublicKey, len(registeredKeys))
+	for i, registeredKey := range registeredKeys {
+		keyBytes, err := t.services.Keystore.Get(ctx, registeredKey.ID)
 		if err != nil {
-			return false, errors.Wrapf(err, "could not get key %s", authorizedKey.ID.String())
+			return authorizedKeys, errors.Wrapf(err, "could not read key %s from keystore", registeredKey.ID.String())
 		}
 
-		// compare stored authorized key to test key
-		authorizedKey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(key))
+		key, _, _, _, err := ssh.ParseAuthorizedKey(keyBytes)
 		if err != nil {
-			return false, errors.Wrapf(err, "could not parse key %d", id)
+			return authorizedKeys, errors.Wrapf(err, "could not parse key %s", registeredKey.ID.String())
 		}
-		if ssh.KeysEqual(testKey, authorizedKey) {
-			return true, nil
-		}
+
+		authorizedKeys[i] = key
 	}
 
-	return false, nil
+	return authorizedKeys, nil
 }
 
 func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
@@ -200,6 +83,7 @@ func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService
 
 // ReverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type ReverseTunnelServices struct {
+	*SSHServer
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
@@ -207,7 +91,7 @@ type ReverseTunnelServices struct {
 	Logger   *logrus.Logger
 }
 
-func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices, options SSHServerOptions) ListFunc {
+func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {
 	return func(ctx context.Context) ([]Tunnel, error) {
 		sts, err := f(ctx)
 		if err != nil {
@@ -217,7 +101,6 @@ func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunne
 		tunnels := make([]Tunnel, len(sts))
 		for i, st := range sts {
 			st.services = services
-			st.serverOptions = options
 			tunnels[i] = st
 		}
 		return tunnels, nil

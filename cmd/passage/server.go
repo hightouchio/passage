@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/stats"
@@ -16,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"net"
 )
 
 var (
@@ -80,19 +80,29 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 	}
 
 	if config.GetBool(ConfigTunnelReverseEnabled) {
-		// Decode config host key from Base64
-		hostKey, err := base64.StdEncoding.DecodeString(config.GetString(ConfigTunnelReverseHostKey))
-		if err != nil {
-			return errors.Wrap(err, "could not decode host key")
-		}
+		// Create SSH Server for Reverse Tunnels
+		sshServer := tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), "2222"), []byte(config.GetString(ConfigTunnelReverseHostKey)))
+		lc.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				go func() {
+					if err := sshServer.Start(ctx); err != nil {
+						logrus.Fatal(errors.Wrap(err, "sshd"))
+					}
+
+				}()
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				_ = sshServer.Close()
+				return nil
+			},
+		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
-			SQL:      postgres.NewClient(sql),
-			Keystore: keystore,
-			Logger:   logger,
-		}, tunnel.SSHServerOptions{
-			BindHost: config.GetString(ConfigTunnelReverseBindHost),
-			HostKey:  hostKey,
+			SSHServer: sshServer,
+			SQL:       postgres.NewClient(sql),
+			Keystore:  keystore,
+			Logger:    logger,
 		}))
 	}
 
