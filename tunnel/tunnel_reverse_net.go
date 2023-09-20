@@ -112,7 +112,7 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 			tunnel.lifecycle.Error(err)
 		}
 
-		return false, []byte("bind address already in use")
+		return false, []byte("Port forwarding disabled")
 	}
 
 	h.Lock()
