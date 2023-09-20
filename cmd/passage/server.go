@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/stats"
@@ -80,13 +81,18 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 	}
 
 	if config.GetBool(ConfigTunnelReverseEnabled) {
+		hostKey, err := base64.StdEncoding.DecodeString(config.GetString(ConfigTunnelReverseHostKey))
+		if err != nil {
+			return errors.Wrap(err, "decode host key")
+		}
+
 		// Create SSH Server for Reverse Tunnels
 		sshServer := tunnel.NewSSHServer(
 			net.JoinHostPort(
 				config.GetString(ConfigTunnelReverseBindHost),
 				config.GetString(ConfigTunnelReverseSshdPort),
 			),
-			[]byte(config.GetString(ConfigTunnelReverseHostKey)),
+			hostKey,
 		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
@@ -113,7 +119,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 
 			GlobalSSHServer: sshServer,
 			GetSSHServer: func(sshdPort int) *tunnel.SSHServer {
-				return tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)), []byte(config.GetString(ConfigTunnelReverseHostKey)))
+				return tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)), hostKey)
 			},
 		}))
 	}
