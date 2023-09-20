@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"github.com/gliderlabs/ssh"
+	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"time"
@@ -36,8 +37,8 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		return bootError{event: "get_authorized_keys", err: err}
 	}
 
-	t.services.SSHServer.RegisterForwarder(t.ID, t.TunnelPort, authorizedKeys)
-	defer t.services.SSHServer.DeregisterForwarder(t.ID)
+	t.services.SSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
+	defer t.services.SSHServer.DeregisterTunnel(t.ID)
 
 	// Wait for tunnel closure
 	<-ctx.Done()
