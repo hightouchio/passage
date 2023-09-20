@@ -81,10 +81,6 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			return true, authorizedTunnels
 		}()
 
-		// If there are any authorized tunnels, we can allow this session past the authentication step
-		// TODO: Upsert authorized tunnels for the session
-		ctx.SetValue("authorized_tunnels", authorizedTunnels)
-
 		entry.WithFields(logrus.Fields{
 			"remote_addr":        ctx.RemoteAddr().String(),
 			"user":               ctx.User(),
@@ -94,6 +90,9 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			"authorized_tunnels": len(authorizedTunnels),
 		}).Info("public key auth request")
 
+		// Register the authorized tunnels onto the ssh.Context
+		registerAuthorizedTunnels(ctx, authorizedTunnels)
+
 		return success
 	})); err != nil {
 		return err
@@ -101,20 +100,9 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// Validate incoming port forward requests against the set of authorized tunnels for this session
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		authorizedTunnels := ctx.Value("authorized_tunnels")
-
 		entry := logrus.WithField("session_id", ctx.SessionID())
 		success, tunnelId := func() (bool, string) {
-			// If the authorized tunnels are nil or cannot be cast, reject the request
-			if authorizedTunnels == nil {
-				entry.Debug("no authorized tunnels for session")
-				return false, ""
-			}
-			tunnels, ok := authorizedTunnels.([]registeredTunnel)
-			if !ok {
-				entry.Debug("no authorized tunnels for session")
-				return false, ""
-			}
+			tunnels := getAuthorizedTunnels(ctx)
 
 			// If there are no valid tunnels, reject the forwarding request
 			if len(tunnels) == 0 {
@@ -246,4 +234,24 @@ func (s *SSHServer) getHostSigners() ([]ssh.Signer, error) {
 	}
 
 	return hostSigners, nil
+}
+
+// registerAuthorizedTunnels adds new authorized tunnels to the ssh.Context
+func registerAuthorizedTunnels(ctx ssh.Context, newAuthorizedTunnels []registeredTunnel) {
+	authorizedTunnels := getAuthorizedTunnels(ctx)
+	authorizedTunnels = append(authorizedTunnels, newAuthorizedTunnels...)
+	ctx.SetValue("authorized_tunnels", authorizedTunnels)
+}
+
+// getAuthorizedTunnels extracts the authorized tunnels from the ssh.Context
+func getAuthorizedTunnels(ctx ssh.Context) []registeredTunnel {
+	ctxTunnels := ctx.Value("authorized_tunnels")
+	if ctxTunnels == nil {
+		return []registeredTunnel{}
+	}
+	tunnels, ok := ctxTunnels.([]registeredTunnel)
+	if !ok {
+		return []registeredTunnel{}
+	}
+	return tunnels
 }
