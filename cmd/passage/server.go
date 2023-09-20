@@ -81,7 +81,13 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 
 	if config.GetBool(ConfigTunnelReverseEnabled) {
 		// Create SSH Server for Reverse Tunnels
-		sshServer := tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), "2222"), []byte(config.GetString(ConfigTunnelReverseHostKey)))
+		sshServer := tunnel.NewSSHServer(
+			net.JoinHostPort(
+				config.GetString(ConfigTunnelReverseBindHost),
+				config.GetString(ConfigTunnelReverseSshdPort),
+			),
+			[]byte(config.GetString(ConfigTunnelReverseHostKey)),
+		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				go func() {
