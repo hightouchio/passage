@@ -39,18 +39,23 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		return bootError{event: "get_authorized_keys", err: err}
 	}
 
-	// Create a dedicated SSH server for this tunnel
-	dedicatedServer := t.services.GetSSHServer(t.SSHDPort)
-	defer dedicatedServer.Close()
 	errs := make(chan error)
-	go func() {
-		lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
-		errs <- dedicatedServer.Start(ctx)
-	}()
+	defer close(errs)
 
-	// Register this tunnel with the dedicated reverse SSH server
-	dedicatedServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
-	defer dedicatedServer.DeregisterTunnel(t.ID)
+	// Only run the individual SSHD server if Passage has been configured to do so.
+	if t.services.EnableIndividualSSHD {
+		// Create a dedicated SSH server for this tunnel
+		dedicatedServer := t.services.GetIndividualSSHD(t.SSHDPort)
+		defer dedicatedServer.Close()
+		go func() {
+			lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
+			errs <- dedicatedServer.Start(ctx)
+		}()
+
+		// Register this tunnel with the dedicated reverse SSH server
+		dedicatedServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
+		defer dedicatedServer.DeregisterTunnel(t.ID)
+	}
 
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
@@ -112,7 +117,9 @@ type ReverseTunnelServices struct {
 	Logger   *logrus.Logger
 
 	GlobalSSHServer *SSHServer
-	GetSSHServer    func(sshdPort int) *SSHServer
+
+	EnableIndividualSSHD bool
+	GetIndividualSSHD    func(sshdPort int) *SSHServer
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {

@@ -119,7 +119,9 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			Logger:   logger,
 
 			GlobalSSHServer: sshServer,
-			GetSSHServer: func(sshdPort int) *tunnel.SSHServer {
+
+			EnableIndividualSSHD: config.GetBool(ConfigTunnelReverseEnableIndividualSSHD),
+			GetIndividualSSHD: func(sshdPort int) *tunnel.SSHServer {
 				return tunnel.NewSSHServer(
 					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
 					hostKey,
