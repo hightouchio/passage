@@ -32,18 +32,39 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	lifecycle := getCtxLifecycle(ctx)
+
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
 		return bootError{event: "get_authorized_keys", err: err}
 	}
 
-	t.services.SSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
-	defer t.services.SSHServer.DeregisterTunnel(t.ID)
+	// Create a dedicated SSH server for this tunnel
+	dedicatedServer := t.services.GetSSHServer(t.SSHDPort)
+	defer dedicatedServer.Close()
+	errs := make(chan error)
+	go func() {
+		lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
+		errs <- dedicatedServer.Start(ctx)
+	}()
 
-	// Wait for tunnel closure
-	<-ctx.Done()
+	// Register this tunnel with the dedicated reverse SSH server
+	dedicatedServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
+	defer dedicatedServer.DeregisterTunnel(t.ID)
 
-	return nil
+	if t.services.GlobalSSHServer != nil {
+		// Register this tunnel with the global reverse SSH server
+		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
+		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+
+	case err := <-errs:
+		return err
+	}
 }
 
 func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, error) {
@@ -84,12 +105,14 @@ func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService
 
 // ReverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type ReverseTunnelServices struct {
-	*SSHServer
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
 	Keystore keystore.Keystore
 	Logger   *logrus.Logger
+
+	GlobalSSHServer *SSHServer
+	GetSSHServer    func(sshdPort int) *SSHServer
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {

@@ -101,10 +101,14 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
-			SSHServer: sshServer,
-			SQL:       postgres.NewClient(sql),
-			Keystore:  keystore,
-			Logger:    logger,
+			SQL:      postgres.NewClient(sql),
+			Keystore: keystore,
+			Logger:   logger,
+
+			GlobalSSHServer: sshServer,
+			GetSSHServer: func(sshdPort int) *tunnel.SSHServer {
+				return tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)), []byte(config.GetString(ConfigTunnelReverseHostKey)))
+			},
 		}))
 	}
 
