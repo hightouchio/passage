@@ -17,6 +17,7 @@ type SSHServer struct {
 
 	server  *ssh.Server
 	tunnels map[uuid.UUID]registeredTunnel
+	close   chan bool
 
 	sync.RWMutex
 }
@@ -34,6 +35,7 @@ func NewSSHServer(addr string, hostKey []byte) *SSHServer {
 		BindAddr: addr,
 		HostKey:  hostKey,
 		tunnels:  make(map[uuid.UUID]registeredTunnel),
+		close:    make(chan bool),
 	}
 }
 
@@ -53,10 +55,11 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	server.HostSigners = hostSigners
 
 	// SSH session handler. Hold connections open until cancelled.
-	server.Handler = func(s ssh.Session) {
+	server.Handler = func(session ssh.Session) {
 		select {
-		case <-s.Context().Done(): // Block until session ends
-		case <-ctx.Done(): // or until server closes
+		case <-session.Context().Done(): // Block until session ends
+		case <-s.close: // or until server closes
+		case <-ctx.Done(): // or until start context is cancelled
 		}
 	}
 
@@ -155,13 +158,14 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	logrus.WithField("addr", s.BindAddr).Infof("Reverse tunnel sshd server listening on %s", s.BindAddr)
 	s.server = server
 	if err := s.server.ListenAndServe(); err != nil {
-		return errors.Wrap(err, "listen and serve")
+		return err
 	}
 
 	return nil
 }
 
 func (s *SSHServer) Close() error {
+	close(s.close)
 	if s.server == nil {
 		return nil
 	}

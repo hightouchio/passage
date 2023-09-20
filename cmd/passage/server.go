@@ -85,7 +85,9 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				go func() {
-					if err := sshServer.Start(ctx); err != nil {
+					// We want to pass context.Background() here, not the context.Context accepted from the hook,
+					//	because the hook's context.Context is cancelled after the application has booted completely
+					if err := sshServer.Start(context.Background()); err != nil {
 						logrus.Fatal(errors.Wrap(err, "sshd"))
 					}
 
