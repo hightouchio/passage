@@ -17,6 +17,7 @@ type SSHServer struct {
 
 	server  *ssh.Server
 	tunnels map[uuid.UUID]registeredTunnel
+	logger  *logrus.Logger
 	close   chan bool
 
 	sync.RWMutex
@@ -30,11 +31,12 @@ type registeredTunnel struct {
 	stats          stats.Stats
 }
 
-func NewSSHServer(addr string, hostKey []byte) *SSHServer {
+func NewSSHServer(addr string, hostKey []byte, logger *logrus.Logger) *SSHServer {
 	return &SSHServer{
 		BindAddr: addr,
 		HostKey:  hostKey,
 		tunnels:  make(map[uuid.UUID]registeredTunnel),
+		logger:   logger,
 		close:    make(chan bool),
 	}
 }
@@ -66,7 +68,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	// Validate incoming public keys, match them against registered tunnels, and store the list of authorized
 	// 	tunnels in the session context for future reference when evaluating reverse port forwarding requests.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		entry := logrus.WithField("session_id", ctx.SessionID())
+		entry := s.logger.WithField("session_id", ctx.SessionID())
 
 		success, authorizedTunnels := func() (bool, []registeredTunnel) {
 			// Identify the set of tunnels that match the incoming public key
@@ -100,7 +102,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// Validate incoming port forward requests against the set of authorized tunnels for this session
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		entry := logrus.WithField("session_id", ctx.SessionID())
+		entry := s.logger.WithField("session_id", ctx.SessionID())
 		success, tunnelId := func() (bool, string) {
 			tunnels := getAuthorizedTunnels(ctx)
 
@@ -124,7 +126,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			return success, tunnelId.String()
 		}()
 
-		logrus.WithFields(logrus.Fields{
+		s.logger.WithFields(logrus.Fields{
 			"remote_addr":  ctx.RemoteAddr().String(),
 			"tunnel_id":    tunnelId,
 			"bind_address": bindPort,
@@ -143,7 +145,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		"cancel-tcpip-forward": handler.HandleSSHRequest,
 	}
 
-	logrus.WithField("addr", s.BindAddr).Infof("Reverse tunnel sshd server listening on %s", s.BindAddr)
+	s.logger.WithField("addr", s.BindAddr).Infof("Reverse tunnel sshd server listening on %s", s.BindAddr)
 	s.server = server
 	if err := s.server.ListenAndServe(); err != nil {
 		return err
@@ -178,7 +180,7 @@ func (s *SSHServer) RegisterTunnel(tunnelId uuid.UUID, bindPort int, authorizedK
 	s.Lock()
 	defer s.Unlock()
 
-	logrus.WithFields(logrus.Fields{
+	s.logger.WithFields(logrus.Fields{
 		"tunnel_id": tunnelId,
 		"bind_port": bindPort,
 	}).Info("Registering tunnel")
@@ -195,7 +197,7 @@ func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 	s.Lock()
 	defer s.Unlock()
 
-	logrus.WithFields(logrus.Fields{
+	s.logger.WithFields(logrus.Fields{
 		"tunnel_id": tunnelId,
 	}).Info("Deregistering tunnel")
 

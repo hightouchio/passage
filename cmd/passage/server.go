@@ -93,6 +93,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 				config.GetString(ConfigTunnelReverseSshdPort),
 			),
 			hostKey,
+			logger,
 		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
@@ -100,7 +101,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 					// We want to pass context.Background() here, not the context.Context accepted from the hook,
 					//	because the hook's context.Context is cancelled after the application has booted completely
 					if err := sshServer.Start(context.Background()); err != nil {
-						logrus.Fatal(errors.Wrap(err, "sshd"))
+						logger.Fatal(errors.Wrap(err, "sshd"))
 					}
 
 				}()
@@ -119,7 +120,11 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 
 			GlobalSSHServer: sshServer,
 			GetSSHServer: func(sshdPort int) *tunnel.SSHServer {
-				return tunnel.NewSSHServer(net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)), hostKey)
+				return tunnel.NewSSHServer(
+					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
+					hostKey,
+					logger,
+				)
 			},
 		}))
 	}
