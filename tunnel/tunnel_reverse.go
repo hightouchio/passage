@@ -19,13 +19,13 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int  `json:"sshdPort"`
-	TunnelPort int  `json:"tunnelPort"`
-	HTTPProxy  bool `json:"httpProxy"`
+	SSHDPort           int     `json:"sshdPort"`
+	TunnelPort         int     `json:"tunnelPort"`
+	HTTPProxy          bool    `json:"httpProxy"`
+	Error              *string `json:"error"`
+	AuthorizedKeysHash string
 
 	services ReverseTunnelServices
-
-	Error *string `json:"error"`
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
@@ -49,7 +49,9 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		defer dedicatedServer.Close()
 		go func() {
 			lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
-			errs <- dedicatedServer.Start(ctx)
+			if err := dedicatedServer.Start(ctx); err != nil {
+				lifecycle.BootError(errors.Wrap(err, "dedicated server start"))
+			}
 		}()
 
 		// Register this tunnel with the dedicated reverse SSH server
@@ -144,18 +146,19 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPProxy == t2.HTTPProxy
+	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPProxy == t2.HTTPProxy && t.AuthorizedKeysHash == t2.AuthorizedKeysHash
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
 func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 	return ReverseTunnel{
-		ID:         record.ID,
-		CreatedAt:  record.CreatedAt,
-		Enabled:    record.Enabled,
-		TunnelPort: record.TunnelPort,
-		SSHDPort:   record.SSHDPort,
-		HTTPProxy:  record.HTTPProxy,
+		ID:                 record.ID,
+		CreatedAt:          record.CreatedAt,
+		Enabled:            record.Enabled,
+		TunnelPort:         record.TunnelPort,
+		SSHDPort:           record.SSHDPort,
+		HTTPProxy:          record.HTTPProxy,
+		AuthorizedKeysHash: record.AuthorizedKeysHash,
 	}
 }
 
