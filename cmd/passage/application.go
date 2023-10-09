@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cloud.google.com/go/storage"
 	"context"
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
@@ -17,6 +18,7 @@ import (
 	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
 
 	"github.com/hightouchio/passage/tunnel/keystore"
+	keystoreGCS "github.com/hightouchio/passage/tunnel/keystore/gcs"
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
@@ -69,6 +71,9 @@ const (
 	ConfigKeystoreS3DisableSSL     = "keystore.s3.disable_ssl"
 	ConfigKeystoreS3ForcePathStyle = "keystore.s3.force_path_style"
 	ConfigKeystoreS3BucketRegion   = "keystore.s3.bucket_region"
+
+	ConfigKeystoreGCSBucketName = "keystore.gcs.bucket_name"
+	ConfigKeystoreGCSKeyPrefix  = "keystore.gcs.key_prefix"
 
 	ConfigPostgresUri     = "postgres.uri"
 	ConfigPostgresHost    = "postgres.host"
@@ -235,6 +240,23 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 			S3:         s3.New(sess),
 			BucketName: bucketName,
 			KeyPrefix:  config.GetString(ConfigKeystoreS3KeyPrefix),
+		}, nil
+
+	case "gcs":
+		bucketName := config.GetString(ConfigKeystoreGCSBucketName)
+		if bucketName == "" {
+			return nil, newConfigError(ConfigKeystoreGCSBucketName, "must be set")
+		}
+
+		client, err := storage.NewClient(context.Background())
+		if err != nil {
+			return nil, errors.Wrap(err, "could not init GCS client")
+		}
+
+		return keystoreGCS.GCS{
+			Client:     client,
+			BucketName: bucketName,
+			KeyPrefix:  config.GetString(ConfigKeystoreGCSKeyPrefix),
 		}, nil
 
 	default:
