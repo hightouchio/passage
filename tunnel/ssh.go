@@ -2,34 +2,11 @@ package tunnel
 
 import (
 	"context"
-	"github.com/gliderlabs/ssh"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
 	"net"
 	"time"
 )
-
-type SSHServerOptions struct {
-	BindHost     string
-	HostKey      []byte
-	AuthDisabled bool
-}
-
-func (o SSHServerOptions) GetHostSigners() ([]ssh.Signer, error) {
-	var hostSigners []ssh.Signer
-	if len(o.HostKey) != 0 {
-		signers, err := getSignersForPrivateKey(o.HostKey)
-		if err != nil {
-			return hostSigners, err
-		}
-		for _, signer := range signers {
-			// Convert from `x/crypto/ssh` Signer to `gliderlabs/ssh` Signer
-			hostSigners = append(hostSigners, signer)
-		}
-	}
-
-	return hostSigners, nil
-}
 
 type SSHClientOptions struct {
 	User              string

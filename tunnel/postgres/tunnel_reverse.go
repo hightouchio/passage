@@ -10,14 +10,15 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID         uuid.UUID      `db:"id"`
-	CreatedAt  time.Time      `db:"created_at"`
-	Enabled    bool           `db:"enabled"`
-	TunnelPort int            `db:"tunnel_port"`
-	SSHDPort   int            `db:"sshd_port"`
-	HTTPProxy  bool           `db:"http_proxy"`
-	Error      sql.NullString `db:"error"`
-	LastUsedAt sql.NullTime   `db:"last_used_at"`
+	ID                 uuid.UUID      `db:"id"`
+	CreatedAt          time.Time      `db:"created_at"`
+	Enabled            bool           `db:"enabled"`
+	TunnelPort         int            `db:"tunnel_port"`
+	SSHDPort           int            `db:"sshd_port"`
+	HTTPProxy          bool           `db:"http_proxy"`
+	Error              sql.NullString `db:"error"`
+	LastUsedAt         sql.NullTime   `db:"last_used_at"`
+	AuthorizedKeysHash string         `db:"authorized_keys_hash"`
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {
@@ -61,7 +62,13 @@ func (c Client) GetReverseTunnel(ctx context.Context, id uuid.UUID) (ReverseTunn
 }
 
 func (c Client) ListReverseActiveTunnels(ctx context.Context) ([]ReverseTunnel, error) {
-	rows, err := c.db.QueryxContext(ctx, `SELECT * FROM passage.reverse_tunnels WHERE enabled=true;`)
+	rows, err := c.db.QueryxContext(ctx, `
+		SELECT rt.*, encode(sha256(array_to_string(array_agg(ka.key_id), ',')::bytea), 'hex') AS authorized_keys_hash
+		FROM passage.reverse_tunnels rt
+				  LEFT JOIN passage.key_authorizations ka ON ka.tunnel_id = rt.id
+		WHERE rt.enabled = true
+		GROUP BY rt.id;
+	`)
 	if err != nil {
 		return nil, err
 	}

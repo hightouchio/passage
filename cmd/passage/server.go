@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"net"
 )
 
 var (
@@ -80,19 +81,53 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 	}
 
 	if config.GetBool(ConfigTunnelReverseEnabled) {
-		// Decode config host key from Base64
 		hostKey, err := base64.StdEncoding.DecodeString(config.GetString(ConfigTunnelReverseHostKey))
 		if err != nil {
-			return errors.Wrap(err, "could not decode host key")
+			return errors.Wrap(err, "decode host key")
 		}
+
+		// Create SSH Server for Reverse Tunnels
+		sshServer := tunnel.NewSSHServer(
+			net.JoinHostPort(
+				config.GetString(ConfigTunnelReverseBindHost),
+				config.GetString(ConfigTunnelReverseSshdPort),
+			),
+			hostKey,
+			logger,
+		)
+		lc.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				go func() {
+					// We want to pass context.Background() here, not the context.Context accepted from the hook,
+					//	because the hook's context.Context is cancelled after the application has booted completely
+					if err := sshServer.Start(context.Background()); err != nil {
+						logger.Fatal(errors.Wrap(err, "sshd"))
+					}
+
+				}()
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				_ = sshServer.Close()
+				return nil
+			},
+		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
 			SQL:      postgres.NewClient(sql),
 			Keystore: keystore,
 			Logger:   logger,
-		}, tunnel.SSHServerOptions{
-			BindHost: config.GetString(ConfigTunnelReverseBindHost),
-			HostKey:  hostKey,
+
+			GlobalSSHServer: sshServer,
+
+			EnableIndividualSSHD: config.GetBool(ConfigTunnelReverseEnableIndividualSSHD),
+			GetIndividualSSHD: func(sshdPort int) *tunnel.SSHServer {
+				return tunnel.NewSSHServer(
+					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
+					hostKey,
+					logger,
+				)
+			},
 		}))
 	}
 

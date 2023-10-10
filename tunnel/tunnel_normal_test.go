@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+const (
+	bindHost = "0.0.0.0"
+)
+
 func TestNormalTunnel_Basic(t *testing.T) {
 	runNormalTunnelTest(t,
 		[]testInstruction{
