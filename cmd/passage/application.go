@@ -14,6 +14,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/hightouchio/passage/tunnel/discovery"
+	discoveryDNS "github.com/hightouchio/passage/tunnel/discovery/dns"
 	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
 	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
 
@@ -55,10 +56,12 @@ const (
 	ConfigTunnelReverseHostKey  = "tunnel.reverse.host_key"
 	ConfigTunnelReverseBindHost = "tunnel.reverse.bind_host"
 
-	ConfigDiscoveryType        = "discovery.type"
-	ConfigDiscoverySrvRegistry = "discovery.srv.registry"
-	ConfigDiscoverySrvPrefix   = "discovery.srv.prefix"
-	ConfigDiscoveryStaticHost  = "discovery.static.host"
+	ConfigDiscoveryType           = "discovery.type"
+	ConfigDiscoverySrvRegistry    = "discovery.srv.registry"
+	ConfigDiscoverySrvPrefix      = "discovery.srv.prefix"
+	ConfigDiscoveryStaticHost     = "discovery.static.host"
+	ConfigDiscoveryDnsHostNormal  = "discovery.dns.host_normal"
+	ConfigDiscoveryDnsHostReverse = "discovery.dns.host_reverse"
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
@@ -183,6 +186,12 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 			Host: config.GetString(ConfigDiscoveryStaticHost),
 		}
 		break
+
+	case "dns":
+		discoveryService = discoveryDNS.Discovery{
+			HostNormal:  config.GetString(ConfigDiscoveryDnsHostNormal),
+			HostReverse: config.GetString(ConfigDiscoveryDnsHostReverse),
+		}
 
 	default:
 		return nil, configError{"unknown discovery type"}
