@@ -69,6 +69,16 @@ services:
       - "mkdir -p /data/keystore && minio server --address \":9079\" --console-address \":9080\" /data"
     restart: always
 
+  # Passage uses Consul for service discovery
+  consul:
+    image: consul:1.15
+    networks:
+      - passage_dev
+    ports:
+      - "8600:8600"
+      - "8500:8500"
+    restart: always
+
 volumes:
   # Persistent volume for Minio keystore.
   minio:

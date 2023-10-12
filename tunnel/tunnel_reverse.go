@@ -2,7 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"fmt"
 	"github.com/gliderlabs/ssh"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -42,27 +44,31 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	errs := make(chan error)
 	defer close(errs)
 
-	// Only run the individual SSHD server if Passage has been configured to do so.
-	if t.services.EnableIndividualSSHD {
-		// Create a dedicated SSH server for this tunnel
-		dedicatedServer := t.services.GetIndividualSSHD(t.SSHDPort)
-		defer dedicatedServer.Close()
-		go func() {
-			lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
-			if err := dedicatedServer.Start(ctx); err != nil {
-				lifecycle.BootError(errors.Wrap(err, "dedicated server start"))
-			}
-		}()
-
-		// Register this tunnel with the dedicated reverse SSH server
-		dedicatedServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
-		defer dedicatedServer.DeregisterTunnel(t.ID)
-	}
-
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
 		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
+
+		consulServiceId := fmt.Sprintf("tunnel:%s", t.ID.String())
+		err := t.services.Consul.Agent().ServiceRegister(&consul.AgentServiceRegistration{
+			ID:      consulServiceId,
+			Name:    consulServiceId,
+			Kind:    consul.ServiceKindTypical,
+			Address: "127.0.0.1", // TODO: Register with Pod IP
+			Port:    t.TunnelPort,
+			Tags:    []string{fmt.Sprintf("tunnel_id:%s", t.ID.String())},
+
+			Check: &consul.AgentServiceCheck{
+				CheckID: fmt.Sprintf("tunnel:%s:check_in", t.ID.String()),
+				Name:    "Tunnel Healthcheck",
+				TTL:     fmt.Sprintf("%ds", int((3 * time.Minute).Seconds())),
+			},
+		})
+		if err != nil {
+			lifecycle.BootError(errors.Wrap(err, "could not register service with consul"))
+		}
+
+		defer t.services.Consul.Agent().ServiceDeregister(consulServiceId)
 	}
 
 	select {
@@ -117,6 +123,7 @@ type ReverseTunnelServices struct {
 	}
 	Keystore keystore.Keystore
 	Logger   *logrus.Logger
+	Consul   *consul.Client
 
 	GlobalSSHServer *SSHServer
 

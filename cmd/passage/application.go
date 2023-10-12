@@ -24,6 +24,8 @@ import (
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
 
+	consul "github.com/hashicorp/consul/api"
+
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -128,6 +130,8 @@ func startApplication(bootFuncs ...interface{}) error {
 			newStats,
 			// Healthcheck manager to detect broken instances of Passage. Reports status over HTTP.
 			newHealthcheck,
+			// Consul Service Discovery
+			newConsulAPI,
 			// Viper configuration management.
 			newConfig,
 			// Logger.
@@ -415,6 +419,12 @@ func newHealthcheck(router *mux.Router) *healthcheckManager {
 	mgr := newHealthcheckManager()
 	router.Handle("/healthcheck", mgr)
 	return mgr
+}
+
+// newConsulAPI initialises a Consul API client
+func newConsulAPI(lc fx.Lifecycle, logger *logrus.Logger) (*consul.Client, error) {
+	consulApi, err := consul.NewClient(consul.DefaultConfig())
+	return consulApi, err
 }
 
 // newStats initializes a Stats client for the server
