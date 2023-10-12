@@ -50,6 +50,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 
 		consulServiceId := fmt.Sprintf("tunnel:%s", t.ID.String())
+		checkId := fmt.Sprintf("tunnel:%s:check_in", t.ID.String())
 		err := t.services.Consul.Agent().ServiceRegister(&consul.AgentServiceRegistration{
 			ID:      consulServiceId,
 			Name:    consulServiceId,
@@ -59,7 +60,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 			Tags:    []string{fmt.Sprintf("tunnel_id:%s", t.ID.String())},
 
 			Check: &consul.AgentServiceCheck{
-				CheckID: fmt.Sprintf("tunnel:%s:check_in", t.ID.String()),
+				CheckID: checkId,
 				Name:    "Tunnel Healthcheck",
 				TTL:     fmt.Sprintf("%ds", int((3 * time.Minute).Seconds())),
 			},
@@ -67,6 +68,16 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		if err != nil {
 			lifecycle.BootError(errors.Wrap(err, "could not register service with consul"))
 		}
+
+		t.services.Consul.Agent().PassTTL(checkId, "Initial tunnel status")
+
+		go (func() {
+			time.Sleep(5 * time.Second)
+			t.services.Consul.Agent().WarnTTL(checkId, "Tunnel warn")
+
+			time.Sleep(15 * time.Second)
+			t.services.Consul.Agent().FailTTL(checkId, "Tunnel failed")
+		})()
 
 		defer t.services.Consul.Agent().ServiceDeregister(consulServiceId)
 	}
