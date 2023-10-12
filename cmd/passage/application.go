@@ -14,10 +14,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/hightouchio/passage/tunnel/discovery"
-	discoveryDNS "github.com/hightouchio/passage/tunnel/discovery/dns"
-	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
-	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
-
+	discoveryConsul "github.com/hightouchio/passage/tunnel/discovery/consul"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	keystoreGCS "github.com/hightouchio/passage/tunnel/keystore/gcs"
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
@@ -130,8 +127,6 @@ func startApplication(bootFuncs ...interface{}) error {
 			newStats,
 			// Healthcheck manager to detect broken instances of Passage. Reports status over HTTP.
 			newHealthcheck,
-			// Consul Service Discovery
-			newConsulAPI,
 			// Viper configuration management.
 			newConfig,
 			// Logger.
@@ -182,23 +177,15 @@ func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, d
 func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService, error) {
 	var discoveryService discovery.DiscoveryService
 	switch config.GetString(ConfigDiscoveryType) {
-	case "srv":
-		discoveryService = discoverySRV.Discovery{
-			SrvRegistry: config.GetString(ConfigDiscoverySrvRegistry),
-			Prefix:      config.GetString(ConfigDiscoverySrvPrefix),
+	case "consul":
+		consulApi, err := consul.NewClient(consul.DefaultConfig())
+		if err != nil {
+			return nil, errors.Wrap(err, "could not init Consul client")
 		}
-		break
-
-	case "static":
-		discoveryService = discoveryStatic.Discovery{
-			Host: config.GetString(ConfigDiscoveryStaticHost),
-		}
-		break
-
-	case "dns":
-		discoveryService = discoveryDNS.Discovery{
-			HostNormal:  config.GetString(ConfigDiscoveryDnsHostNormal),
-			HostReverse: config.GetString(ConfigDiscoveryDnsHostReverse),
+		discoveryService = discoveryConsul.Discovery{
+			Consul:         consulApi,
+			HostAddress:    "127.0.0.1", // TODO: Drive off of Pod IP
+			HealthcheckTTL: 30 * time.Second,
 		}
 
 	default:
@@ -419,12 +406,6 @@ func newHealthcheck(router *mux.Router) *healthcheckManager {
 	mgr := newHealthcheckManager()
 	router.Handle("/healthcheck", mgr)
 	return mgr
-}
-
-// newConsulAPI initialises a Consul API client
-func newConsulAPI(lc fx.Lifecycle, logger *logrus.Logger) (*consul.Client, error) {
-	consulApi, err := consul.NewClient(consul.DefaultConfig())
-	return consulApi, err
 }
 
 // newStats initializes a Stats client for the server

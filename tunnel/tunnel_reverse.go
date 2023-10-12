@@ -2,9 +2,7 @@ package tunnel
 
 import (
 	"context"
-	"fmt"
 	"github.com/gliderlabs/ssh"
-	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -49,37 +47,21 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 
-		consulServiceId := fmt.Sprintf("tunnel:%s", t.ID.String())
-		checkId := fmt.Sprintf("tunnel:%s:check_in", t.ID.String())
-		err := t.services.Consul.Agent().ServiceRegister(&consul.AgentServiceRegistration{
-			ID:      consulServiceId,
-			Name:    consulServiceId,
-			Kind:    consul.ServiceKindTypical,
-			Address: "127.0.0.1", // TODO: Register with Pod IP
-			Port:    t.TunnelPort,
-			Tags:    []string{fmt.Sprintf("tunnel_id:%s", t.ID.String())},
-
-			Check: &consul.AgentServiceCheck{
-				CheckID: checkId,
-				Name:    "Tunnel Healthcheck",
-				TTL:     fmt.Sprintf("%ds", int((3 * time.Minute).Seconds())),
-			},
-		})
-		if err != nil {
-			lifecycle.BootError(errors.Wrap(err, "could not register service with consul"))
+		// Register this tunnel with service discovery
+		if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
+			return bootError{event: "register_tunnel", err: err}
 		}
+		// Deregister tunnel
+		defer func() {
+			if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+				lifecycle.BootError(errors.Wrap(err, "failed to deregister tunnel"))
+			}
+		}()
 
-		t.services.Consul.Agent().PassTTL(checkId, "Initial tunnel status")
-
-		go (func() {
-			time.Sleep(5 * time.Second)
-			t.services.Consul.Agent().WarnTTL(checkId, "Tunnel warn")
-
-			time.Sleep(15 * time.Second)
-			t.services.Consul.Agent().FailTTL(checkId, "Tunnel failed")
-		})()
-
-		defer t.services.Consul.Agent().ServiceDeregister(consulServiceId)
+		// TODO: Just for testing
+		if err := t.services.Discovery.MarkUnhealthy(t.ID, "adadaadad"); err != nil {
+			lifecycle.BootError(errors.Wrap(err, "failed to mark tunnel unhealthy"))
+		}
 	}
 
 	select {
@@ -115,28 +97,15 @@ func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, 
 	return authorizedKeys, nil
 }
 
-func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost(Reverse, t.ID)
-	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
-	}
-
-	return ConnectionDetails{
-		Host: tunnelHost,
-		Port: t.TunnelPort,
-	}, nil
-}
-
 // ReverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type ReverseTunnelServices struct {
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
-	Keystore keystore.Keystore
-	Logger   *logrus.Logger
-	Consul   *consul.Client
-
 	GlobalSSHServer *SSHServer
+	Keystore        keystore.Keystore
+	Logger          *logrus.Logger
+	Discovery       discovery.DiscoveryService
 
 	EnableIndividualSSHD bool
 	GetIndividualSSHD    func(sshdPort int) *SSHServer

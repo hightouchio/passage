@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
-	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
@@ -43,7 +43,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 }
 
 // runTunnels is the entrypoint for tunnel servers
-func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, consul *consul.Client, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats, logger *logrus.Logger) error {
+func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, discovery discovery.DiscoveryService, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats, logger *logrus.Logger) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
@@ -71,9 +71,10 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 
 	if config.GetBool(ConfigTunnelNormalEnabled) {
 		runTunnelManager(tunnel.Normal, tunnel.InjectNormalTunnelDependencies(server.GetNormalTunnels, tunnel.NormalTunnelServices{
-			SQL:      postgres.NewClient(sql),
-			Keystore: keystore,
-			Logger:   logger,
+			SQL:       postgres.NewClient(sql),
+			Keystore:  keystore,
+			Logger:    logger,
+			Discovery: discovery,
 		}, tunnel.SSHClientOptions{
 			User:              config.GetString(ConfigTunnelNormalSshUser),
 			DialTimeout:       config.GetDuration(ConfigTunnelNormalDialTimeout),
@@ -115,10 +116,10 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
-			SQL:      postgres.NewClient(sql),
-			Keystore: keystore,
-			Logger:   logger,
-			Consul:   consul,
+			SQL:       postgres.NewClient(sql),
+			Keystore:  keystore,
+			Logger:    logger,
+			Discovery: discovery,
 
 			GlobalSSHServer: sshServer,
 

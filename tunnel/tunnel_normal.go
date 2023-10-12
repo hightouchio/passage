@@ -180,18 +180,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	return signers, nil
 }
 
-func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost(Normal, t.ID)
-	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
-	}
-
-	return ConnectionDetails{
-		Host: tunnelHost,
-		Port: t.TunnelPort,
-	}, nil
-}
-
 // NormalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type NormalTunnelServices struct {
 	SQL interface {
@@ -200,6 +188,8 @@ type NormalTunnelServices struct {
 	}
 	Keystore keystore.Keystore
 	Logger   *logrus.Logger
+
+	Discovery discovery.DiscoveryService
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {

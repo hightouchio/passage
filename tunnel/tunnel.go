@@ -3,15 +3,12 @@ package tunnel
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
 )
 
 type Tunnel interface {
 	Start(context.Context, TunnelOptions) error
-	GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error)
-
 	GetID() uuid.UUID
 	Equal(interface{}) bool
 	GetError() *string
@@ -25,6 +22,11 @@ type TunnelOptions struct {
 type ConnectionDetails struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+}
+
+type HealthcheckDetails struct {
+	Status string `json:"status"`
+	Reason string `json:"reason"`
 }
 
 //goland:noinspection GoNameStartsWithPackageName
@@ -62,8 +64,7 @@ func (r CreateNormalTunnelRequest) Validate() error {
 type CreateNormalTunnelResponse struct {
 	Tunnel `json:"tunnel"`
 
-	PublicKey         *string `json:"publicKey,omitempty"`
-	ConnectionDetails `json:"connection,omitempty"`
+	PublicKey *string `json:"publicKey,omitempty"`
 }
 
 const defaultSSHPort = 22
@@ -92,11 +93,10 @@ func (s API) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelR
 	}
 
 	tunnel := normalTunnelFromSQL(record)
-	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
-	response := &CreateNormalTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
+	response := &CreateNormalTunnelResponse{Tunnel: tunnel}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
@@ -132,10 +132,8 @@ type CreateReverseTunnelRequest struct {
 }
 
 type CreateReverseTunnelResponse struct {
-	Tunnel `json:"tunnel"`
-
-	PrivateKey        *string `json:"privateKeyBase64,omitempty"`
-	ConnectionDetails `json:"connection,omitempty"`
+	Tunnel     `json:"tunnel"`
+	PrivateKey *string `json:"privateKeyBase64,omitempty"`
 }
 
 func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
@@ -154,11 +152,10 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 	}
 
 	tunnel := reverseTunnelFromSQL(record)
-	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
-	response := &CreateReverseTunnelResponse{Tunnel: tunnel, ConnectionDetails: connectionDetails}
+	response := &CreateReverseTunnelResponse{Tunnel: tunnel}
 
 	// if requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {

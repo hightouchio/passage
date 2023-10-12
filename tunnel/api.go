@@ -58,9 +58,10 @@ type GetTunnelRequest struct {
 }
 
 type GetTunnelResponse struct {
-	TunnelType        `json:"type"`
-	Tunnel            `json:"tunnel"`
-	ConnectionDetails `json:"connection"`
+	TunnelType         `json:"type"`
+	Tunnel             `json:"tunnel"`
+	ConnectionDetails  `json:"connection"`
+	HealthcheckDetails `json:"healthcheck"`
 }
 
 // GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
@@ -72,15 +73,22 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
-	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
+	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get connection details")
+		return nil, errors.Wrap(err, "could not get tunnel details")
 	}
 
 	return &GetTunnelResponse{
-		TunnelType:        tunnelType,
-		Tunnel:            tunnel,
-		ConnectionDetails: connectionDetails,
+		TunnelType: tunnelType,
+		Tunnel:     tunnel,
+		ConnectionDetails: ConnectionDetails{
+			Host: tunnelDetails.Host,
+			Port: tunnelDetails.Port,
+		},
+		HealthcheckDetails: HealthcheckDetails{
+			Status: tunnelDetails.Status,
+			Reason: tunnelDetails.StatusReason,
+		},
 	}, nil
 }
 
