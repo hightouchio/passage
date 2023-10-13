@@ -58,6 +58,7 @@ func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 	if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
 		return bootError{event: "service_discovery_register", err: err}
 	}
+	// TODO: Deregister tunnel when it *completely* shuts down
 
 	// Update service discovery that SSH connection established, but not quite online
 	t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelWarning, "Booting")

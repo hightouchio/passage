@@ -32,8 +32,6 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	lifecycle := getCtxLifecycle(ctx)
-
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
 		return bootError{event: "get_authorized_keys", err: err}
@@ -51,12 +49,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
 			return bootError{event: "register_tunnel", err: err}
 		}
-		// Deregister tunnel
-		defer func() {
-			if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-				lifecycle.BootError(errors.Wrap(err, "failed to deregister tunnel"))
-			}
-		}()
+		// TODO: Deregister tunnel when it *completely* shuts down
 	}
 
 	select {
