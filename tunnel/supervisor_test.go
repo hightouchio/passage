@@ -32,10 +32,6 @@ func (d dummyTunnel) Equal(i interface{}) bool {
 	return true
 }
 
-func (d dummyTunnel) GetError() *string {
-	return nil
-}
-
 func TestSupervisor_Profile(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)

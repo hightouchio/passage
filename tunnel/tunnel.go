@@ -11,7 +11,6 @@ type Tunnel interface {
 	Start(context.Context, TunnelOptions) error
 	GetID() uuid.UUID
 	Equal(interface{}) bool
-	GetError() *string
 }
 
 type TunnelOptions struct {

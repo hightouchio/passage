@@ -42,11 +42,7 @@ func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTun
 
 	if err := checkConnectivity(ctx, details.ConnectionDetails); err != nil {
 		s.Stats.Incr("status_check", stats.Tags{"success": false}, 1)
-		errorMessage := "Failed to connect to tunnel"
-		if details.Tunnel.GetError() != nil {
-			errorMessage = *details.Tunnel.GetError()
-		}
-		return &CheckTunnelResponse{Success: false, Error: errorMessage}, nil
+		return &CheckTunnelResponse{Success: false, Error: "Failed to connect to tunnel"}, nil
 	}
 
 	s.Stats.Incr("status_check", stats.Tags{"success": true}, 1)

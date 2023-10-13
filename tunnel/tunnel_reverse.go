@@ -152,7 +152,3 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 func (t ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
 }
-
-func (t ReverseTunnel) GetError() *string {
-	return t.Error
-}
