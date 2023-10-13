@@ -59,7 +59,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		}()
 
 		// TODO: Just for testing
-		if err := t.services.Discovery.MarkUnhealthy(t.ID, "adadaadad"); err != nil {
+		if err := t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelUnhealthy, "adadaadad"); err != nil {
 			lifecycle.BootError(errors.Wrap(err, "failed to mark tunnel unhealthy"))
 		}
 	}

@@ -32,8 +32,8 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 			Name:    "Tunnel Healthcheck",
 			TTL:     fmt.Sprintf("%ds", int(d.HealthcheckTTL.Seconds())),
 
-			// Default to the Warn status before the first healthcheck is processed.
-			Status: "warning",
+			// Default to the Warning status before the first healthcheck is processed.
+			Status: discovery.TunnelWarning,
 		},
 	})
 	if err != nil {
@@ -80,15 +80,8 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 	}, nil
 }
 
-func (d Discovery) MarkHealthy(id uuid.UUID, reason string) error {
-	if err := d.Consul.Agent().PassTTL(getTunnelHealthcheckId(id), reason); err != nil {
-		return errors.Wrap(err, "could not mark tunnel healthy")
-	}
-	return nil
-}
-
-func (d Discovery) MarkUnhealthy(id uuid.UUID, reason string) error {
-	if err := d.Consul.Agent().FailTTL(getTunnelHealthcheckId(id), reason); err != nil {
+func (d Discovery) UpdateHealth(id uuid.UUID, status, message string) error {
+	if err := d.Consul.Agent().UpdateTTL(getTunnelHealthcheckId(id), message, status); err != nil {
 		return errors.Wrap(err, "could not mark tunnel unhealthy")
 	}
 	return nil

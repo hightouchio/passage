@@ -9,8 +9,7 @@ type DiscoveryService interface {
 
 	GetTunnel(id uuid.UUID) (TunnelDetails, error)
 
-	MarkHealthy(id uuid.UUID, reason string) error
-	MarkUnhealthy(id uuid.UUID, reason string) error
+	UpdateHealth(id uuid.UUID, status, message string) error
 }
 
 type TunnelDetails struct {
@@ -19,3 +18,10 @@ type TunnelDetails struct {
 	Status       string
 	StatusReason string
 }
+
+// Consul healthcheck status codes
+const (
+	TunnelUnhealthy = "critical"
+	TunnelWarning   = "warning"
+	TunnelHealthy   = "passing"
+)
