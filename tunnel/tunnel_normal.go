@@ -38,17 +38,6 @@ type NormalTunnel struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
-	err := t.start(ctx, options)
-	if err != nil {
-		if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, err.Error()); err != nil {
-			return errors.Wrap(err, "failed to persist tunnel start error")
-		}
-		return err
-	}
-	return nil
-}
-
-func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
 	lifecycle := getCtxLifecycle(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
