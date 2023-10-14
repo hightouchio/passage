@@ -27,13 +27,15 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 		Port:    port,
 		Tags:    []string{fmt.Sprintf("tunnel_id:%s", id.String())},
 
-		Check: &consul.AgentServiceCheck{
-			CheckID: getTunnelHealthcheckId(id),
-			Name:    "Tunnel Healthcheck",
-			TTL:     fmt.Sprintf("%ds", int(d.HealthcheckTTL.Seconds())),
+		Checks: []*consul.AgentServiceCheck{
+			{
+				CheckID: getTunnelHealthcheckId(id),
+				Name:    "Tunnel Check-in",
+				TTL:     formatConsulDuration(d.HealthcheckTTL),
 
-			// Default to the Critical status before the first healthcheck is processed.
-			Status: discovery.TunnelUnhealthy,
+				// Default to the Critical status before the first healthcheck is processed.
+				Status: discovery.TunnelUnhealthy,
+			},
 		},
 	})
 	if err != nil {
@@ -63,6 +65,8 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 
 	var check *consul.HealthCheck
 	for _, c := range service.Checks {
+		// TODO: Refactor this to support multiple healthchecks
+		//	Prioritize self-reported status over connectivity check status
 		if c.CheckID == getTunnelHealthcheckId(id) {
 			check = c
 			break
@@ -93,4 +97,8 @@ func getTunnelServiceId(id uuid.UUID) string {
 
 func getTunnelHealthcheckId(id uuid.UUID) string {
 	return fmt.Sprintf("%s:check_in", getTunnelServiceId(id))
+}
+
+func formatConsulDuration(d time.Duration) string {
+	return fmt.Sprintf("%ds", int(d.Seconds()))
 }

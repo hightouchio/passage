@@ -40,6 +40,9 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 	errs := make(chan error)
 	defer close(errs)
 
+	// Start the tunnel connectivity check
+	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
+
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
 		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), t.services.Discovery, stats.GetStats(ctx))
@@ -49,7 +52,11 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 		if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
 			return bootError{event: "register_tunnel", err: err}
 		}
-		// TODO: Deregister tunnel when it *completely* shuts down
+		defer func() {
+			if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+				t.services.Logger.Error(errors.Wrap(err, "could not deregister tunnel from service discovery"))
+			}
+		}()
 	}
 
 	select {

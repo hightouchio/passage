@@ -43,11 +43,18 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Start the tunnel connectivity check
+	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
+
 	// Register tunnel with service discovery.
 	if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
 		return bootError{event: "service_discovery_register", err: err}
 	}
-	// TODO: Deregister tunnel when it *completely* shuts down
+	defer func() {
+		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+			t.services.Logger.Error(errors.Wrap(err, "could not deregister tunnel from service discovery"))
+		}
+	}()
 
 	// Update service discovery that SSH connection established, but not quite online
 	t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelWarning, "Booting")
