@@ -32,8 +32,8 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 			Name:    "Tunnel Healthcheck",
 			TTL:     fmt.Sprintf("%ds", int(d.HealthcheckTTL.Seconds())),
 
-			// Default to the Warning status before the first healthcheck is processed.
-			Status: discovery.TunnelWarning,
+			// Default to the Critical status before the first healthcheck is processed.
+			Status: discovery.TunnelUnhealthy,
 		},
 	})
 	if err != nil {

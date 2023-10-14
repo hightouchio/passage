@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"github.com/gliderlabs/ssh"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
 	"io"
@@ -16,7 +17,7 @@ type ReverseForwardingHandler struct {
 	forwards         map[string]*TCPForwarder
 	sync.Mutex
 
-	GetTunnel func(bindPort int) (registeredTunnel, bool)
+	GetTunnel func(bindPort int) (boundReverseTunnel, bool)
 }
 
 func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
@@ -122,6 +123,9 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	// Start port forwarding
 	go forwarder.Serve()
 
+	// Mark tunnel healthy
+	tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelHealthy, "Tunnel is online")
+
 	// Graceful shutdown if connection ends
 	go func() {
 		<-ctx.Done()
@@ -135,6 +139,13 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 func (h *ReverseForwardingHandler) closePortForwarding(ctx context.Context, payload remoteForwardCancelRequest) (bool, []byte) {
 	addr := net.JoinHostPort(payload.BindAddr, strconv.Itoa(int(payload.BindPort)))
 	h.closeTunnel(addr)
+
+	// Get the tunnel to deregister it from the discovery service
+	tunnel, ok := h.GetTunnel(int(payload.BindPort))
+	if ok {
+		tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelUnhealthy, "Tunnel is offline")
+	}
+
 	return true, nil
 }
 
