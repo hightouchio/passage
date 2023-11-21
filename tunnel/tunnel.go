@@ -7,8 +7,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+type StatusUpdateFn func(status, message string)
+
 type Tunnel interface {
-	Start(context.Context, TunnelOptions) error
+	Start(context.Context, TunnelOptions, StatusUpdateFn) error
 	GetID() uuid.UUID
 	Equal(interface{}) bool
 }

@@ -25,7 +25,7 @@ type ReverseTunnel struct {
 	services ReverseTunnelServices
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
+func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
 	// TODO: Assign this randomly.
 	tunnelPort := 12345
 
