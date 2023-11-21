@@ -50,7 +50,7 @@ func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger 
 			return
 
 		case <-ticker.C:
-			logger.Info("Checking tunnel")
+			logger.Debug("Checking tunnel")
 
 			// Resolve the tunnel connection details from service discovery
 			tunnelDetails, err := serviceDiscovery.GetTunnel(tunnelID)

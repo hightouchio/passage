@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 	"net"
 )
 
@@ -89,13 +90,14 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		}
 
 		// Create SSH Server for Reverse Tunnels
+		logger := logger.Named("SSHServer")
 		sshServer := tunnel.NewSSHServer(
 			net.JoinHostPort(
 				config.GetString(ConfigTunnelReverseBindHost),
 				config.GetString(ConfigTunnelReverseSshdPort),
 			),
 			hostKey,
-			logger.Named("SSHServer"),
+			logger,
 		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
@@ -103,9 +105,8 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 					// We want to pass context.Background() here, not the context.Context accepted from the hook,
 					//	because the hook's context.Context is cancelled after the application has booted completely
 					if err := sshServer.Start(context.Background()); err != nil {
-						logger.Fatal(errors.Wrap(err, "sshd"))
+						logger.Errorw("SSH", zap.Error(err))
 					}
-
 				}()
 				return nil
 			},
@@ -127,7 +128,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 				return tunnel.NewSSHServer(
 					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
 					hostKey,
-					logger.Named("SSHServer"),
+					logger,
 				)
 			},
 		}))
