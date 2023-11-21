@@ -13,8 +13,7 @@ import (
 )
 
 type ReverseForwardingHandler struct {
-	httpProxyEnabled bool
-	forwards         map[string]*TCPForwarder
+	forwards map[string]*TCPForwarder
 	sync.Mutex
 
 	GetTunnel func(bindPort int) (boundReverseTunnel, bool)
@@ -67,10 +66,16 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	conn := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
 	tunnelBindAddr := net.JoinHostPort(payload.BindAddr, strconv.Itoa(int(payload.BindPort)))
 
+	// Start listening on a local port.
+	tunnelListener, err := newEphemeralTCPListener()
+	if err != nil {
+		return false, []byte("Port forwarding is disabled")
+	}
+	defer tunnelListener.Close()
+
 	// Initiate TCPForwarder to listen for tunnel connections.
 	forwarder := &TCPForwarder{
-		BindAddr:         tunnelBindAddr,
-		HTTPProxyEnabled: h.httpProxyEnabled,
+		Listener: tunnelListener,
 
 		// Implement GetUpstreamConn by opening a channel on the SSH connection.
 		GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
@@ -104,24 +109,17 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 		Stats:     tunnel.stats,
 	}
 
-	// Start tunnel listener
-	if err := forwarder.Listen(); err != nil {
-		switch err.(type) {
-		case bootError:
-			tunnel.lifecycle.BootError(err)
-		default:
-			tunnel.lifecycle.Error(err)
-		}
-
-		return false, []byte("Port forwarding disabled")
-	}
-
 	h.Lock()
 	h.forwards[tunnelBindAddr] = forwarder
 	h.Unlock()
 
 	// Start port forwarding
-	go forwarder.Serve()
+	go func() {
+		if err := forwarder.Serve(); err != nil {
+			tunnel.lifecycle.Error(errors.Wrap(err, "forwarder_serve"))
+			return
+		}
+	}()
 
 	// Mark tunnel healthy
 	tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelHealthy, "Tunnel is online")
@@ -153,6 +151,7 @@ func (h *ReverseForwardingHandler) closeTunnel(addr string) {
 	h.Lock()
 	ln, ok := h.forwards[addr]
 	h.Unlock()
+
 	if ok {
 		ln.Close()
 	}

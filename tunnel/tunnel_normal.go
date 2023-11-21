@@ -35,17 +35,21 @@ type NormalTunnel struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
-	tunnelPort := 12345
-
 	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
+	// Start listening on a local port.
+	tunnelListener, err := newEphemeralTCPListener()
+	if err != nil {
+		return bootError{event: "open_listener", err: err}
+	}
+	defer tunnelListener.Close()
+	lifecycle.BootEvent("open_listener", stats.Tags{"listen_addr": tunnelListener.Addr().String()})
+	listenerPort := portFromNetAddr(tunnelListener.Addr())
 
 	// Register tunnel with service discovery.
-	if err := t.services.Discovery.RegisterTunnel(t.ID, tunnelPort); err != nil {
+	if err := t.services.Discovery.RegisterTunnel(t.ID, listenerPort); err != nil {
 		return bootError{event: "service_discovery_register", err: err}
 	}
 	defer func() {
@@ -53,6 +57,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			t.services.Logger.Error(errors.Wrap(err, "could not deregister tunnel from service discovery"))
 		}
 	}()
+
+	// Start the tunnel connectivity check
+	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
 
 	// Update service discovery that SSH connection established, but not quite online
 	t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelWarning, "Booting")
@@ -119,10 +126,10 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 		}
 	}()
 
-	// Configure TCPForwarder
+	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
+	//	tunnel listener and a remote SSH connection.
 	forwarder := &TCPForwarder{
-		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(tunnelPort)),
-		KeepaliveInterval: 5 * time.Second,
+		Listener: tunnelListener,
 
 		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
 		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
@@ -133,26 +140,19 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 			return serviceConn, err
 		},
 
-		Lifecycle: lifecycle,
-		Stats:     stats.GetStats(ctx),
+		KeepaliveInterval: 5 * time.Second,
+		Lifecycle:         lifecycle,
+		Stats:             stats.GetStats(ctx),
 	}
 	defer forwarder.Close()
-
-	// Start tunnel listener
-	if err := forwarder.Listen(); err != nil {
-		t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelUnhealthy, fmt.Sprintf("Failed to boot forwarder: %s", err.Error()))
-		switch err.(type) {
-		case bootError:
-			lifecycle.BootError(err)
-		default:
-			lifecycle.Error(err)
-		}
-	}
 
 	// Start port forwarding
 	go func() {
 		defer cancel()
-		forwarder.Serve()
+		if err := forwarder.Serve(); err != nil {
+			lifecycle.Error(bootError{event: "forwarder_serve", err: err})
+			return
+		}
 	}()
 
 	// Start connectivity checker
@@ -166,7 +166,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				return
 
 			case <-ticker.C:
-				if err := checkConnectivity(ctx, "localhost", tunnelPort); err != nil {
+				if err := checkConnectivity(ctx, "localhost", listenerPort); err != nil {
 					lifecycle.Error(errors.Wrap(err, "connectivity check failed"))
 
 					// Update service discovery that tunnel is unhealthy

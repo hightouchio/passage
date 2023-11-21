@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
@@ -12,23 +13,20 @@ import (
 )
 
 type TCPForwarder struct {
-	BindAddr string
-
-	// KeepaliveInterval is the interval between OS level TCP keepalive handshakes
-	KeepaliveInterval time.Duration
+	Listener *net.TCPListener
 
 	// GetUpstreamConn is a function thats job is to initiate a connection to the upstream service.
 	// It is called once for each incoming TunnelConnection.
 	// It should return a dedicated io.ReadWriteCloser for each incoming TunnelConnection.
 	GetUpstreamConn func(net.Conn) (io.ReadWriteCloser, error)
 
+	// KeepaliveInterval is the interval between OS level TCP keepalive handshakes
+	KeepaliveInterval time.Duration
+
 	Lifecycle Lifecycle
 	Stats     stats.Stats
-
-	listener  *net.TCPListener
 	conns     map[string]net.Conn
 	close     chan struct{}
-	closeOnce sync.Once
 
 	sync.RWMutex
 }
@@ -44,69 +42,65 @@ func (s *TCPSession) ID() string {
 	return s.id
 }
 
-func (f *TCPForwarder) Listen() error {
-	f.close = make(chan struct{})
-
-	// Open tunnel TCP listener
-	f.Lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": f.BindAddr})
-	listenTcpAddr, err := net.ResolveTCPAddr("tcp", f.BindAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: errors.Wrap(err, "resolve addr")}
-	}
-	listener, err := net.ListenTCP("tcp", listenTcpAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: err}
-	}
-	f.listener = listener
-	f.Lifecycle.Open()
-
-	// Wait for close signal
-	go func() {
-		<-f.close
-		f.listener.Close()
-		f.Lifecycle.Close()
-	}()
-
-	return nil
-}
-
 func (f *TCPForwarder) Serve() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if f.Listener == nil {
+		return fmt.Errorf("must set listener")
+	}
+
+	if f.close == nil {
+		f.close = make(chan struct{})
+	}
+
 	for {
-		if f.listener == nil {
-			return fmt.Errorf("cannot serve without first starting listener")
-		}
+		select {
+		case <-f.close:
+			return nil
 
-		// Accept incoming tunnel connections
-		conn, err := f.listener.AcceptTCP()
-		if err != nil {
-			return errors.Wrap(err, "accept tcp")
-		}
-
-		// Configure keepalive
-		conn.SetKeepAlive(true)
-		conn.SetKeepAlivePeriod(f.KeepaliveInterval)
-
-		// Pass connections off to tunnel connection handler.
-		go func() {
-			session := &TCPSession{
-				TCPConn: conn,
-				id:      uuid.New().String(),
+		default:
+			// Accept incoming tunnel connections
+			conn, err := f.Listener.AcceptTCP()
+			if err != nil {
+				return errors.Wrap(err, "accept tcp")
 			}
-			defer session.Close()
 
-			f.handleSession(session)
-		}()
+			// Configure keepalive
+			if err := conn.SetKeepAlive(true); err != nil {
+				return errors.Wrap(err, "set keepalive")
+			}
+			if err := conn.SetKeepAlivePeriod(f.KeepaliveInterval); err != nil {
+				return errors.Wrap(err, "set keepalive period")
+			}
+
+			// Pass connections off to tunnel connection handler.
+			go func() {
+				session := &TCPSession{
+					TCPConn: conn,
+					id:      uuid.New().String(),
+				}
+				defer session.Close()
+
+				f.handleSession(ctx, session)
+			}()
+		}
 	}
 }
 
 func (f *TCPForwarder) Close() error {
-	f.closeOnce.Do(func() { close(f.close) })
+	if f.close != nil {
+		close(f.close)
+	}
+	if f.Listener != nil {
+		return f.Listener.Close()
+	}
 	return nil
 }
 
 // handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleSession(session *TCPSession) {
+func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
 
 	defer func() {
@@ -151,7 +145,7 @@ func (f *TCPForwarder) handleSession(session *TCPSession) {
 	}()
 
 	select {
-	case <-f.close: // Forwarder close
+	case <-ctx.Done():
 	case <-done: // Finished pipeline
 	}
 }
