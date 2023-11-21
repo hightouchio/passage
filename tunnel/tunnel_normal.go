@@ -62,7 +62,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
 
 	// Update service discovery that SSH connection established, but not quite online
-	t.services.Discovery.UpdateHealth(t.ID, discovery.TunnelWarning, "Booting")
+	statusUpdate(StatusBooting, "Booting")
 
 	// Get a list of key signers to use for authentication
 	keySigners, err := t.getAuthSigners(ctx)

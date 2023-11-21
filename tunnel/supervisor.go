@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"fmt"
 	"github.com/hightouchio/passage/stats"
 	"time"
 )
@@ -65,10 +64,7 @@ func (s *Supervisor) Start(ctx context.Context) {
 					ctx = stats.InjectContext(ctx, st)
 					ctx = injectCtxLifecycle(ctx, lifecycle)
 
-					if err := s.Tunnel.Start(ctx, s.TunnelOptions, func(status, message string) {
-						// Log status updates (forward these to Consul)
-						fmt.Printf("Tunnel(%s): %s - %s\n", s.Tunnel.GetID(), status, message)
-					}); err != nil {
+					if err := s.Tunnel.Start(ctx, s.TunnelOptions, newTunnelStatusUpdater(s.Tunnel)); err != nil {
 						switch err.(type) {
 						case bootError:
 							lifecycle.BootError(err)
