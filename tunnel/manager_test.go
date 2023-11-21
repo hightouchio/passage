@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
@@ -28,7 +28,7 @@ func Test_Manager_restartTunnel(t *testing.T) {
 		return t, nil
 	}
 
-	manager := NewManager(stats.New(&statsd.NoOpClient{}, logrus.New()), listFunc, TunnelOptions{}, 50*time.Millisecond, 50*time.Millisecond)
+	manager := NewManager(log.Get(), stats.New(&statsd.NoOpClient{}), listFunc, TunnelOptions{}, 50*time.Millisecond, 50*time.Millisecond)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -73,7 +73,7 @@ func newMockTunnel(port int) *mockTunnel {
 	}
 }
 
-func (m *mockTunnel) Start(ctx context.Context, options TunnelOptions) error {
+func (m *mockTunnel) Start(ctx context.Context, options TunnelOptions, fn StatusUpdateFn) error {
 	m.started = true
 	<-ctx.Done()
 	m.stopped = true

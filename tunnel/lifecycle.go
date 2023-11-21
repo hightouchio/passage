@@ -3,8 +3,8 @@ package tunnel
 import (
 	"context"
 	"fmt"
-	"github.com/DataDog/datadog-go/statsd"
-	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/log"
+	"go.uber.org/zap"
 )
 
 // Lifecycle provides callbacks for the tunnel to self-report status
@@ -13,7 +13,7 @@ type Lifecycle interface {
 	Start()
 
 	// BootEvent is called for logging purposes during relevant events in the Tunnel boot process.
-	BootEvent(event string, tags stats.Tags)
+	BootEvent(event string, args ...any)
 
 	// BootError is called when an anomaly occurs while booting a Tunnel.
 	BootError(err error)
@@ -22,7 +22,7 @@ type Lifecycle interface {
 	Open()
 
 	// SessionEvent is called for logging purposes during important events in a Tunnel session (connection)
-	SessionEvent(sessionId string, event string, tags stats.Tags)
+	SessionEvent(sessionId string, event string, args ...any)
 	SessionError(sessionId string, err error)
 
 	// Error is called when an error causes the tunnel to crash
@@ -46,76 +46,47 @@ func (e bootError) Error() string {
 
 // lifecycleLogger logs events in a tunnel's lifecycle
 type lifecycleLogger struct {
-	st stats.Stats
+	logger *log.Logger
 }
 
 func (l lifecycleLogger) Start() {
-	l.st.SimpleEvent("start")
+	l.logger.Info("Starting tunnel")
 }
 
-func (l lifecycleLogger) BootEvent(event string, tags stats.Tags) {
-	tags["event"] = event
-	l.st.Event(stats.Event{
-		Event: statsd.Event{
-			Title:     "boot_event",
-			Text:      event,
-			AlertType: statsd.Info,
-		},
-		Tags: tags,
-	})
+func (l lifecycleLogger) BootEvent(event string, args ...any) {
+	l.logger.With(args...).Infof("Boot event: %s", event)
 }
 
 func (l lifecycleLogger) BootError(err error) {
-	l.st.ErrorEvent("boot_error", err)
+	l.logger.Errorw("Boot error", zap.Error(err))
 }
 
-func (l lifecycleLogger) SessionEvent(sessionId string, event string, tags stats.Tags) {
-	tags["event"] = event
-	tags["session_id"] = sessionId
-
-	l.st.Event(stats.Event{
-		Event: statsd.Event{
-			Title:     "session_event",
-			Text:      event,
-			AlertType: statsd.Info,
-		},
-		Tags: tags,
-	})
+func (l lifecycleLogger) SessionEvent(sessionId string, event string, args ...any) {
+	l.logger.With(
+		zap.String("session_id", sessionId),
+	).With(args...).Infof("Session event: %s", event)
 }
 
 func (l lifecycleLogger) SessionError(sessionId string, err error) {
-	l.st.Event(stats.Event{
-		Event: statsd.Event{
-			Title:     "session_error",
-			Text:      err.Error(),
-			AlertType: statsd.Error,
-		},
-		Tags: stats.Tags{
-			"session_id": sessionId,
-		},
-	})
+	l.logger.With(
+		zap.String("session_id", sessionId),
+	).Errorw("Session error", zap.Error(err))
 }
 
 func (l lifecycleLogger) Open() {
-	l.st.SimpleEvent("open")
+	l.logger.Info("Open")
 }
 
 func (l lifecycleLogger) Error(err error) {
-	l.st.Event(stats.Event{
-		Event: statsd.Event{
-			Title:     "error",
-			Text:      err.Error(),
-			AlertType: statsd.Error,
-		},
-	})
-}
-
-func (l lifecycleLogger) Close() {
-	l.st.SimpleEvent("close")
+	l.logger.Error(zap.Error(err))
 }
 
 func (l lifecycleLogger) Stop() {
-	l.st.SimpleEvent("stop")
+	l.logger.Info("Stop")
+}
+
+func (l lifecycleLogger) Close() {
+	l.logger.Info("Close")
 }
 
 type NoopLifecycle struct {
@@ -125,7 +96,7 @@ func (n NoopLifecycle) Start() {
 	// no-op
 }
 
-func (n NoopLifecycle) BootEvent(event string, tags stats.Tags) {
+func (n NoopLifecycle) BootEvent(event string, args ...any) {
 	// no-op
 }
 
@@ -137,7 +108,7 @@ func (n NoopLifecycle) Open() {
 	// no-op
 }
 
-func (n NoopLifecycle) SessionEvent(sessionId string, event string, tags stats.Tags) {
+func (n NoopLifecycle) SessionEvent(sessionId string, event string, args ...any) {
 	// no-op
 }
 

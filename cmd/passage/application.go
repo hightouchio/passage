@@ -9,8 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
+	"go.uber.org/zap"
 	"net/http/pprof"
 
 	"github.com/hightouchio/passage/tunnel/discovery"
@@ -26,7 +28,6 @@ import (
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"go.uber.org/dig"
 	"go.uber.org/fx"
@@ -146,9 +147,9 @@ func startApplication(bootFuncs ...interface{}) error {
 		if err := app.Start(startCtx); err != nil {
 			switch v := dig.RootCause(err).(type) {
 			case configError:
-				logrus.Fatalf("config error: %v", v)
+				log.Get().Fatalf("Config error: %v", v)
 			default:
-				logrus.Fatalf("startup error: %v", v)
+				log.Get().Fatalf("Startup error: %v", v)
 			}
 		}
 	}()
@@ -159,7 +160,7 @@ func startApplication(bootFuncs ...interface{}) error {
 	defer cancel()
 
 	if err := app.Stop(stopCtx); err != nil {
-		logrus.Fatalf("shutdown error: %v", dig.RootCause(err))
+		log.Get().Fatalf("Shutdown error: %v", dig.RootCause(err))
 	}
 
 	return nil
@@ -264,9 +265,11 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 	}
 }
 
-func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) *mux.Router {
+func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.Router {
 	router := mux.NewRouter()
 	server := &http.Server{Addr: config.GetString(ConfigHTTPAddr), Handler: router}
+
+	logger := log.Named("HTTP")
 
 	// Log every request.
 	router.Use(LoggingMiddleware(logger))
@@ -282,10 +285,10 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithField("addr", server.Addr).Debug("http server start")
+			logger.Info("Start")
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
-					logrus.Fatal(errors.Wrap(err, "http"))
+					logger.Fatal("Could not start HTTP listener", zap.Error(err))
 				}
 			}()
 			return nil
@@ -320,34 +323,14 @@ func newConfig() (*viper.Viper, error) {
 	return config, nil
 }
 
-func newLogger(config *viper.Viper) *logrus.Logger {
-	logger := logrus.New()
-	switch config.GetString(ConfigLogLevel) {
-	case "trace":
-		logger.SetLevel(logrus.TraceLevel)
-	case "debug":
-		logger.SetLevel(logrus.DebugLevel)
-	case "info":
-		logger.SetLevel(logrus.InfoLevel)
-	case "warning", "warn":
-		logger.SetLevel(logrus.WarnLevel)
-	case "error":
-		logger.SetLevel(logrus.ErrorLevel)
-	default:
-		logger.SetLevel(logrus.InfoLevel)
-	}
-
-	switch config.GetString(ConfigLogFormat) {
-	case "json":
-		logger.SetFormatter(&logrus.JSONFormatter{})
-	default:
-		logger.SetFormatter(&logrus.TextFormatter{})
-	}
-	return logger
+func newLogger(config *viper.Viper) *log.Logger {
+	// Init new zap
+	log.Init(config.GetString(ConfigLogLevel), config.GetString(ConfigLogFormat))
+	return log.Get()
 }
 
 // newPostgres initializes a connection to the Postgres database
-func newPostgres(lc fx.Lifecycle, logger *logrus.Logger, config *viper.Viper) (*sqlx.DB, error) {
+func newPostgres(lc fx.Lifecycle, config *viper.Viper) (*sqlx.DB, error) {
 	config.SetDefault(ConfigPostgresHost, os.Getenv("PGHOST"))
 	config.SetDefault(ConfigPostgresPort, os.Getenv("PGPORT"))
 	config.SetDefault(ConfigPostgresUser, os.Getenv("PGUSER"))
@@ -409,7 +392,7 @@ func newHealthcheck(router *mux.Router) *healthcheckManager {
 }
 
 // newStats initializes a Stats client for the server
-func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
+func newStats(config *viper.Viper) (stats.Stats, error) {
 	var statsdClient statsd.ClientInterface
 
 	if statsdAddr := config.GetString(ConfigStatsdAddr); statsdAddr != "" {
@@ -422,7 +405,7 @@ func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
 		statsdClient = &statsd.NoOpClient{}
 	}
 	st := stats.
-		New(statsdClient, logger).
+		New(statsdClient).
 		WithPrefix("passage")
 	if version != "" {
 		st = st.WithTags(stats.Tags{"version": version})

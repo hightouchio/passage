@@ -2,7 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -54,22 +56,29 @@ func (s *Supervisor) Start(ctx context.Context) {
 						WithTags(stats.Tags{
 							"tunnel_id": s.Tunnel.GetID().String(),
 						})
-					lifecycle := lifecycleLogger{st}
+
+					logger := log.Get().Named("Tunnel").With(
+						zap.String("tunnel_id", s.Tunnel.GetID().String()),
+					)
+
+					lifecycle := lifecycleLogger{logger}
 					lifecycle.Start()
 					defer lifecycle.Stop()
 
 					// Inject visibility interfaces into context
 					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
+
 					ctx = stats.InjectContext(ctx, st)
 					ctx = injectCtxLifecycle(ctx, lifecycle)
+					ctx = log.Context(ctx, logger)
 
-					if err := s.Tunnel.Start(ctx, s.TunnelOptions, newTunnelStatusUpdater(s.Tunnel)); err != nil {
+					if err := s.Tunnel.Start(ctx, s.TunnelOptions, newTunnelStatusUpdater(logger)); err != nil {
 						switch err.(type) {
 						case bootError:
-							lifecycle.BootError(err)
+							logger.Errorw("Boot error", zap.Error(err))
 						default:
-							lifecycle.Error(err)
+							logger.Errorw("Error", zap.Error(err))
 						}
 					}
 				}()

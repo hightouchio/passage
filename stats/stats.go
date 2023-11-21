@@ -3,13 +3,11 @@ package stats
 import (
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/sirupsen/logrus"
 	"strings"
 )
 
 type Stats struct {
 	client statsd.ClientInterface
-	logger *logrus.Logger
 
 	prefix    string
 	tags      Tags
@@ -18,10 +16,9 @@ type Stats struct {
 
 type Tags map[string]interface{}
 
-func New(client statsd.ClientInterface, logger *logrus.Logger) Stats {
+func New(client statsd.ClientInterface) Stats {
 	return Stats{
 		client:    client,
-		logger:    logger,
 		tags:      Tags{},
 		eventTags: Tags{},
 	}
@@ -57,48 +54,6 @@ func (s Stats) Incr(name string, tags Tags, rate float64) {
 
 func (s Stats) Gauge(name string, value float64, tags Tags, rate float64) {
 	s.client.Gauge(joinPrefixes(s.prefix, name), value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
-}
-
-func (s Stats) SimpleEvent(title string) {
-	s.Event(Event{
-		Event: *statsd.NewEvent(title, ""),
-	})
-}
-
-func (s Stats) ErrorEvent(title string, err error) {
-	s.Event(Event{
-		Event: statsd.Event{
-			Title:     title,
-			Text:      err.Error(),
-			AlertType: statsd.Error,
-		},
-	})
-}
-
-func (s Stats) Event(event Event) {
-	tags := mergeTags([]Tags{s.tags, s.eventTags, event.Tags})
-
-	statsEvent := event.Event
-	statsEvent.Title = joinPrefixes(s.prefix, event.Title)
-	statsEvent.Tags = convertTags(tags)
-
-	// prepare for logging
-	var level logrus.Level
-	switch statsEvent.AlertType {
-	case statsd.Error:
-		level = logrus.ErrorLevel
-	case statsd.Warning:
-		level = logrus.WarnLevel
-	default:
-		level = logrus.InfoLevel
-	}
-
-	fields := logrus.Fields(tags)
-	if statsEvent.AlertType == statsd.Error {
-		fields["error"] = statsEvent.Text
-	}
-
-	s.logger.WithFields(logrus.Fields(tags)).Log(level, statsEvent.Title)
 }
 
 func joinPrefixes(prefixes ...string) string {

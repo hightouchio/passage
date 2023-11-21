@@ -1,6 +1,9 @@
 package tunnel
 
-import "fmt"
+import (
+	"github.com/hightouchio/passage/log"
+	"go.uber.org/zap"
+)
 
 type StatusUpdateFn func(status Status, message string)
 
@@ -12,8 +15,12 @@ const (
 	StatusError   Status = "error"
 )
 
-func newTunnelStatusUpdater(tunnel Tunnel) StatusUpdateFn {
+func newTunnelStatusUpdater(log *log.Logger) StatusUpdateFn {
+	logger := log.Named("StatusUpdater")
 	return func(status Status, message string) {
-		fmt.Printf("Tunnel(%s): %s - %s\n", tunnel.GetID(), status, message)
+		logger.With(
+			zap.String("status", string(status)),
+			zap.String("message", message),
+		).Infof("Status update: %s", status)
 	}
 }

@@ -3,15 +3,16 @@ package tunnel
 import (
 	"context"
 	"github.com/gliderlabs/ssh"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type ReverseTunnel struct {
@@ -26,6 +27,8 @@ type ReverseTunnel struct {
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
+	logger := log.FromContext(ctx)
+
 	// TODO: Assign this randomly.
 	tunnelPort := 12345
 
@@ -41,7 +44,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 	defer close(errs)
 
 	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
+	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
 
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
@@ -54,7 +57,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 		}
 		defer func() {
 			if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-				t.services.Logger.Error(errors.Wrap(err, "could not deregister tunnel from service discovery"))
+				logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
 			}
 		}()
 	}
@@ -99,7 +102,6 @@ type ReverseTunnelServices struct {
 	}
 	GlobalSSHServer *SSHServer
 	Keystore        keystore.Keystore
-	Logger          *logrus.Logger
 	Discovery       discovery.DiscoveryService
 
 	EnableIndividualSSHD bool

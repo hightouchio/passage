@@ -4,10 +4,11 @@ import (
 	"context"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 	"sync"
 )
@@ -18,8 +19,8 @@ type SSHServer struct {
 
 	server  *ssh.Server
 	tunnels map[uuid.UUID]boundReverseTunnel
-	logger  *logrus.Logger
 	close   chan bool
+	logger  *log.Logger
 
 	sync.RWMutex
 }
@@ -33,12 +34,12 @@ type boundReverseTunnel struct {
 	discovery      discovery.DiscoveryService
 }
 
-func NewSSHServer(addr string, hostKey []byte, logger *logrus.Logger) *SSHServer {
+func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
 	return &SSHServer{
 		BindAddr: addr,
 		HostKey:  hostKey,
-		tunnels:  make(map[uuid.UUID]boundReverseTunnel),
 		logger:   logger,
+		tunnels:  make(map[uuid.UUID]boundReverseTunnel),
 		close:    make(chan bool),
 	}
 }
@@ -70,7 +71,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	// Validate incoming public keys, match them against registered tunnels, and store the list of authorized
 	// 	tunnels in the session context for future reference when evaluating reverse port forwarding requests.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		entry := s.logger.WithField("session_id", ctx.SessionID())
+		logger := s.logger.With(zap.String("session_id", ctx.SessionID()))
 
 		success, authorizedTunnels := func() (bool, []boundReverseTunnel) {
 			// Identify the set of tunnels that match the incoming public key
@@ -78,21 +79,21 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 			// Reject the SSH session if there are no authorized tunnels
 			if len(authorizedTunnels) == 0 {
-				entry.Debug("no authorized tunnels for public key")
+				logger.Debug("no authorized tunnels for public key")
 				return false, []boundReverseTunnel{}
 			}
 
 			return true, authorizedTunnels
 		}()
 
-		entry.WithFields(logrus.Fields{
-			"remote_addr":        ctx.RemoteAddr().String(),
-			"user":               ctx.User(),
-			"key_type":           incomingKey.Type(),
-			"fingerprint":        gossh.FingerprintSHA256(incomingKey),
-			"success":            success,
-			"authorized_tunnels": len(authorizedTunnels),
-		}).Info("public key auth request")
+		logger.With(
+			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("user", ctx.User()),
+			zap.String("key_type", incomingKey.Type()),
+			zap.String("fingerprint", gossh.FingerprintSHA256(incomingKey)),
+			zap.Bool("success", success),
+			zap.Int("authorized_tunnels", len(authorizedTunnels)),
+		).Info("public key auth request")
 
 		// Register the authorized tunnels onto the ssh.Context
 		registerAuthorizedTunnels(ctx, authorizedTunnels)
@@ -104,13 +105,14 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// Validate incoming port forward requests against the set of authorized tunnels for this session
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		entry := s.logger.WithField("session_id", ctx.SessionID())
+		logger := s.logger.With(zap.String("session_id", ctx.SessionID()))
+
 		success, tunnelId := func() (bool, string) {
 			tunnels := getAuthorizedTunnels(ctx)
 
 			// If there are no valid tunnels, reject the forwarding request
 			if len(tunnels) == 0 {
-				entry.Debug("No authorized tunnels for session")
+				logger.Debug("No authorized tunnels for session")
 				return false, ""
 			}
 
@@ -128,13 +130,13 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			return success, tunnelId.String()
 		}()
 
-		s.logger.WithFields(logrus.Fields{
-			"remote_addr":  ctx.RemoteAddr().String(),
-			"tunnel_id":    tunnelId,
-			"bind_address": bindPort,
-			"bind_port":    bindPort,
-			"success":      success,
-		}).Info("reverse port forwarding request")
+		logger.With(
+			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("tunnel_id", tunnelId),
+			zap.String("bind_address", bindHost),
+			zap.Uint32("bind_port", bindPort),
+			zap.Bool("success", success),
+		).Info("reverse port forwarding request")
 		return success
 	}
 
@@ -147,7 +149,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		"cancel-tcpip-forward": handler.HandleSSHRequest,
 	}
 
-	s.logger.WithField("addr", s.BindAddr).Infof("Reverse tunnel sshd server listening on %s", s.BindAddr)
+	s.logger.With(zap.String("bind_addr", s.BindAddr)).Infof("Listening on %s", s.BindAddr)
 	s.server = server
 	if err := s.server.ListenAndServe(); err != nil {
 		return err
@@ -182,10 +184,11 @@ func (s *SSHServer) RegisterTunnel(tunnelId uuid.UUID, bindPort int, authorizedK
 	s.Lock()
 	defer s.Unlock()
 
-	s.logger.WithFields(logrus.Fields{
-		"tunnel_id": tunnelId,
-		"bind_port": bindPort,
-	}).Info("Registering tunnel")
+	s.logger.With(
+		zap.String("tunnel_id", tunnelId.String()),
+		zap.Int("bind_port", bindPort),
+	).Info("Registering tunnel")
+
 	s.tunnels[tunnelId] = boundReverseTunnel{
 		id:             tunnelId,
 		port:           bindPort,
@@ -201,9 +204,9 @@ func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 	s.Lock()
 	defer s.Unlock()
 
-	s.logger.WithFields(logrus.Fields{
-		"tunnel_id": tunnelId,
-	}).Info("Deregistering tunnel")
+	s.logger.With(
+		zap.String("tunnel_id", tunnelId.String()),
+	).Info("Deregistering tunnel")
 
 	delete(s.tunnels, tunnelId)
 }

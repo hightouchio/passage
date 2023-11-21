@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"net"
@@ -31,7 +32,9 @@ type CheckTunnelResponse struct {
 }
 
 // runTunnelConnectivityCheck continuously checks the status of a tunnel, independent of the tunnel-handling code itself.
-func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger *logrus.Logger, serviceDiscovery discovery.DiscoveryService) {
+func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger *log.Logger, serviceDiscovery discovery.DiscoveryService) {
+	logger = logger.Named("ConnectivityCheck")
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -50,23 +53,23 @@ func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger 
 			// Resolve the tunnel connection details from service discovery
 			tunnelDetails, err := serviceDiscovery.GetTunnel(tunnelID)
 			if err != nil {
-				logger.Error(errors.Wrap(err, "could not get tunnel details for connectivity check"))
+				logger.Error("could not get tunnel details for connectivity check", zap.Error(err))
 				break
 			}
 
 			// Check connectivity to the tunnel.
 			if err := checkConnectivity(ctx, tunnelDetails.Host, tunnelDetails.Port); err != nil {
-				logger.WithError(err).Warn("Tunnel is unhealthy")
+				logger.Warnw("Tunnel is unhealthy", zap.Error(err))
 
 				// Report Unhealthy status
 				if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelUnhealthy, fmt.Sprintf("Tunnel connectivity check failed: %s", err.Error())); err != nil {
-					logger.Error(errors.Wrap(err, "could not update service discovery with tunnel status"))
+					logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
 				}
 			} else {
 				logger.Info("Tunnel is healthy")
 				// Report Healthy status
 				if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelHealthy, "Tunnel connectivity check successful"); err != nil {
-					logger.Error(errors.Wrap(err, "could not update service discovery with tunnel status"))
+					logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
 				}
 			}
 		}

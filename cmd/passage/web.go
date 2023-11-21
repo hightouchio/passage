@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"github.com/sirupsen/logrus"
+	"github.com/hightouchio/passage/log"
+	"go.uber.org/zap"
 	"net/http"
-	"runtime/debug"
 	"time"
 )
 
@@ -44,13 +44,13 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 // LoggingMiddleware logs the incoming HTTP request & its duration.
-func LoggingMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
+func LoggingMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
-					logger.WithField("err", err).WithField("trace", debug.Stack()).Error("recovered panic")
+					logger.Error("Recovered from panic")
 				}
 			}()
 
@@ -68,20 +68,20 @@ func LoggingMiddleware(logger *logrus.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(responseRecorder, r.WithContext(ctx))
 			duration := time.Since(start)
 
-			l := logger.WithFields(logrus.Fields{
-				"remote_addr":     r.RemoteAddr,
-				"method":          r.Method,
-				"path":            r.URL.EscapedPath(),
-				"content_length":  r.ContentLength,
-				"status":          responseRecorder.status,
-				"duration":        duration.Round(time.Millisecond).Seconds(),
-				"response_length": responseRecorder.bytesWritten,
-			})
+			l := logger.With(
+				zap.String("remote_addr", r.RemoteAddr),
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.EscapedPath()),
+				zap.Int64("content_length", r.ContentLength),
+				zap.Int("status", responseRecorder.status),
+				zap.Duration("duration", duration.Round(time.Millisecond)),
+				zap.Int("response_length", responseRecorder.bytesWritten),
+			)
 
 			if err != nil {
-				l.WithError(err).Error("http request")
+				l.Errorw("HTTP Request", zap.Error(err))
 			} else {
-				l.Info("http request")
+				l.Info("HTTP Request")
 			}
 		}
 

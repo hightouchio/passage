@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"go.uber.org/zap"
 	"io"
 	"net"
 	"strconv"
@@ -15,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -35,6 +36,8 @@ type NormalTunnel struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUpdate StatusUpdateFn) error {
+	logger := log.FromContext(ctx)
+
 	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -45,7 +48,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		return bootError{event: "open_listener", err: err}
 	}
 	defer tunnelListener.Close()
-	lifecycle.BootEvent("open_listener", stats.Tags{"listen_addr": tunnelListener.Addr().String()})
+	logger.Infow("Open tunnel listener", "listen_addr", tunnelListener.Addr().String())
 	listenerPort := portFromNetAddr(tunnelListener.Addr())
 
 	// Register tunnel with service discovery.
@@ -54,12 +57,12 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 	defer func() {
 		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-			t.services.Logger.Error(errors.Wrap(err, "could not deregister tunnel from service discovery"))
+			logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
 		}
 	}()
 
 	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
+	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
 
 	// Update service discovery that SSH connection established, but not quite online
 	statusUpdate(StatusBooting, "Booting")
@@ -80,7 +83,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 
 	// Dial external SSH server
-	lifecycle.BootEvent("remote_dial", stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort})
+	lifecycle.BootEvent("remote_dial", zap.String("ssh_host", t.SSHHost), zap.Int("ssh_port", t.SSHPort))
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -98,7 +101,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	lifecycle.BootEvent("ssh_connect", stats.Tags{"ssh_user": sshUser, "ssh_auth_method_count": len(keySigners)})
+	lifecycle.BootEvent("ssh_connect", zap.String("ssh_user", sshUser), zap.Int("ssh_auth_method_count", len(keySigners)))
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -214,7 +217,6 @@ type NormalTunnelServices struct {
 		UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error
 	}
 	Keystore keystore.Keystore
-	Logger   *logrus.Logger
 
 	Discovery discovery.DiscoveryService
 }

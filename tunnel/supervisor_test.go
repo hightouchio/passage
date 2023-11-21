@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
-	"github.com/sirupsen/logrus"
 	"testing"
 	"time"
 )
@@ -15,7 +14,7 @@ import (
 type dummyTunnel struct {
 }
 
-func (d dummyTunnel) Start(ctx context.Context, options TunnelOptions) error {
+func (d dummyTunnel) Start(ctx context.Context, options TunnelOptions, fn StatusUpdateFn) error {
 	time.Sleep(10 * time.Millisecond)
 	return fmt.Errorf("bad tunnel")
 }
@@ -33,10 +32,7 @@ func (d dummyTunnel) Equal(i interface{}) bool {
 }
 
 func TestSupervisor_Profile(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
-
-	st := stats.New(&statsd.NoOpClient{}, logger)
+	st := stats.New(&statsd.NoOpClient{})
 	tunnel := dummyTunnel{}
 	supervisor := NewSupervisor(tunnel, st, TunnelOptions{BindHost: "0.0.0.0"}, 50*time.Millisecond)
 
@@ -47,7 +43,7 @@ func TestSupervisor_Profile(t *testing.T) {
 	go func() {
 		defer timer.Stop()
 		<-timer.C
-		logger.Info("timer done")
+		t.Logf("timer done\n")
 		supervisor.Stop()
 		cancel()
 	}()

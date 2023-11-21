@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -31,18 +32,21 @@ type Manager struct {
 	// lastRefresh records when the last successful refresh took place. indicating that nothing is frozen
 	lastRefresh time.Time
 
+	logger *log.Logger
+
 	lock sync.Mutex
 	stop chan bool
 }
 
-func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(logger *log.Logger, st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
 	return &Manager{
-		Stats:    st,
-		ListFunc: listFunc,
-
+		ListFunc:              listFunc,
 		TunnelOptions:         tunnelOptions,
 		RefreshDuration:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
+
+		Stats:  st,
+		logger: logger,
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
@@ -52,12 +56,12 @@ func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, 
 }
 
 func (m *Manager) Start(ctx context.Context) {
-	m.Stats.SimpleEvent("manager.start")
+	m.logger.Info("Start")
 	m.startWorker()
 }
 
 func (m *Manager) Stop(ctx context.Context) {
-	m.Stats.SimpleEvent("manager.stop")
+	m.logger.Info("Stop")
 	m.stop <- true
 }
 
@@ -71,7 +75,7 @@ func (m *Manager) startWorker() {
 		select {
 		case <-ticker.C:
 			if err := m.refreshTunnels(ctx); err != nil {
-				logrus.WithError(err).Error("could not refresh tunnels from DB")
+				m.logger.Errorw("Could not refresh tunnels from DB", zap.Error(err))
 				continue
 			}
 			m.refreshSupervisors(ctx)
