@@ -25,10 +25,6 @@ type TCPForwarder struct {
 	Lifecycle Lifecycle
 	Stats     stats.Stats
 
-	// HTTPProxyEnabled determines if this forwarder should run as an HTTPS proxy
-	//	https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
-	HTTPProxyEnabled bool
-
 	listener  *net.TCPListener
 	conns     map[string]net.Conn
 	close     chan struct{}
@@ -139,16 +135,6 @@ func (f *TCPForwarder) handleSession(session *TCPSession) {
 
 	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
 	pipeline := NewBidirectionalPipeline(session, upstream)
-
-	// If we're running in proxy mode, lets first read a CONNECT request from the client, then forward subsequent data on
-	// 	to the upstream.
-	if f.HTTPProxyEnabled {
-		if err := handleHttpProxy(session, upstream); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not handle proxy CONNECT"))
-			return
-		}
-		f.Lifecycle.SessionEvent(session.ID(), "HTTP proxy connection established", stats.Tags{})
-	}
 
 	done := make(chan struct{})
 	go func() {
