@@ -152,9 +152,13 @@ func startApplication(bootFuncs ...interface{}) error {
 				log.Get().Fatalf("Startup error: %v", v)
 			}
 		}
+
+		log.Get().Named("Passage").Infow("Start", zap.String("version", version))
 	}()
 
 	<-app.Done()
+
+	log.Get().Named("Passage").Infow("Stop")
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
