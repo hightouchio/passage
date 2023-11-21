@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Uber Technologies, Inc.
+// Copyright (c) 2021 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,36 +18,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package buffer
+package zapcore
 
-import (
-	"go.uber.org/zap/internal/pool"
-)
+import "time"
 
-// A Pool is a type-safe wrapper around a sync.Pool.
-type Pool struct {
-	p *pool.Pool[*Buffer]
+// DefaultClock is the default clock used by Zap in operations that require
+// time. This clock uses the system clock for all operations.
+var DefaultClock = systemClock{}
+
+// Clock is a source of time for logged entries.
+type Clock interface {
+	// Now returns the current local time.
+	Now() time.Time
+
+	// NewTicker returns *time.Ticker that holds a channel
+	// that delivers "ticks" of a clock.
+	NewTicker(time.Duration) *time.Ticker
 }
 
-// NewPool constructs a new Pool.
-func NewPool() Pool {
-	return Pool{
-		p: pool.New(func() *Buffer {
-			return &Buffer{
-				bs: make([]byte, 0, _size),
-			}
-		}),
-	}
+// systemClock implements default Clock that uses system time.
+type systemClock struct{}
+
+func (systemClock) Now() time.Time {
+	return time.Now()
 }
 
-// Get retrieves a Buffer from the pool, creating one if necessary.
-func (p Pool) Get() *Buffer {
-	buf := p.p.Get()
-	buf.Reset()
-	buf.pool = p
-	return buf
-}
-
-func (p Pool) put(buf *Buffer) {
-	p.p.Put(buf)
+func (systemClock) NewTicker(duration time.Duration) *time.Ticker {
+	return time.NewTicker(duration)
 }
