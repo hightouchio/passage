@@ -94,7 +94,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			zap.String("fingerprint", gossh.FingerprintSHA256(incomingKey)),
 			zap.Bool("success", success),
 			zap.Int("authorized_tunnels", len(authorizedTunnels)),
-		).Info("Authentication attempt")
+		).Info("Handle authentication attempt")
 
 		// Register the authorized tunnels onto the ssh.Context
 		registerAuthorizedTunnels(ctx, authorizedTunnels)

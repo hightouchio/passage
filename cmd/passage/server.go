@@ -90,7 +90,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		}
 
 		// Create SSH Server for Reverse Tunnels
-		logger := logger.Named("SSHServer")
+		logger := logger.Named("SSHD")
 		sshServer := tunnel.NewSSHServer(
 			net.JoinHostPort(
 				config.GetString(ConfigTunnelReverseBindHost),

@@ -148,6 +148,8 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 	defer forwarder.Close()
 
+	logger.Info("Tunnel is ready")
+
 	// Start port forwarding
 	go func() {
 		defer cancel()
