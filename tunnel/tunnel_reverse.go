@@ -48,7 +48,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
-		t.services.GlobalSSHServer.RegisterTunnel(t.ID, tunnelPort, authorizedKeys, getCtxLifecycle(ctx), t.services.Discovery, stats.GetStats(ctx))
+		t.services.GlobalSSHServer.RegisterTunnel(t.ID, tunnelPort, authorizedKeys, logger, t.services.Discovery, stats.GetStats(ctx))
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 
 		// Register this tunnel with service discovery

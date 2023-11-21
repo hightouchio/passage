@@ -62,8 +62,6 @@ func (s *Supervisor) Start(ctx context.Context) {
 					)
 
 					lifecycle := lifecycleLogger{logger}
-					lifecycle.Start()
-					defer lifecycle.Stop()
 
 					// Inject visibility interfaces into context
 					ctx, cancel := context.WithCancel(ctx)
@@ -73,14 +71,12 @@ func (s *Supervisor) Start(ctx context.Context) {
 					ctx = injectCtxLifecycle(ctx, lifecycle)
 					ctx = log.Context(ctx, logger)
 
+					logger.Info("Start")
 					if err := s.Tunnel.Start(ctx, s.TunnelOptions, newTunnelStatusUpdater(logger)); err != nil {
-						switch err.(type) {
-						case bootError:
-							logger.Errorw("Boot error", zap.Error(err))
-						default:
-							logger.Errorw("Error", zap.Error(err))
-						}
+						logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
+						return
 					}
+					logger.Info("Stop")
 				}()
 			}
 		}

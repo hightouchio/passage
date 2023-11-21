@@ -5,6 +5,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 	"io"
 	"net"
@@ -13,10 +14,9 @@ import (
 )
 
 type ReverseForwardingHandler struct {
-	forwards map[string]*TCPForwarder
-	sync.Mutex
-
+	forwards  map[string]*TCPForwarder
 	GetTunnel func(bindPort int) (boundReverseTunnel, bool)
+	sync.Mutex
 }
 
 func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
@@ -105,8 +105,8 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 			return ch, nil
 		},
 
-		Lifecycle: tunnel.lifecycle,
-		Stats:     tunnel.stats,
+		logger: tunnel.logger,
+		Stats:  tunnel.stats,
 	}
 
 	h.Lock()
@@ -116,12 +116,13 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	// Start port forwarding
 	go func() {
 		if err := forwarder.Serve(); err != nil {
-			tunnel.lifecycle.Error(errors.Wrap(err, "forwarder_serve"))
+			tunnel.logger.Error("Forwarder serve", zap.Error(err))
 			return
 		}
 	}()
 
 	// Mark tunnel healthy
+	// TODO: Fix this
 	tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelHealthy, "Tunnel is online")
 
 	// Graceful shutdown if connection ends

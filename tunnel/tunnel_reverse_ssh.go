@@ -29,9 +29,10 @@ type boundReverseTunnel struct {
 	id             uuid.UUID
 	port           int
 	authorizedKeys []ssh.PublicKey
-	lifecycle      Lifecycle
-	stats          stats.Stats
-	discovery      discovery.DiscoveryService
+
+	logger    *log.Logger
+	stats     stats.Stats
+	discovery discovery.DiscoveryService
 }
 
 func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
@@ -93,7 +94,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			zap.String("fingerprint", gossh.FingerprintSHA256(incomingKey)),
 			zap.Bool("success", success),
 			zap.Int("authorized_tunnels", len(authorizedTunnels)),
-		).Info("public key auth request")
+		).Info("Authentication attempt")
 
 		// Register the authorized tunnels onto the ssh.Context
 		registerAuthorizedTunnels(ctx, authorizedTunnels)
@@ -180,21 +181,21 @@ func (s *SSHServer) getTunnelFromBindPort(bindPort int) (boundReverseTunnel, boo
 }
 
 // RegisterTunnel registers a Reverse Tunnel with this SSH Server.
-func (s *SSHServer) RegisterTunnel(tunnelId uuid.UUID, bindPort int, authorizedKeys []ssh.PublicKey, lifecycle Lifecycle, discovery discovery.DiscoveryService, st stats.Stats) {
+func (s *SSHServer) RegisterTunnel(tunnelId uuid.UUID, bindPort int, authorizedKeys []ssh.PublicKey, logger *log.Logger, discovery discovery.DiscoveryService, st stats.Stats) {
 	s.Lock()
 	defer s.Unlock()
 
 	s.logger.With(
 		zap.String("tunnel_id", tunnelId.String()),
 		zap.Int("bind_port", bindPort),
-	).Info("Registering tunnel")
+	).Debug("Registering tunnel")
 
 	s.tunnels[tunnelId] = boundReverseTunnel{
 		id:             tunnelId,
 		port:           bindPort,
 		authorizedKeys: authorizedKeys,
 		discovery:      discovery,
-		lifecycle:      lifecycle,
+		logger:         logger,
 		stats:          st,
 	}
 }
@@ -206,7 +207,7 @@ func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 
 	s.logger.With(
 		zap.String("tunnel_id", tunnelId.String()),
-	).Info("Deregistering tunnel")
+	).Debug("Deregistering tunnel")
 
 	delete(s.tunnels, tunnelId)
 }

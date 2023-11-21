@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 	"net"
 	"sync"
@@ -23,10 +25,11 @@ type TCPForwarder struct {
 	// KeepaliveInterval is the interval between OS level TCP keepalive handshakes
 	KeepaliveInterval time.Duration
 
-	Lifecycle Lifecycle
-	Stats     stats.Stats
-	conns     map[string]net.Conn
-	close     chan struct{}
+	logger *log.Logger
+	Stats  stats.Stats
+
+	conns map[string]net.Conn
+	close chan struct{}
 
 	sync.RWMutex
 }
@@ -101,17 +104,19 @@ func (f *TCPForwarder) Close() error {
 // handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
 func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
-	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
+	sessionLogger := f.logger.With(zap.String("session_id", session.ID()))
+	sessionLogger.Infow("New session", zap.String("remote_addr", session.RemoteAddr().String()))
 
 	defer func() {
 		session.Close()
 		// Record pipeline metrics to logs and statsd
 		f.Stats.Count("bytes_rcvd", int64(session.bytesReceived), nil, 1)
 		f.Stats.Count("bytes_sent", int64(session.bytesSent), nil, 1)
-		f.Lifecycle.SessionEvent(session.ID(), "close", stats.Tags{
-			"bytes_rcvd": session.bytesReceived,
-			"bytes_sent": session.bytesSent,
-		})
+		sessionLogger.Infow(
+			"Session closed",
+			zap.Uint64("bytes_rcvd", session.bytesReceived),
+			zap.Uint64("bytes_sent", session.bytesSent),
+		)
 	}()
 
 	// Get upstream connection.
@@ -119,10 +124,10 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	if err != nil {
 		// Set SO_LINGER=0 so the tunnel net.TCPConn does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 		if err := session.SetLinger(0); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "set linger"))
+			sessionLogger.Errorw("Set linger", zap.Error(err))
 		}
 
-		f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "dial upstream"))
+		sessionLogger.Errorw("Dial upstream", zap.Error(err))
 		return
 	}
 	defer upstream.Close()
@@ -138,7 +143,7 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 
 		// Forward bytes.
 		if err := pipeline.Run(); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "pipeline"))
+			sessionLogger.Errorw("Pipeline", zap.Error(err))
 		}
 
 		close(done)

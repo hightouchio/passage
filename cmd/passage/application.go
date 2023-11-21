@@ -288,7 +288,7 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.R
 			logger.Info("Start")
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
-					logger.Fatal("Could not start HTTP listener", zap.Error(err))
+					logger.Fatalw("HTTP Listener", zap.Error(err))
 				}
 			}()
 			return nil

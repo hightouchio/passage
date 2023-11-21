@@ -33,7 +33,7 @@ type CheckTunnelResponse struct {
 
 // runTunnelConnectivityCheck continuously checks the status of a tunnel, independent of the tunnel-handling code itself.
 func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger *log.Logger, serviceDiscovery discovery.DiscoveryService) {
-	logger = logger.Named("ConnectivityCheck")
+	logger = logger.Named("ConnectivityCheck").With(zap.String("tunnel_id", tunnelID.String()))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -41,6 +41,8 @@ func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger 
 	// Check the connectivity every 15 seconds
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
+
+	logger.Debug("Start")
 
 	for {
 		select {

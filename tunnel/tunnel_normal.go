@@ -38,7 +38,6 @@ type NormalTunnel struct {
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUpdate StatusUpdateFn) error {
 	logger := log.FromContext(ctx)
 
-	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -61,9 +60,6 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		}
 	}()
 
-	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
-
 	// Update service discovery that SSH connection established, but not quite online
 	statusUpdate(StatusBooting, "Booting")
 
@@ -83,9 +79,10 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 
 	// Dial external SSH server
-	lifecycle.BootEvent("remote_dial", zap.String("ssh_host", t.SSHHost), zap.Int("ssh_port", t.SSHPort))
 	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
+	logger.Infow("SSH remote dial", zap.String("addr", addr))
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+
 	if err != nil {
 		statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("Failed to resolve remote address: %s", err.Error()))
 		return bootError{event: "remote_dial", err: errors.Wrapf(err, "resolve addr %s", addr)}
@@ -96,12 +93,16 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		return bootError{event: "remote_dial", err: err}
 	}
 	defer sshConn.Close()
+
 	// Configure TCP keepalive for SSH connection
 	sshConn.SetKeepAlive(true)
 	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
 
 	// Init SSH connection protocol
-	lifecycle.BootEvent("ssh_connect", zap.String("ssh_user", sshUser), zap.Int("ssh_auth_method_count", len(keySigners)))
+	logger.With(
+		zap.String("ssh_user", sshUser),
+		zap.Int("ssh_auth_method_count", len(keySigners)),
+	).Infow("SSH open client connection")
 	c, chans, reqs, err := ssh.NewClientConn(
 		sshConn, addr,
 		&ssh.ClientConfig{
@@ -115,12 +116,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		return bootError{event: "ssh_connect", err: err}
 	}
 	sshClient := ssh.NewClient(c, chans, reqs)
+	logger.Info("SSH connection established")
 	statusUpdate(discovery.TunnelWarning, "SSH connection established")
 
 	// Start sending keepalive packets to the upstream SSH server
 	go func() {
 		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
+			logger.Errorw("SSH keepalive failed", zap.Error(err))
 			statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("SSH keepalive failed: %s", err.Error()))
 			cancel()
 		}
@@ -141,8 +143,8 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		},
 
 		KeepaliveInterval: 5 * time.Second,
-		Lifecycle:         lifecycle,
 		Stats:             stats.GetStats(ctx),
+		logger:            logger.Named("Forwarder"),
 	}
 	defer forwarder.Close()
 
@@ -150,32 +152,13 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	go func() {
 		defer cancel()
 		if err := forwarder.Serve(); err != nil {
-			lifecycle.Error(bootError{event: "forwarder_serve", err: err})
+			logger.Errorw("Forwarder serve", zap.Error(err))
 			return
 		}
 	}()
 
-	// Start connectivity checker
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case <-ticker.C:
-				if err := checkConnectivity(ctx, "localhost", listenerPort); err != nil {
-					lifecycle.Error(errors.Wrap(err, "connectivity check failed"))
-					statusUpdate(discovery.TunnelUnhealthy, err.Error())
-					return
-				}
-
-				statusUpdate(discovery.TunnelHealthy, "Tunnel is online")
-			}
-		}
-	}()
+	// Start the tunnel connectivity check
+	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
 
 	<-ctx.Done()
 	return nil
