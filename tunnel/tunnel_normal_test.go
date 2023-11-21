@@ -100,7 +100,6 @@ func runNormalTunnelTest(t *testing.T, clientInstructions, serviceInstructions [
 
 		tunnel := &NormalTunnel{
 			ID:          uuid.New(),
-			TunnelPort:  tunnelPort,
 			SSHHost:     "localhost",
 			SSHPort:     sshdPort,
 			SSHUser:     "test",

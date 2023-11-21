@@ -19,16 +19,16 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort           int     `json:"sshdPort"`
-	TunnelPort         int     `json:"tunnelPort"`
-	HTTPProxy          bool    `json:"httpProxy"`
-	Error              *string `json:"error"`
+	SSHDPort           int `json:"sshdPort"`
 	AuthorizedKeysHash string
 
 	services ReverseTunnelServices
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
+	// TODO: Assign this randomly.
+	tunnelPort := 12345
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -45,11 +45,11 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) e
 
 	if t.services.GlobalSSHServer != nil {
 		// Register this tunnel with the global reverse SSH server
-		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), t.services.Discovery, stats.GetStats(ctx))
+		t.services.GlobalSSHServer.RegisterTunnel(t.ID, tunnelPort, authorizedKeys, getCtxLifecycle(ctx), t.services.Discovery, stats.GetStats(ctx))
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 
 		// Register this tunnel with service discovery
-		if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
+		if err := t.services.Discovery.RegisterTunnel(t.ID, tunnelPort); err != nil {
 			return bootError{event: "register_tunnel", err: err}
 		}
 		defer func() {
@@ -128,7 +128,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPProxy == t2.HTTPProxy && t.AuthorizedKeysHash == t2.AuthorizedKeysHash
+	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.AuthorizedKeysHash == t2.AuthorizedKeysHash
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -137,9 +137,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		ID:                 record.ID,
 		CreatedAt:          record.CreatedAt,
 		Enabled:            record.Enabled,
-		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
-		HTTPProxy:          record.HTTPProxy,
 		AuthorizedKeysHash: record.AuthorizedKeysHash,
 	}
 }

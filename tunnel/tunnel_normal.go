@@ -24,22 +24,20 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int     `json:"tunnelPort"`
-	SSHUser     string  `json:"sshUser"`
-	SSHHost     string  `json:"sshHost"`
-	SSHPort     int     `json:"sshPort"`
-	ServiceHost string  `json:"serviceHost"`
-	ServicePort int     `json:"servicePort"`
-	HTTPProxy   bool    `json:"httpProxy"`
-	Error       *string `json:"error"`
+	SSHUser     string `json:"sshUser"`
+	SSHHost     string `json:"sshHost"`
+	SSHPort     int    `json:"sshPort"`
+	ServiceHost string `json:"serviceHost"`
+	ServicePort int    `json:"servicePort"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
 }
 
 func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
-	lifecycle := getCtxLifecycle(ctx)
+	tunnelPort := 12345
 
+	lifecycle := getCtxLifecycle(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -47,7 +45,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 	go runTunnelConnectivityCheck(ctx, t.ID, t.services.Logger, t.services.Discovery)
 
 	// Register tunnel with service discovery.
-	if err := t.services.Discovery.RegisterTunnel(t.ID, t.TunnelPort); err != nil {
+	if err := t.services.Discovery.RegisterTunnel(t.ID, tunnelPort); err != nil {
 		return bootError{event: "service_discovery_register", err: err}
 	}
 	defer func() {
@@ -123,8 +121,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 
 	// Configure TCPForwarder
 	forwarder := &TCPForwarder{
-		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort)),
-		HTTPProxyEnabled:  t.HTTPProxy,
+		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(tunnelPort)),
 		KeepaliveInterval: 5 * time.Second,
 
 		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
@@ -169,7 +166,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
 				return
 
 			case <-ticker.C:
-				if err := checkConnectivity(ctx, "localhost", t.TunnelPort); err != nil {
+				if err := checkConnectivity(ctx, "localhost", tunnelPort); err != nil {
 					lifecycle.Error(errors.Wrap(err, "connectivity check failed"))
 
 					// Update service discovery that tunnel is unhealthy
@@ -254,10 +251,8 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHUser == t2.SSHUser &&
 		t.SSHHost == t2.SSHHost &&
 		t.SSHPort == t2.SSHPort &&
-		t.TunnelPort == t2.TunnelPort &&
 		t.ServiceHost == t2.ServiceHost &&
-		t.ServicePort == t2.ServicePort &&
-		t.HTTPProxy == t2.HTTPProxy
+		t.ServicePort == t2.ServicePort
 }
 
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
@@ -268,7 +263,6 @@ func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 		SSHPort:     tunnel.SSHPort,
 		ServiceHost: tunnel.ServiceHost,
 		ServicePort: tunnel.ServicePort,
-		HTTPProxy:   tunnel.HTTPProxy,
 	}
 }
 
@@ -278,13 +272,11 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		ID:          record.ID,
 		CreatedAt:   record.CreatedAt,
 		Enabled:     record.Enabled,
-		TunnelPort:  record.TunnelPort,
 		SSHUser:     record.SSHUser.String,
 		SSHHost:     record.SSHHost,
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
-		HTTPProxy:   record.HTTPProxy,
 	}
 }
 
