@@ -71,7 +71,7 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	if err != nil {
 		return false, []byte("Port forwarding is disabled")
 	}
-	defer tunnelListener.Close()
+	// Not deferring close here because we want to close it when the tunnel closes
 
 	// Initiate TCPForwarder to listen for tunnel connections.
 	forwarder := &TCPForwarder{
