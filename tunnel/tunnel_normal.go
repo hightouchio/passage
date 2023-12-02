@@ -71,6 +71,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		//	If not, fall back to the default.
 		User: firstNotEmptyString(t.SSHUser, t.clientOptions.User),
 
+		// Select the SSH auth methods to use for the client connection
+		GetKeySigners: t.getAuthSigners,
+
 		// Pass these options in from the global config
 		DialTimeout:       t.clientOptions.DialTimeout,
 		KeepaliveInterval: t.clientOptions.KeepaliveInterval,
