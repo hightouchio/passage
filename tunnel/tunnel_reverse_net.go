@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"github.com/gliderlabs/ssh"
-	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
@@ -120,14 +119,13 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 			return
 		}
 	}()
-
-	// Mark tunnel healthy
-	// TODO: Fix this
-	tunnel.Discovery.UpdateHealth(tunnel.ID, discovery.TunnelHealthy, "Tunnel is online")
+	tunnel.StatusUpdate(StatusOnline, "Tunnel is online")
 
 	// Graceful shutdown if connection ends
 	go func() {
+		// TODO: Does this context end when the connection ends, or when this message is fully processed?
 		<-ctx.Done()
+		tunnel.StatusUpdate(StatusError, "Tunnel is offline")
 		h.closeTunnel(tunnelBindAddr)
 	}()
 
@@ -138,13 +136,6 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 func (h *ReverseForwardingHandler) closePortForwarding(ctx context.Context, payload remoteForwardCancelRequest) (bool, []byte) {
 	addr := net.JoinHostPort(payload.BindAddr, strconv.Itoa(int(payload.BindPort)))
 	h.closeTunnel(addr)
-
-	// Get the tunnel to deregister it from the discovery service
-	tunnel, ok := h.GetTunnel(int(payload.BindPort))
-	if ok {
-		tunnel.Discovery.UpdateHealth(tunnel.ID, discovery.TunnelUnhealthy, "Tunnel is offline")
-	}
-
 	return true, nil
 }
 

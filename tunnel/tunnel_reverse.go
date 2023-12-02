@@ -53,6 +53,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 			logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
 		}
 	}()
+	statusUpdate(StatusBooting, "SSHD server is online. Waiting for connections")
 
 	// Register this tunnel with the global reverse SSH server
 	if t.services.GlobalSSHServer != nil {
@@ -66,9 +67,9 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 			//	for tunnels.
 			RegisteredPort: t.SSHDPort,
 
-			Discovery: t.services.Discovery,
-			Logger:    logger,
-			Stats:     stats.GetStats(ctx),
+			StatusUpdate: statusUpdate,
+			Logger:       logger,
+			Stats:        stats.GetStats(ctx),
 		})
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 	}

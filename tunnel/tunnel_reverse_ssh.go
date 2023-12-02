@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
-	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
@@ -32,9 +31,9 @@ type SSHServerRegisteredTunnel struct {
 	AuthorizedKeys []ssh.PublicKey
 	Listener       *net.TCPListener
 
-	Discovery discovery.DiscoveryService
-	Logger    *log.Logger
-	Stats     stats.Stats
+	StatusUpdate StatusUpdateFn
+	Logger       *log.Logger
+	Stats        stats.Stats
 }
 
 func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
