@@ -14,8 +14,10 @@ import (
 )
 
 type ReverseForwardingHandler struct {
-	forwards  map[string]*TCPForwarder
-	GetTunnel func(bindPort int) (boundReverseTunnel, bool)
+	Listener  net.Listener
+	GetTunnel func(bindPort int) (SSHServerRegisteredTunnel, bool)
+
+	forwards map[string]*TCPForwarder
 	sync.Mutex
 }
 
@@ -61,21 +63,19 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 		// Couldn't find a valid registered tunnel for this request
 		return false, []byte("Port forwarding is disabled")
 	}
+	tunnelBindAddr := net.JoinHostPort(payload.BindAddr, strconv.Itoa(int(payload.BindPort)))
+
+	// If a forwarder is already registered for this tunnel, return an error
+	if _, ok := h.forwards[tunnelBindAddr]; ok {
+		return false, []byte("Port forwarding is disabled")
+	}
 
 	// Get the connection out of the context
 	conn := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
-	tunnelBindAddr := net.JoinHostPort(payload.BindAddr, strconv.Itoa(int(payload.BindPort)))
-
-	// Start listening on a local port.
-	tunnelListener, err := newEphemeralTCPListener()
-	if err != nil {
-		return false, []byte("Port forwarding is disabled")
-	}
-	// Not deferring close here because we want to close it when the tunnel closes
 
 	// Initiate TCPForwarder to listen for tunnel connections.
 	forwarder := &TCPForwarder{
-		Listener: tunnelListener,
+		Listener: tunnel.Listener,
 
 		// Implement GetUpstreamConn by opening a channel on the SSH connection.
 		GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
@@ -105,8 +105,8 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 			return ch, nil
 		},
 
-		logger: tunnel.logger,
-		Stats:  tunnel.stats,
+		logger: tunnel.Logger,
+		Stats:  tunnel.Stats,
 	}
 
 	h.Lock()
@@ -116,14 +116,14 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	// Start port forwarding
 	go func() {
 		if err := forwarder.Serve(); err != nil {
-			tunnel.logger.Error("Forwarder serve", zap.Error(err))
+			tunnel.Logger.Error("Forwarder serve", zap.Error(err))
 			return
 		}
 	}()
 
 	// Mark tunnel healthy
 	// TODO: Fix this
-	tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelHealthy, "Tunnel is online")
+	tunnel.Discovery.UpdateHealth(tunnel.ID, discovery.TunnelHealthy, "Tunnel is online")
 
 	// Graceful shutdown if connection ends
 	go func() {
@@ -142,7 +142,7 @@ func (h *ReverseForwardingHandler) closePortForwarding(ctx context.Context, payl
 	// Get the tunnel to deregister it from the discovery service
 	tunnel, ok := h.GetTunnel(int(payload.BindPort))
 	if ok {
-		tunnel.discovery.UpdateHealth(tunnel.id, discovery.TunnelUnhealthy, "Tunnel is offline")
+		tunnel.Discovery.UpdateHealth(tunnel.ID, discovery.TunnelUnhealthy, "Tunnel is offline")
 	}
 
 	return true, nil

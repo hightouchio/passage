@@ -48,10 +48,9 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 	defer tunnelListener.Close()
 	logger.Infow("Open tunnel listener", "listen_addr", tunnelListener.Addr().String())
-	listenerPort := portFromNetAddr(tunnelListener.Addr())
 
 	// Register tunnel with service discovery.
-	if err := t.services.Discovery.RegisterTunnel(t.ID, listenerPort); err != nil {
+	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(tunnelListener.Addr())); err != nil {
 		return bootError{event: "service_discovery_register", err: err}
 	}
 	defer func() {

@@ -29,9 +29,6 @@ type ReverseTunnel struct {
 func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
 	logger := log.FromContext(ctx)
 
-	// TODO: Assign this randomly.
-	tunnelPort := 12345
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -40,35 +37,47 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 		return bootError{event: "get_authorized_keys", err: err}
 	}
 
-	errs := make(chan error)
-	defer close(errs)
+	// Open listener when the tunnel first boots.
+	listener, err := newEphemeralTCPListener()
+	if err != nil {
+		return bootError{event: "open_listener", err: err}
+	}
+	defer listener.Close()
+
+	// Register this tunnel with service discovery
+	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(listener.Addr())); err != nil {
+		return bootError{event: "register_tunnel", err: err}
+	}
+	defer func() {
+		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
+			logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
+		}
+	}()
+
+	// Register this tunnel with the global reverse SSH server
+	if t.services.GlobalSSHServer != nil {
+		t.services.GlobalSSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
+			ID:             t.ID,
+			AuthorizedKeys: authorizedKeys,
+			Listener:       listener,
+
+			// This is not actually the port that the tunnel is listening on,
+			//	but the port that the tunnel is *registered* on, which is how we uniquely identify incoming requests
+			//	for tunnels.
+			RegisteredPort: t.SSHDPort,
+
+			Discovery: t.services.Discovery,
+			Logger:    logger,
+			Stats:     stats.GetStats(ctx),
+		})
+		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
+	}
 
 	// Start the tunnel connectivity check
 	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
 
-	if t.services.GlobalSSHServer != nil {
-		// Register this tunnel with the global reverse SSH server
-		t.services.GlobalSSHServer.RegisterTunnel(t.ID, tunnelPort, authorizedKeys, logger, t.services.Discovery, stats.GetStats(ctx))
-		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
-
-		// Register this tunnel with service discovery
-		if err := t.services.Discovery.RegisterTunnel(t.ID, tunnelPort); err != nil {
-			return bootError{event: "register_tunnel", err: err}
-		}
-		defer func() {
-			if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-				logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
-			}
-		}()
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil
-
-	case err := <-errs:
-		return err
-	}
+	<-ctx.Done()
+	return nil
 }
 
 func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, error) {

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
+	"net"
 	"sync"
 )
 
@@ -18,21 +19,22 @@ type SSHServer struct {
 	HostKey  []byte
 
 	server  *ssh.Server
-	tunnels map[uuid.UUID]boundReverseTunnel
+	tunnels map[uuid.UUID]SSHServerRegisteredTunnel
 	close   chan bool
 	logger  *log.Logger
 
 	sync.RWMutex
 }
 
-type boundReverseTunnel struct {
-	id             uuid.UUID
-	port           int
-	authorizedKeys []ssh.PublicKey
+type SSHServerRegisteredTunnel struct {
+	ID             uuid.UUID
+	RegisteredPort int
+	AuthorizedKeys []ssh.PublicKey
+	Listener       *net.TCPListener
 
-	logger    *log.Logger
-	stats     stats.Stats
-	discovery discovery.DiscoveryService
+	Discovery discovery.DiscoveryService
+	Logger    *log.Logger
+	Stats     stats.Stats
 }
 
 func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
@@ -40,7 +42,7 @@ func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
 		BindAddr: addr,
 		HostKey:  hostKey,
 		logger:   logger,
-		tunnels:  make(map[uuid.UUID]boundReverseTunnel),
+		tunnels:  make(map[uuid.UUID]SSHServerRegisteredTunnel),
 		close:    make(chan bool),
 	}
 }
@@ -74,14 +76,14 @@ func (s *SSHServer) Start(ctx context.Context) error {
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		logger := s.logger.With(zap.String("session_id", ctx.SessionID()))
 
-		success, authorizedTunnels := func() (bool, []boundReverseTunnel) {
+		success, authorizedTunnels := func() (bool, []SSHServerRegisteredTunnel) {
 			// Identify the set of tunnels that match the incoming public key
 			authorizedTunnels := s.getAuthorizedTunnels(incomingKey)
 
 			// Reject the SSH session if there are no authorized tunnels
 			if len(authorizedTunnels) == 0 {
 				logger.Debug("no authorized tunnels for public key")
-				return false, []boundReverseTunnel{}
+				return false, []SSHServerRegisteredTunnel{}
 			}
 
 			return true, authorizedTunnels
@@ -122,9 +124,9 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			var success bool
 			for _, tunnel := range tunnels {
 				// If the requested port matches a valid tunnel port, we're good to go
-				if int(bindPort) == tunnel.port {
+				if int(bindPort) == tunnel.RegisteredPort {
 					success = true
-					tunnelId = tunnel.id
+					tunnelId = tunnel.ID
 					break
 				}
 			}
@@ -143,7 +145,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// Handle reverse port forwarding requests
 	handler := &ReverseForwardingHandler{
-		GetTunnel: s.getTunnelFromBindPort,
+		GetTunnel: s.getTunnelFromRegisteredPort,
 	}
 	server.RequestHandlers = map[string]ssh.RequestHandler{
 		"tcpip-forward":        handler.HandleSSHRequest,
@@ -167,37 +169,30 @@ func (s *SSHServer) Close() error {
 	return s.server.Close()
 }
 
-// GetTunnelFromBindPort resolves a given bind port to the registered tunnel that is bound to it.
-func (s *SSHServer) getTunnelFromBindPort(bindPort int) (boundReverseTunnel, bool) {
+// getTunnelFromRegisteredPort resolves a given port to the registered tunnel associated with it
+func (s *SSHServer) getTunnelFromRegisteredPort(port int) (SSHServerRegisteredTunnel, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
 	for _, tunnel := range s.tunnels {
-		if tunnel.port == bindPort {
+		if tunnel.RegisteredPort == port {
 			return tunnel, true
 		}
 	}
-	return boundReverseTunnel{}, false
+	return SSHServerRegisteredTunnel{}, false
 }
 
 // RegisterTunnel registers a Reverse Tunnel with this SSH Server.
-func (s *SSHServer) RegisterTunnel(tunnelId uuid.UUID, bindPort int, authorizedKeys []ssh.PublicKey, logger *log.Logger, discovery discovery.DiscoveryService, st stats.Stats) {
+func (s *SSHServer) RegisterTunnel(tunnel SSHServerRegisteredTunnel) {
 	s.Lock()
 	defer s.Unlock()
 
 	s.logger.With(
-		zap.String("tunnel_id", tunnelId.String()),
-		zap.Int("bind_port", bindPort),
+		zap.String("tunnel_id", tunnel.ID.String()),
+		zap.Int("registered_port", tunnel.RegisteredPort),
 	).Debug("Registering tunnel")
 
-	s.tunnels[tunnelId] = boundReverseTunnel{
-		id:             tunnelId,
-		port:           bindPort,
-		authorizedKeys: authorizedKeys,
-		discovery:      discovery,
-		logger:         logger,
-		stats:          st,
-	}
+	s.tunnels[tunnel.ID] = tunnel
 }
 
 // DeregisterTunnel removes the reverse tunnel from the SSH server
@@ -214,13 +209,13 @@ func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 
 // getAuthorizedTunnels matches an incoming ssh.PublicKey against tunnels registered with this SSH server.
 // This serves to determine the set of authorized bind ports that a given SSH connection can forward to.
-func (s *SSHServer) getAuthorizedTunnels(incomingKey ssh.PublicKey) []boundReverseTunnel {
+func (s *SSHServer) getAuthorizedTunnels(incomingKey ssh.PublicKey) []SSHServerRegisteredTunnel {
 	s.RLock()
 	defer s.RUnlock()
 
-	var authorizedTunnels []boundReverseTunnel
+	var authorizedTunnels []SSHServerRegisteredTunnel
 	for _, tunnel := range s.tunnels {
-		for _, authorizedKey := range tunnel.authorizedKeys {
+		for _, authorizedKey := range tunnel.AuthorizedKeys {
 			if ssh.KeysEqual(authorizedKey, incomingKey) {
 				authorizedTunnels = append(authorizedTunnels, tunnel)
 			}
@@ -247,21 +242,21 @@ func (s *SSHServer) getHostSigners() ([]ssh.Signer, error) {
 }
 
 // registerAuthorizedTunnels adds new authorized tunnels to the ssh.Context
-func registerAuthorizedTunnels(ctx ssh.Context, newAuthorizedTunnels []boundReverseTunnel) {
+func registerAuthorizedTunnels(ctx ssh.Context, newAuthorizedTunnels []SSHServerRegisteredTunnel) {
 	authorizedTunnels := getAuthorizedTunnels(ctx)
 	authorizedTunnels = append(authorizedTunnels, newAuthorizedTunnels...)
 	ctx.SetValue("authorized_tunnels", authorizedTunnels)
 }
 
 // getAuthorizedTunnels extracts the authorized tunnels from the ssh.Context
-func getAuthorizedTunnels(ctx ssh.Context) []boundReverseTunnel {
+func getAuthorizedTunnels(ctx ssh.Context) []SSHServerRegisteredTunnel {
 	ctxTunnels := ctx.Value("authorized_tunnels")
 	if ctxTunnels == nil {
-		return []boundReverseTunnel{}
+		return []SSHServerRegisteredTunnel{}
 	}
-	tunnels, ok := ctxTunnels.([]boundReverseTunnel)
+	tunnels, ok := ctxTunnels.([]SSHServerRegisteredTunnel)
 	if !ok {
-		return []boundReverseTunnel{}
+		return []SSHServerRegisteredTunnel{}
 	}
 	return tunnels
 }
