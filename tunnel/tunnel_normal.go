@@ -85,15 +85,15 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 
 	// Listen for keepalive failures
 	go func() {
+		defer cancel()
+
 		select {
 		case err, ok := <-keepalive:
 			// If the channel closed, just ignore it
 			if !ok {
 				return
 			}
-
 			statusUpdate(StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error()))
-			cancel()
 
 		case <-ctx.Done():
 			return
