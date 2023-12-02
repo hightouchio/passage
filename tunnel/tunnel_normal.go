@@ -60,71 +60,40 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 		}
 	}()
 
-	// Update service discovery that SSH connection established, but not quite online
+	// Establish a connection to the remote SSH server
 	statusUpdate(StatusBooting, "Booting")
+	sshClient, keepalive, err := NewSSHClient(ctx, SSHClientOptions{
+		Host: t.SSHHost,
+		Port: t.SSHPort,
 
-	// Get a list of key signers to use for authentication
-	keySigners, err := t.getAuthSigners(ctx)
+		// Select the SSH user to use for the client connection
+		//	If the tunnel has explicitly set a user, use that.
+		//	If not, fall back to the default.
+		User: firstNotEmptyString(t.SSHUser, t.clientOptions.User),
+
+		// Pass these options in from the global config
+		DialTimeout:       t.clientOptions.DialTimeout,
+		KeepaliveInterval: t.clientOptions.KeepaliveInterval,
+	})
 	if err != nil {
-		statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("Failed to generate authentication payload: %s", err.Error()))
-		return bootError{event: "generate_auth_signers", err: err}
-	}
-
-	// Determine SSH user to use, either from the database or from the config.
-	var sshUser string
-	if t.SSHUser != "" {
-		sshUser = t.SSHUser
-	} else {
-		sshUser = t.clientOptions.User
-	}
-
-	// Dial external SSH server
-	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
-	logger.Infow("SSH remote dial", zap.String("addr", addr))
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-
-	if err != nil {
-		statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("Failed to resolve remote address: %s", err.Error()))
-		return bootError{event: "remote_dial", err: errors.Wrapf(err, "resolve addr %s", addr)}
-	}
-	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("Failed to connect to remote server: %s", err.Error()))
-		return bootError{event: "remote_dial", err: err}
-	}
-	defer sshConn.Close()
-
-	// Configure TCP keepalive for SSH connection
-	sshConn.SetKeepAlive(true)
-	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
-
-	// Init SSH connection protocol
-	logger.With(
-		zap.String("ssh_user", sshUser),
-		zap.Int("ssh_auth_method_count", len(keySigners)),
-	).Infow("SSH open client connection")
-	c, chans, reqs, err := ssh.NewClientConn(
-		sshConn, addr,
-		&ssh.ClientConfig{
-			User:            sshUser,
-			Auth:            []ssh.AuthMethod{ssh.PublicKeys(keySigners...)},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		},
-	)
-	if err != nil {
-		statusUpdate(discovery.TunnelUnhealthy, err.Error())
 		return bootError{event: "ssh_connect", err: err}
 	}
-	sshClient := ssh.NewClient(c, chans, reqs)
-	logger.Info("SSH connection established")
-	statusUpdate(discovery.TunnelWarning, "SSH connection established")
+	statusUpdate(StatusBooting, "SSH connection established")
 
-	// Start sending keepalive packets to the upstream SSH server
+	// Listen for keepalive failures
 	go func() {
-		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			logger.Errorw("SSH keepalive failed", zap.Error(err))
-			statusUpdate(discovery.TunnelUnhealthy, fmt.Sprintf("SSH keepalive failed: %s", err.Error()))
+		select {
+		case err, ok := <-keepalive:
+			// If the channel closed, just ignore it
+			if !ok {
+				return
+			}
+
+			statusUpdate(StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error()))
 			cancel()
+
+		case <-ctx.Done():
+			return
 		}
 	}()
 
@@ -148,8 +117,7 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 	}
 	defer forwarder.Close()
 
-	logger.Info("Tunnel is ready")
-
+	logger.Info("Tunnel is online")
 	// Start port forwarding
 	go func() {
 		defer cancel()
@@ -164,6 +132,21 @@ func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUp
 
 	<-ctx.Done()
 	return nil
+}
+
+// firstNotEmptyString returns the first string that is not empty
+func firstNotEmptyString(options ...string) string {
+	if len(options) == 0 {
+		return ""
+	}
+
+	for _, str := range options {
+		if str != "" {
+			return str
+		}
+	}
+
+	return ""
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
