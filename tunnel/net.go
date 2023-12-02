@@ -6,8 +6,11 @@ import (
 )
 
 // newEphemeralTCPListener returns a TCP listener bound to a random, unused port
-func newEphemeralTCPListener() (*net.TCPListener, error) {
-	return net.ListenTCP("tcp", &net.TCPAddr{Port: 0})
+func newEphemeralTCPListener(ip string) (*net.TCPListener, error) {
+	return net.ListenTCP("tcp", &net.TCPAddr{
+		IP:   net.ParseIP(ip),
+		Port: 0,
+	})
 }
 
 func portFromNetAddr(addr net.Addr) int {

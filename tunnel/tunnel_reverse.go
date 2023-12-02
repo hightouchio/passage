@@ -38,14 +38,14 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 	}
 
 	// Open listener when the tunnel first boots.
-	listener, err := newEphemeralTCPListener()
+	tunnelListener, err := newEphemeralTCPListener(tunnelOptions.BindHost)
 	if err != nil {
 		return bootError{event: "open_listener", err: err}
 	}
-	defer listener.Close()
+	defer tunnelListener.Close()
 
 	// Register this tunnel with service discovery
-	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(listener.Addr())); err != nil {
+	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(tunnelListener.Addr())); err != nil {
 		return bootError{event: "register_tunnel", err: err}
 	}
 	defer func() {
@@ -61,7 +61,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 		t.services.GlobalSSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
 			ID:             t.ID,
 			AuthorizedKeys: authorizedKeys,
-			Listener:       listener,
+			Listener:       tunnelListener,
 
 			// This is not actually the port that the tunnel is listening on,
 			//	but the port that the tunnel is *registered* on, which is how we uniquely identify incoming requests

@@ -35,14 +35,14 @@ type NormalTunnel struct {
 	services      NormalTunnelServices
 }
 
-func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions, statusUpdate StatusUpdateFn) error {
+func (t NormalTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
 	logger := log.FromContext(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start listening on a local port.
-	tunnelListener, err := newEphemeralTCPListener()
+	tunnelListener, err := newEphemeralTCPListener(tunnelOptions.BindHost)
 	if err != nil {
 		return bootError{event: "open_listener", err: err}
 	}
