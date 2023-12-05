@@ -56,9 +56,6 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 	}
 
-	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, log.FromContext(ctx), t.services.Discovery)
-
 	<-ctx.Done()
 	return nil
 }

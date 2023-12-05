@@ -115,9 +115,6 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		}
 	}()
 
-	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
-
 	<-ctx.Done()
 	return nil
 }

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	conncheckTimeout          = 10 * time.Second
+	conncheckInterval         = 30 * time.Second
 	conncheckDialTimeout      = 5 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
 	conncheckReadMaxBytes     = 256
@@ -38,12 +38,10 @@ func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Check the connectivity every 15 seconds
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(conncheckInterval)
 	defer ticker.Stop()
 
 	logger.Debug("Start")
-
 	for {
 		select {
 		case <-ctx.Done():

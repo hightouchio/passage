@@ -13,6 +13,8 @@ type ServeStrategy func(ctx context.Context, tunnel Tunnel) error
 func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryService) ServeStrategy {
 	return func(ctx context.Context, tunnel Tunnel) error {
 		logger := log.FromContext(ctx)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
 
 		// Run listening on a random, unused local port
 		tunnelListener, err := newEphemeralTCPListener(bindHost)
@@ -32,6 +34,11 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 			}
 		}()
 
+		// Start running the connectivity check
+		// TODO: Run one as soon as the tunnel comes online.
+		go runTunnelConnectivityCheck(ctx, tunnel.GetID(), logger, serviceDiscovery)
+
+		// Start the tunnel
 		return tunnel.Start(ctx, tunnelListener, newTunnelStatusUpdater(logger))
 	}
 }
