@@ -32,7 +32,7 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	}
 
 	// Dial remote SSH server
-	logger.With(zap.String("addr", addr)).Infow("Dial %s", addr)
+	logger.With(zap.String("addr", addr)).Infof("Dial %s", addr)
 	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to remote server")

@@ -19,8 +19,30 @@ spec:
         - name: openssh-server
           image: lscr.io/linuxserver/openssh-server:latest
           imagePullPolicy: IfNotPresent
+
+          env:
+            - name: PASSWORD_ACCESS
+              value: "false"
+            - name: SUDO_ACCESS
+              value: "false"
+            - name: USER_NAME
+              value: "passage"
+
+            - name: "PUBLIC_KEY_FILE"
+              value: "/config/keys/authorized_keys"
+
+          volumeMounts:
+            - name: authorized-keys
+              subPath: authorized_keys
+              mountPath: /config/keys/authorized_keys
+
+
       restartPolicy: Always
 
+      volumes:
+        - name: authorized-keys
+          configMap:
+            name: openssh-server-authorized-keys
 ---
 
 apiVersion: v1
@@ -36,3 +58,14 @@ spec:
       protocol: TCP
       port: 22
       targetPort: 2222
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openssh-server-authorized-keys
+data:
+  authorized_keys: |
+    # hello world
+    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCbJkWqOljcvF8c2Sn/7MUUgil+sgapzvMerwe1JNjyMsbOX03SmS/hOKMLTYwq1eJ36d3FdNyqwWmgHeFIyGCF2DfRJ7ysk/hug6y6BrFJpEhEkyYIDaxzhPx3P85GoLgTo83+ZbYn9DuUQEwhDxEs1ZwnE8h6vfeMzNRZEUaWFAePejJqS4NWYNHvI2OGXbCVyrlfkt+c9wLEg1wvlF3RcYtlFBgw/1APmV1xVAa8PUK9gZJb7Y/YtJSjnMCkOoB0j+1lyfpLlayvt41G5EVZIFMXIcqqJd6DGsDI0xmP0JuHJYN4dqU3IFFn/4o5uT6e43ij6DFeM6We03JJTILU3CNdBw7b9ypWBYj2M/HEcDT9q1W7kwpTQDQWx+wtmo53I6bLw5MuKiUMhJyA90fKkQH0VUy/MDipMew7CkWScgLfa7W6mI04swU0SezpswjS2/AG/K/7bPpdlD8ECIQ3Vw/aUVxCBM6DSD6Px7bZB5ssM2bi4sfcywn36zuNPAh00Ohim1JAtkempT5i8gdhJwUhkbvVbWbWrns6LuneyzmZuDU9zUwyNFvrEB95rzsmkCWTZB6GIAX2A/IuTDxFEcbddrDPnPz8HsYyvRftNdmHsMQVW9Bj0yVSnM7h46khr/lcxVXiBSfFywa3DXEU97bzcazeB3QY9PwI8KyuvQ==
