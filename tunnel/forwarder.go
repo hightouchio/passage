@@ -113,6 +113,11 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 
 	defer func() {
 		if err := session.Close(); err != nil {
+			// If the session is already closed, we can ignore this error.
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
 			sessionLogger.Warnw("Could not close session", zap.Error(err))
 		}
 
