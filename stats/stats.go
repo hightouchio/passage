@@ -8,34 +8,22 @@ import (
 type Stats struct {
 	client statsd.ClientInterface
 
-	prefix    string
-	tags      Tags
-	eventTags Tags
+	prefix string
+	tags   Tags
 }
 
 type Tags map[string]interface{}
 
 func New(client statsd.ClientInterface) Stats {
 	return Stats{
-		client:    client,
-		tags:      Tags{},
-		eventTags: Tags{},
+		client: client,
+		tags:   Tags{},
 	}
 }
 
 func (s Stats) WithTags(tags Tags) Stats {
 	s.tags = mergeTags([]Tags{s.tags, tags})
 	return s
-}
-
-func (s Stats) WithEventTags(tags Tags) Stats {
-	s.eventTags = mergeTags([]Tags{s.eventTags, tags})
-	return s
-}
-
-type Event struct {
-	statsd.Event
-	Tags Tags
 }
 
 func (s Stats) Count(name string, value int64, tags Tags, rate float64) {
