@@ -108,7 +108,10 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	sessionLogger.Infow("New session", zap.String("remote_addr", session.RemoteAddr().String()))
 
 	defer func() {
-		session.Close()
+		if err := session.Close(); err != nil {
+			sessionLogger.Warnw("Could not close session", zap.Error(err))
+		}
+
 		// Record pipeline metrics to logs and statsd
 		f.Stats.Count(StatTunnelBytesReceived, int64(session.bytesReceived), nil, 1)
 		f.Stats.Count(StatTunnelBytesSent, int64(session.bytesSent), nil, 1)
@@ -124,10 +127,10 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	if err != nil {
 		// Set SO_LINGER=0 so the tunnel net.TCPConn does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 		if err := session.SetLinger(0); err != nil {
-			sessionLogger.Errorw("Set linger", zap.Error(err))
+			sessionLogger.Warnw("Could not set error", zap.Error(err))
 		}
 
-		sessionLogger.Errorw("Dial upstream", zap.Error(err))
+		sessionLogger.Errorw("Could not dial upstream", zap.Error(err))
 		return
 	}
 	defer upstream.Close()
