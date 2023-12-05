@@ -115,9 +115,14 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 	// Start port forwarding
 	go func() {
 		if err := forwarder.Serve(); err != nil {
+			// If it's simply a closed error, we can return without logging an error.
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
 			tunnel.Logger.Error("Forwarder serve", zap.Error(err))
-			return
 		}
+
 	}()
 	tunnel.StatusUpdate(StatusOnline, "Tunnel is online")
 

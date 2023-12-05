@@ -66,6 +66,10 @@ func (f *TCPForwarder) Serve() error {
 			// Accept incoming tunnel connections
 			conn, err := f.Listener.AcceptTCP()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return err
+				}
+
 				return errors.Wrap(err, "accept tcp")
 			}
 

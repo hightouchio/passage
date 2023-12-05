@@ -106,8 +106,12 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	go func() {
 		defer cancel()
 		if err := forwarder.Serve(); err != nil {
+			// If it's simply a closed error, we can return without logging an error.
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
 			logger.Errorw("Forwarder serve", zap.Error(err))
-			return
 		}
 	}()
 
