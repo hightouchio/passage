@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
@@ -25,6 +26,7 @@ type Manager struct {
 	RefreshDuration       time.Duration
 	TunnelRestartInterval time.Duration
 	Stats                 stats.Stats
+	ServiceDiscovery      discovery.DiscoveryService
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
@@ -38,15 +40,23 @@ type Manager struct {
 	stop chan bool
 }
 
-func NewManager(logger *log.Logger, st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(
+	logger *log.Logger,
+	st stats.Stats,
+	listFunc ListFunc,
+	tunnelOptions TunnelOptions,
+	refreshDuration, tunnelRestartInterval time.Duration,
+	serviceDiscovery discovery.DiscoveryService,
+) *Manager {
 	return &Manager{
 		ListFunc:              listFunc,
 		TunnelOptions:         tunnelOptions,
 		RefreshDuration:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
 
-		Stats:  st,
-		logger: logger,
+		Stats:            st,
+		ServiceDiscovery: serviceDiscovery,
+		logger:           logger,
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
@@ -106,7 +116,7 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 			st := m.Stats.WithEventTags(stats.Tags{"tunnel_id": tunnelID.String()})
 			ctx = stats.InjectContext(ctx, st)
 
-			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)
+			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval, m.ServiceDiscovery)
 			go supervisor.Start(ctx)
 			m.supervisors[tunnelID] = supervisor
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"go.uber.org/zap"
 	"time"
 )
@@ -12,18 +13,27 @@ import (
 type Supervisor struct {
 	Tunnel        Tunnel
 	TunnelOptions TunnelOptions
-	Retry         time.Duration
-	Stats         stats.Stats
+
+	Retry            time.Duration
+	Stats            stats.Stats
+	ServiceDiscovery discovery.DiscoveryService
 
 	stop chan bool
 }
 
-func NewSupervisor(tunnel Tunnel, st stats.Stats, options TunnelOptions, retry time.Duration) *Supervisor {
+func NewSupervisor(
+	tunnel Tunnel,
+	st stats.Stats,
+	options TunnelOptions,
+	retry time.Duration,
+	serviceDiscovery discovery.DiscoveryService,
+) *Supervisor {
 	return &Supervisor{
-		Tunnel:        tunnel,
-		TunnelOptions: options,
-		Retry:         retry,
-		Stats:         st,
+		Tunnel:           tunnel,
+		TunnelOptions:    options,
+		Retry:            retry,
+		Stats:            st,
+		ServiceDiscovery: serviceDiscovery,
 
 		stop: make(chan bool),
 	}
@@ -50,33 +60,26 @@ func (s *Supervisor) Start(ctx context.Context) {
 				}
 
 				func() {
-					// Build visibility interfaces
+					ctx, cancel := context.WithCancel(ctx)
+					defer cancel()
+
 					st := s.Stats.
 						WithPrefix("tunnel").
-						WithTags(stats.Tags{
-							"tunnel_id": s.Tunnel.GetID().String(),
-						})
+						WithTags(stats.Tags{"tunnel_id": s.Tunnel.GetID().String()})
 
 					logger := log.Get().Named("Tunnel").With(
 						zap.String("tunnel_id", s.Tunnel.GetID().String()),
 					)
 
-					lifecycle := lifecycleLogger{logger}
-
-					// Inject visibility interfaces into context
-					ctx, cancel := context.WithCancel(ctx)
-					defer cancel()
-
-					ctx = stats.InjectContext(ctx, st)
-					ctx = injectCtxLifecycle(ctx, lifecycle)
-					ctx = log.Context(ctx, logger)
-
 					logger.Info("Start")
-					if err := s.Tunnel.Start(ctx, s.TunnelOptions, newTunnelStatusUpdater(logger)); err != nil {
+					defer logger.Info("Stop")
+
+					ctx = log.Context(stats.InjectContext(ctx, st), logger)
+
+					// Serve the tunnel over TCP
+					if err := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)(ctx, s.Tunnel); err != nil {
 						logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
-						return
 					}
-					logger.Info("Stop")
 				}()
 			}
 		}

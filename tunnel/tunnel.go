@@ -5,10 +5,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
+	"net"
 )
 
 type Tunnel interface {
-	Start(context.Context, TunnelOptions, StatusUpdateFn) error
+	Start(context.Context, *net.TCPListener, StatusUpdateFn) error
 	GetID() uuid.UUID
 	Equal(interface{}) bool
 }

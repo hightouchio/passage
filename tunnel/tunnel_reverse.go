@@ -7,7 +7,7 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"go.uber.org/zap"
+	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,33 +26,14 @@ type ReverseTunnel struct {
 	services ReverseTunnelServices
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
-	logger := log.FromContext(ctx)
-
+func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate StatusUpdateFn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
-		return bootError{event: "get_authorized_keys", err: err}
+		return errors.Wrap(err, "get authorized keys")
 	}
-
-	// Open listener when the tunnel first boots.
-	tunnelListener, err := newEphemeralTCPListener(tunnelOptions.BindHost)
-	if err != nil {
-		return bootError{event: "open_listener", err: err}
-	}
-	defer tunnelListener.Close()
-
-	// Register this tunnel with service discovery
-	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(tunnelListener.Addr())); err != nil {
-		return bootError{event: "register_tunnel", err: err}
-	}
-	defer func() {
-		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-			logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
-		}
-	}()
 
 	// Register this tunnel with the global reverse SSH server
 	if t.services.GlobalSSHServer != nil {
@@ -61,7 +42,7 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 		t.services.GlobalSSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
 			ID:             t.ID,
 			AuthorizedKeys: authorizedKeys,
-			Listener:       tunnelListener,
+			Listener:       listener,
 
 			// This is not actually the port that the tunnel is listening on,
 			//	but the port that the tunnel is *registered* on, which is how we uniquely identify incoming requests
@@ -69,14 +50,14 @@ func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, s
 			RegisteredPort: t.SSHDPort,
 
 			StatusUpdate: statusUpdate,
-			Logger:       logger,
+			Logger:       log.FromContext(ctx),
 			Stats:        stats.GetStats(ctx),
 		})
 		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 	}
 
 	// Start the tunnel connectivity check
-	go runTunnelConnectivityCheck(ctx, t.ID, logger, t.services.Discovery)
+	go runTunnelConnectivityCheck(ctx, t.ID, log.FromContext(ctx), t.services.Discovery)
 
 	<-ctx.Done()
 	return nil

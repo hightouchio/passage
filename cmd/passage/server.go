@@ -44,7 +44,18 @@ func runServer(cmd *cobra.Command, args []string) error {
 }
 
 // runTunnels is the entrypoint for tunnel servers
-func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, discovery discovery.DiscoveryService, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats, logger *log.Logger) error {
+func runTunnels(
+	lc fx.Lifecycle,
+	server tunnel.API,
+	sql *sqlx.DB,
+	config *viper.Viper,
+	discovery discovery.DiscoveryService,
+	keystore keystore.Keystore,
+	healthchecks *healthcheckManager,
+	st stats.Stats,
+	logger *log.Logger,
+	serviceDiscovery discovery.DiscoveryService,
+) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
@@ -56,6 +67,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			},
 			config.GetDuration(ConfigTunnelRefreshInterval),
 			config.GetDuration(ConfigTunnelRestartInterval),
+			serviceDiscovery,
 		)
 
 		lc.Append(fx.Hook{

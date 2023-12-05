@@ -35,29 +35,11 @@ type NormalTunnel struct {
 	services      NormalTunnelServices
 }
 
-func (t NormalTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, statusUpdate StatusUpdateFn) error {
-	logger := log.FromContext(ctx)
-
+func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate StatusUpdateFn) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Start listening on a local port.
-	tunnelListener, err := newEphemeralTCPListener(tunnelOptions.BindHost)
-	if err != nil {
-		return bootError{event: "open_listener", err: err}
-	}
-	defer tunnelListener.Close()
-	logger.Infow("Open tunnel listener", "listen_addr", tunnelListener.Addr().String())
-
-	// Register tunnel with service discovery.
-	if err := t.services.Discovery.RegisterTunnel(t.ID, portFromNetAddr(tunnelListener.Addr())); err != nil {
-		return bootError{event: "service_discovery_register", err: err}
-	}
-	defer func() {
-		if err := t.services.Discovery.DeregisterTunnel(t.ID); err != nil {
-			logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
-		}
-	}()
+	logger := log.FromContext(ctx)
 
 	// Establish a connection to the remote SSH server
 	statusUpdate(StatusBooting, "Booting")
@@ -78,7 +60,7 @@ func (t NormalTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, st
 		KeepaliveInterval: t.clientOptions.KeepaliveInterval,
 	})
 	if err != nil {
-		return bootError{event: "ssh_connect", err: err}
+		return errors.Wrap(err, "SSH connect")
 	}
 	statusUpdate(StatusBooting, "SSH connection established")
 
@@ -102,7 +84,7 @@ func (t NormalTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions, st
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
 	forwarder := &TCPForwarder{
-		Listener: tunnelListener,
+		Listener: listener,
 
 		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
 		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {

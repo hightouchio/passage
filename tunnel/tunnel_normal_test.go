@@ -5,7 +5,6 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
-	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -93,7 +92,6 @@ func runNormalTunnelTest(t *testing.T, clientInstructions, serviceInstructions [
 		st := stats.New(&statsd.NoOpClient{})
 
 		ctx = stats.InjectContext(ctx, st)
-		ctx = injectCtxLifecycle(ctx, lifecycleLogger{log.Get()})
 
 		keystore := keystoreInMemory.New()
 		database := MockNormalDatabase{}
@@ -114,8 +112,15 @@ func runNormalTunnelTest(t *testing.T, clientInstructions, serviceInstructions [
 				KeepaliveInterval: 60 * time.Second,
 			},
 		}
+
+		listener, err := newEphemeralTCPListener("0.0.0.0")
+		if err != nil {
+			t.Error(errors.Wrap(err, "open listener"))
+			return
+		}
+
 		logrus.Debug("passage: start tunnel")
-		if err := tunnel.Start(ctx, TunnelOptions{BindHost: bindHost}, func(status Status, message string) {}); err != nil {
+		if err := tunnel.Start(ctx, listener, func(status Status, message string) {}); err != nil {
 			t.Error(errors.Wrap(err, "server failed to start"))
 			return
 		}
