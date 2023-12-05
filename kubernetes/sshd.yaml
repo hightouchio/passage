@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openssh-server
+  labels:
+    app: openssh-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openssh-server
+  template:
+    metadata:
+      name: openssh-server
+      labels:
+        app: openssh-server
+    spec:
+      containers:
+        - name: openssh-server
+          image: lscr.io/linuxserver/openssh-server:latest
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: openssh-server
+spec:
+  selector:
+    app: openssh-server
+  type: ClusterIP
+  ports:
+    - name: "http"
+      protocol: TCP
+      port: 22
+      targetPort: 2222

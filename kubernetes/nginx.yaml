@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upstream-nginx-config
+data:
+  nginx.conf: |
+    server {
+      listen 80;
+
+      location / {
+        return 200 'Hello world\n';
+        add_header Content-Type text/plain;
+      }
+
+      location /pod-cost {
+        return 200 '5\n';
+        add_header Content-Type text/plain;
+      }
+    }
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upstream-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upstream-nginx
+  template:
+    metadata:
+      labels:
+        app: upstream-nginx
+
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+      volumes:
+        - name: config-volume
+          configMap:
+            name: upstream-nginx-config
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: upstream-nginx
+spec:
+  selector:
+    app: upstream-nginx
+  type: ClusterIP
+  ports:
+    - name: "http"
+      protocol: TCP
+      port: 80
+      targetPort: 80
