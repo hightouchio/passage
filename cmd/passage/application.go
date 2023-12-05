@@ -155,10 +155,9 @@ func startApplication(bootFuncs ...interface{}) error {
 
 		log.Get().Named("Passage").Infow("Start", zap.String("version", version))
 	}()
+	defer log.Get().Named("Passage").Info("Stop")
 
 	<-app.Done()
-
-	log.Get().Named("Passage").Infow("Stop")
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -292,7 +291,9 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.R
 			logger.Info("Start")
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
-					logger.Errorw("HTTP Listener", zap.Error(err))
+					if !errors.Is(err, http.ErrServerClosed) {
+						logger.Errorw("Listener", zap.Error(err))
+					}
 				}
 			}()
 			return nil

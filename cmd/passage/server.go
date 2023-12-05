@@ -59,7 +59,7 @@ func runTunnels(
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
-			logger.Named("TunnelManager").With("tunnel_type", name),
+			logger.Named("Manager").With("tunnel_type", name),
 			st.WithTags(stats.Tags{"tunnel_type": name}),
 			listFunc,
 			tunnel.TunnelOptions{
@@ -117,7 +117,9 @@ func runTunnels(
 					// We want to pass context.Background() here, not the context.Context accepted from the hook,
 					//	because the hook's context.Context is cancelled after the application has booted completely
 					if err := sshServer.Start(context.Background()); err != nil {
-						logger.Errorw("SSH", zap.Error(err))
+						if !errors.Is(err, tunnel.ErrSshServerClosed) {
+							logger.Errorw("SSH", zap.Error(err))
+						}
 					}
 				}()
 				return nil

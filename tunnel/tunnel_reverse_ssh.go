@@ -46,6 +46,8 @@ func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
 	}
 }
 
+var ErrSshServerClosed = ssh.ErrServerClosed
+
 func (s *SSHServer) Start(ctx context.Context) error {
 	server := &ssh.Server{
 		Addr: s.BindAddr,
