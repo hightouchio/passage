@@ -53,6 +53,7 @@ func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger 
 			logger.Debug("Checking tunnel")
 
 			// Resolve the tunnel connection details from service discovery
+			// TODO: Do not resolve through service discovery.
 			tunnelDetails, err := serviceDiscovery.GetTunnel(tunnelID)
 			if err != nil {
 				logger.Error("could not get tunnel details for connectivity check", zap.Error(err))

@@ -9,7 +9,7 @@ type Status string
 
 const (
 	StatusBooting Status = "booting"
-	StatusOnline  Status = "healthy"
+	StatusReady   Status = "ready"
 	StatusError   Status = "error"
 )
 
@@ -18,11 +18,9 @@ type StatusUpdate struct {
 	Message string
 }
 
-func statusLogger(log *log.Logger, statuses <-chan StatusUpdate) {
-	for status := range statuses {
-		log.With(
-			zap.String("status", string(status.Status)),
-			zap.String("message", string(status.Status)),
-		).Debugf("[%s] %s", status.Status, status.Message)
-	}
+func logStatus(log *log.Logger, status StatusUpdate) {
+	log.With(
+		zap.String("status", string(status.Status)),
+		zap.String("message", string(status.Status)),
+	).Debugf("[%s] %s", status.Status, status.Message)
 }

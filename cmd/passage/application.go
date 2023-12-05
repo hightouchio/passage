@@ -38,7 +38,6 @@ import (
 )
 
 const (
-	ConfigEnv          = "env"
 	ConfigHTTPAddr     = "http.addr"
 	ConfigApiEnabled   = "api.enabled"
 	ConfigPprofEnabled = "pprof.enabled"

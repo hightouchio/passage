@@ -101,7 +101,6 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	}
 	defer forwarder.Close()
 
-	logger.Info("Tunnel is online")
 	// Start port forwarding
 	go func() {
 		defer cancel()
@@ -114,6 +113,8 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 			logger.Errorw("Forwarder serve", zap.Error(err))
 		}
 	}()
+	logger.Info("Tunnel is online")
+	statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
 
 	<-ctx.Done()
 	return nil

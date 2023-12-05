@@ -124,7 +124,7 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 		}
 
 	}()
-	tunnel.StatusUpdate <- StatusUpdate{StatusOnline, "Tunnel is online"}
+	tunnel.StatusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
 
 	// Graceful shutdown if connection ends
 	go func() {
