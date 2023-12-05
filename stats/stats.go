@@ -3,7 +3,6 @@ package stats
 import (
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
-	"strings"
 )
 
 type Stats struct {
@@ -24,11 +23,6 @@ func New(client statsd.ClientInterface) Stats {
 	}
 }
 
-func (s Stats) WithPrefix(new string) Stats {
-	s.prefix = joinPrefixes(s.prefix, new)
-	return s
-}
-
 func (s Stats) WithTags(tags Tags) Stats {
 	s.tags = mergeTags([]Tags{s.tags, tags})
 	return s
@@ -45,25 +39,15 @@ type Event struct {
 }
 
 func (s Stats) Count(name string, value int64, tags Tags, rate float64) {
-	s.client.Count(joinPrefixes(s.prefix, name), value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
+	s.client.Count(name, value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
 }
 
 func (s Stats) Incr(name string, tags Tags, rate float64) {
-	s.client.Incr(joinPrefixes(s.prefix, name), convertTags(mergeTags([]Tags{s.tags, tags})), rate)
+	s.client.Incr(name, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
 }
 
 func (s Stats) Gauge(name string, value float64, tags Tags, rate float64) {
-	s.client.Gauge(joinPrefixes(s.prefix, name), value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
-}
-
-func joinPrefixes(prefixes ...string) string {
-	newPrefixes := []string{}
-	for _, v := range prefixes {
-		if v != "" {
-			newPrefixes = append(newPrefixes, v)
-		}
-	}
-	return strings.Join(newPrefixes, ".")
+	s.client.Gauge(name, value, convertTags(mergeTags([]Tags{s.tags, tags})), rate)
 }
 
 func mergeTags(tags []Tags) Tags {

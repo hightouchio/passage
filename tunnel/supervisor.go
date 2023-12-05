@@ -63,9 +63,7 @@ func (s *Supervisor) Start(ctx context.Context) {
 					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
 
-					st := s.Stats.
-						WithPrefix("tunnel").
-						WithTags(stats.Tags{"tunnel_id": s.Tunnel.GetID().String()})
+					st := s.Stats.WithTags(stats.Tags{"tunnel_id": s.Tunnel.GetID().String()})
 
 					logger := log.Get().Named("Tunnel").With(
 						zap.String("tunnel_id", s.Tunnel.GetID().String()),

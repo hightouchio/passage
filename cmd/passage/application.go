@@ -175,7 +175,7 @@ func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, d
 		SQL:              postgres.NewClient(sql),
 		DiscoveryService: discovery,
 		Keystore:         keystore,
-		Stats:            stats.WithPrefix("tunnel"),
+		Stats:            stats,
 	}, nil
 }
 
@@ -408,9 +408,7 @@ func newStats(config *viper.Viper) (stats.Stats, error) {
 	} else {
 		statsdClient = &statsd.NoOpClient{}
 	}
-	st := stats.
-		New(statsdClient).
-		WithPrefix("passage")
+	st := stats.New(statsdClient)
 	if version != "" {
 		st = st.WithTags(stats.Tags{"version": version})
 	}

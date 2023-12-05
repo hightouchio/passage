@@ -110,8 +110,8 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	defer func() {
 		session.Close()
 		// Record pipeline metrics to logs and statsd
-		f.Stats.Count("bytes_rcvd", int64(session.bytesReceived), nil, 1)
-		f.Stats.Count("bytes_sent", int64(session.bytesSent), nil, 1)
+		f.Stats.Count(StatTunnelBytesReceived, int64(session.bytesReceived), nil, 1)
+		f.Stats.Count(StatTunnelBytesSent, int64(session.bytesSent), nil, 1)
 		sessionLogger.Infow(
 			"Session closed",
 			zap.Uint64("bytes_rcvd", session.bytesReceived),
