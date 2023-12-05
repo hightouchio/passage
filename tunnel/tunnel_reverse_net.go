@@ -124,13 +124,13 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 		}
 
 	}()
-	tunnel.StatusUpdate(StatusOnline, "Tunnel is online")
+	tunnel.StatusUpdate <- StatusUpdate{StatusOnline, "Tunnel is online"}
 
 	// Graceful shutdown if connection ends
 	go func() {
 		// TODO: Does this context end when the connection ends, or when this message is fully processed?
 		<-ctx.Done()
-		tunnel.StatusUpdate(StatusError, "Tunnel is offline")
+		tunnel.StatusUpdate <- StatusUpdate{StatusError, "Tunnel is offline"}
 		h.closeTunnel(tunnelBindAddr)
 	}()
 

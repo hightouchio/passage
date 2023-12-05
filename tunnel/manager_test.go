@@ -75,7 +75,7 @@ func newMockTunnel(port int) *mockTunnel {
 	}
 }
 
-func (m *mockTunnel) Start(ctx context.Context, listener *net.TCPListener, fn StatusUpdateFn) error {
+func (m *mockTunnel) Start(ctx context.Context, listener *net.TCPListener, update chan<- StatusUpdate) error {
 	m.started = true
 	<-ctx.Done()
 	m.stopped = true

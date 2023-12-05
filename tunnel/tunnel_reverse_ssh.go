@@ -31,7 +31,7 @@ type SSHServerRegisteredTunnel struct {
 	AuthorizedKeys []ssh.PublicKey
 	Listener       *net.TCPListener
 
-	StatusUpdate StatusUpdateFn
+	StatusUpdate chan<- StatusUpdate
 	Logger       *log.Logger
 	Stats        stats.Stats
 }

@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	conncheckInterval         = 30 * time.Second
+	// TODO: Adjust this interval to align with discovery TTLs
+	conncheckInterval = 30 * time.Second
+
 	conncheckDialTimeout      = 5 * time.Second
 	conncheckErrorWaitTimeout = 1 * time.Second
 	conncheckReadMaxBytes     = 256

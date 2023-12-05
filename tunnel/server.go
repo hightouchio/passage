@@ -34,11 +34,18 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 			}
 		}()
 
+		// Create a channel to receive status updates.
+		statusUpdates := make(chan StatusUpdate)
+		defer close(statusUpdates)
+
+		// Record status updates
+		go statusLogger(logger, statusUpdates)
+
 		// Start running the connectivity check
 		// TODO: Run one as soon as the tunnel comes online.
 		go runTunnelConnectivityCheck(ctx, tunnel.GetID(), logger, serviceDiscovery)
 
 		// Start the tunnel
-		return tunnel.Start(ctx, tunnelListener, newTunnelStatusUpdater(logger))
+		return tunnel.Start(ctx, tunnelListener, statusUpdates)
 	}
 }

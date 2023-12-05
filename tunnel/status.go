@@ -5,8 +5,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type StatusUpdateFn func(status Status, message string)
-
 type Status string
 
 const (
@@ -15,12 +13,16 @@ const (
 	StatusError   Status = "error"
 )
 
-func newTunnelStatusUpdater(log *log.Logger) StatusUpdateFn {
-	logger := log.Named("StatusUpdater")
-	return func(status Status, message string) {
-		logger.With(
-			zap.String("status", string(status)),
-			zap.String("message", message),
-		).Debugf("Status update: %s", status)
+type StatusUpdate struct {
+	Status  Status
+	Message string
+}
+
+func statusLogger(log *log.Logger, statuses <-chan StatusUpdate) {
+	for status := range statuses {
+		log.With(
+			zap.String("status", string(status.Status)),
+			zap.String("message", string(status.Status)),
+		).Debugf("[%s] %s", status.Status, status.Message)
 	}
 }

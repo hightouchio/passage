@@ -26,7 +26,7 @@ type ReverseTunnel struct {
 	services ReverseTunnelServices
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate StatusUpdateFn) error {
+func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -37,7 +37,7 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 
 	// Register this tunnel with the global reverse SSH server
 	if t.services.GlobalSSHServer != nil {
-		statusUpdate(StatusBooting, "SSHD server is online. Waiting for connections")
+		statusUpdate <- StatusUpdate{StatusBooting, "SSHD server is online. Waiting for connections"}
 
 		t.services.GlobalSSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
 			ID:             t.ID,

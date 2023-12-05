@@ -35,14 +35,14 @@ type NormalTunnel struct {
 	services      NormalTunnelServices
 }
 
-func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate StatusUpdateFn) error {
+func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	logger := log.FromContext(ctx)
 
 	// Establish a connection to the remote SSH server
-	statusUpdate(StatusBooting, "Booting")
+	statusUpdate <- StatusUpdate{StatusBooting, "Initialized"}
 	sshClient, keepalive, err := NewSSHClient(ctx, SSHClientOptions{
 		Host: t.SSHHost,
 		Port: t.SSHPort,
@@ -62,7 +62,7 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	if err != nil {
 		return errors.Wrap(err, "SSH connect")
 	}
-	statusUpdate(StatusBooting, "SSH connection established")
+	statusUpdate <- StatusUpdate{StatusBooting, "SSH connection established"}
 
 	// Listen for keepalive failures
 	go func() {
@@ -74,7 +74,7 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 			if !ok {
 				return
 			}
-			statusUpdate(StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error()))
+			statusUpdate <- StatusUpdate{StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error())}
 
 		case <-ctx.Done():
 			return

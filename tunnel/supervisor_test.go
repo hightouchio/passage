@@ -16,7 +16,7 @@ import (
 type dummyTunnel struct {
 }
 
-func (d dummyTunnel) Start(ctx context.Context, listener *net.TCPListener, fn StatusUpdateFn) error {
+func (d dummyTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
 	time.Sleep(10 * time.Millisecond)
 	return fmt.Errorf("bad tunnel")
 }

@@ -9,7 +9,7 @@ import (
 )
 
 type Tunnel interface {
-	Start(context.Context, *net.TCPListener, StatusUpdateFn) error
+	Start(context.Context, *net.TCPListener, chan<- StatusUpdate) error
 	GetID() uuid.UUID
 	Equal(interface{}) bool
 }

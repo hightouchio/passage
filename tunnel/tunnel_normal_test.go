@@ -120,7 +120,7 @@ func runNormalTunnelTest(t *testing.T, clientInstructions, serviceInstructions [
 		}
 
 		logrus.Debug("passage: start tunnel")
-		if err := tunnel.Start(ctx, listener, func(status Status, message string) {}); err != nil {
+		if err := tunnel.Start(ctx, listener, make(chan<- StatusUpdate)); err != nil {
 			t.Error(errors.Wrap(err, "server failed to start"))
 			return
 		}
