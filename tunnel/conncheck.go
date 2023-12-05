@@ -35,46 +35,51 @@ type CheckTunnelResponse struct {
 
 // runTunnelConnectivityCheck continuously checks the status of a tunnel, independent of the tunnel-handling code itself.
 func runTunnelConnectivityCheck(ctx context.Context, tunnelID uuid.UUID, logger *log.Logger, serviceDiscovery discovery.DiscoveryService) {
-	logger = logger.Named("ConnectivityCheck").With(zap.String("tunnel_id", tunnelID.String()))
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	logger = logger.Named("ConnectivityCheck").With(zap.String("tunnel_id", tunnelID.String()))
 
+	// Create a ticker to run the check on an interval
 	ticker := time.NewTicker(conncheckInterval)
 	defer ticker.Stop()
 
+	tick := func() {
+		// Resolve the tunnel connection details from service discovery
+		// TODO: Do not resolve through service discovery.
+		tunnelDetails, err := serviceDiscovery.GetTunnel(tunnelID)
+		if err != nil {
+			logger.Error("could not get tunnel details for connectivity check", zap.Error(err))
+			return
+		}
+
+		// Check connectivity to the tunnel.
+		if err := checkConnectivity(ctx, tunnelDetails.Host, tunnelDetails.Port); err != nil {
+			logger.Warnw("Tunnel is unhealthy", zap.Error(err))
+
+			// Report Unhealthy status
+			if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelUnhealthy, fmt.Sprintf("Tunnel connectivity check failed: %s", err.Error())); err != nil {
+				logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
+			}
+		} else {
+			logger.Info("Tunnel is healthy")
+			// Report Healthy status
+			if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelHealthy, "Tunnel connectivity check successful"); err != nil {
+				logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
+			}
+		}
+	}
+
+	// Initial check
 	logger.Debug("Start")
+	tick()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-ticker.C:
-			logger.Debug("Checking tunnel")
-
-			// Resolve the tunnel connection details from service discovery
-			// TODO: Do not resolve through service discovery.
-			tunnelDetails, err := serviceDiscovery.GetTunnel(tunnelID)
-			if err != nil {
-				logger.Error("could not get tunnel details for connectivity check", zap.Error(err))
-				break
-			}
-
-			// Check connectivity to the tunnel.
-			if err := checkConnectivity(ctx, tunnelDetails.Host, tunnelDetails.Port); err != nil {
-				logger.Warnw("Tunnel is unhealthy", zap.Error(err))
-
-				// Report Unhealthy status
-				if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelUnhealthy, fmt.Sprintf("Tunnel connectivity check failed: %s", err.Error())); err != nil {
-					logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
-				}
-			} else {
-				logger.Info("Tunnel is healthy")
-				// Report Healthy status
-				if err := serviceDiscovery.UpdateHealth(tunnelID, discovery.TunnelHealthy, "Tunnel connectivity check successful"); err != nil {
-					logger.Errorw("Could not update service discovery with tunnel status", zap.Error(err))
-				}
-			}
+			// Subsequent checks
+			tick()
 		}
 	}
 }
