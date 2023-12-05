@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS passage.key_authorizations(
     tunnel_type passage.tunnel_type NOT NULL,
     tunnel_id   UUID NOT NULL,
 
+    -- This is converted to a primary key in a later migration.
     UNIQUE(key_id, tunnel_type, tunnel_id)
 );
 
