@@ -10,6 +10,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type ReverseForwardingHandler struct {
@@ -74,7 +75,8 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx context.Context, paylo
 
 	// Initiate TCPForwarder to listen for tunnel connections.
 	forwarder := &TCPForwarder{
-		Listener: tunnel.Listener,
+		Listener:          tunnel.Listener,
+		KeepaliveInterval: 5 * time.Second,
 
 		// Implement GetUpstreamConn by opening a channel on the SSH connection.
 		GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
