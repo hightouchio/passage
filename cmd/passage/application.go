@@ -25,6 +25,7 @@ import (
 
 	consul "github.com/hashicorp/consul/api"
 
+	"github.com/hashicorp/go-sockaddr"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -57,12 +58,7 @@ const (
 	ConfigTunnelReverseSshdPort             = "tunnel.reverse.sshd_port"
 	ConfigTunnelReverseEnableIndividualSSHD = "tunnel.reverse.enable_individual_sshd"
 
-	ConfigDiscoveryType           = "discovery.type"
-	ConfigDiscoverySrvRegistry    = "discovery.srv.registry"
-	ConfigDiscoverySrvPrefix      = "discovery.srv.prefix"
-	ConfigDiscoveryStaticHost     = "discovery.static.host"
-	ConfigDiscoveryDnsHostNormal  = "discovery.dns.host_normal"
-	ConfigDiscoveryDnsHostReverse = "discovery.dns.host_reverse"
+	ConfigDiscoveryType = "discovery.type"
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
@@ -100,8 +96,7 @@ func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigTunnelReverseSshdPort, 22)
 	config.SetDefault(ConfigTunnelReverseEnableIndividualSSHD, true)
-	config.SetDefault(ConfigDiscoveryType, "static")
-	config.SetDefault(ConfigDiscoveryStaticHost, "localhost")
+	config.SetDefault(ConfigDiscoveryType, "consul")
 	config.SetDefault(ConfigKeystoreType, "in-memory")
 	config.SetDefault(ConfigLogLevel, "info")
 	config.SetDefault(ConfigLogFormat, "text")
@@ -185,9 +180,16 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 		if err != nil {
 			return nil, errors.Wrap(err, "could not init Consul client")
 		}
+
+		// Get Private IP Address
+		privateIp, err := sockaddr.GetPrivateIP()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not determine private IP")
+		}
+
 		discoveryService = discoveryConsul.NewConsulDiscovery(
 			consulApi,
-			"127.0.0.1", // TODO: Drive off of Pod IP
+			privateIp,
 			30*time.Second,
 		)
 
