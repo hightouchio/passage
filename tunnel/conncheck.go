@@ -64,7 +64,7 @@ func checkConnectivity(ctx context.Context, host string, port int) error {
 	dialer := &net.Dialer{Timeout: conncheckDialTimeout}
 	conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf(net.JoinHostPort(host, strconv.Itoa(port))))
 	if err != nil {
-		return errors.Wrap(err, "dial error")
+		return err
 	}
 	defer conn.Close()
 
