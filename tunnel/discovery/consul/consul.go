@@ -34,7 +34,7 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 				TTL:     formatConsulDuration(d.HealthcheckTTL),
 
 				// Default to the Critical status before the first healthcheck is processed.
-				Status: discovery.TunnelUnhealthy,
+				Status: string(discovery.HealthcheckCritical),
 			},
 		},
 	})
@@ -84,8 +84,8 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 	}, nil
 }
 
-func (d Discovery) UpdateHealth(id uuid.UUID, status, message string) error {
-	if err := d.Consul.Agent().UpdateTTL(getTunnelHealthcheckId(id), message, status); err != nil {
+func (d Discovery) UpdateHealth(id uuid.UUID, status discovery.HealthcheckStatus, message string) error {
+	if err := d.Consul.Agent().UpdateTTL(getTunnelHealthcheckId(id), message, string(status)); err != nil {
 		return errors.Wrap(err, "could not mark tunnel unhealthy")
 	}
 	return nil

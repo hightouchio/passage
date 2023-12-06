@@ -30,30 +30,58 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		}
 		defer func() {
 			if err := serviceDiscovery.DeregisterTunnel(tunnel.GetID()); err != nil {
-				logger.Errorw("Failed to deregister tunnel from service discovery", zap.Error(err))
+				logger.Errorw("deregister tunnel from service discovery", zap.Error(err))
 			}
 		}()
 
-		// Create a channel to receive status updates.
+		// Create a channel to receive tunnel status updates
 		statusUpdates := make(chan StatusUpdate)
 		defer close(statusUpdates)
+
+		// Create a channel to receive connectivity check updates
+		connCheckUpdates := make(chan error)
+		defer close(connCheckUpdates)
 
 		// Consume from the status update channel
 		go func() {
 			var connCheckStarted bool
-			for status := range statusUpdates {
-				logStatus(logger, status)
+			for update := range statusUpdates {
+				logStatus(logger, update)
 
 				// Now that the tunnel is online, start running the connectivity check
 				//	Only do this once
-				if status.Status == StatusReady && !connCheckStarted {
+				if update.Status == StatusReady && !connCheckStarted {
 					connCheckStarted = true
-					go runTunnelConnectivityCheck(ctx, tunnel.GetID(), logger, serviceDiscovery)
+					go tunnelConnectivityCheck(ctx, logger, "localhost", portFromNetAddr(tunnelListener.Addr()), connCheckUpdates)
 				}
 			}
 		}()
 
-		// Start the tunnel
+		// Consume from the connectivity check update channel
+		go func() {
+			for connErr := range connCheckUpdates {
+				// Update service discovery with tunnel health status
+				var status discovery.HealthcheckStatus
+				var message string
+
+				if connErr == nil {
+					status = discovery.HealthcheckPassing
+					message = "Tunnel is online"
+				} else {
+					status = discovery.HealthcheckCritical
+					message = connErr.Error()
+				}
+
+				logger.Infof("Update tunnel health: %v, %s", status, message)
+
+				// TODO: Write this to a different healthcheck?
+				if err := serviceDiscovery.UpdateHealth(tunnel.GetID(), status, message); err != nil {
+					logger.Errorw("Failed to update tunnel health", zap.Error(err))
+				}
+			}
+		}()
+
+		// Run the tunnel
 		return tunnel.Start(ctx, tunnelListener, statusUpdates)
 	}
 }
