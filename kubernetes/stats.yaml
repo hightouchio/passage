@@ -81,7 +81,7 @@ spec:
       restartPolicy: Always
 
       containers:
-        - name: statsd-exporter
+        - name: prometheus
           image: prom/prometheus:latest
           imagePullPolicy: IfNotPresent
 
@@ -120,3 +120,112 @@ data:
       - job_name: 'exporter'
         static_configs:
           - targets: ['statsd-exporter:9102']
+            
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stats
+  name: prometheus
+spec:
+  selector:
+    app: prometheus
+  type: ClusterIP
+  ports:
+    - name: "http"
+      port: 9090
+      targetPort: 9090
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: stats
+  name: grafana
+  labels:
+    app: grafana
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      name: grafana
+      labels:
+        app: grafana
+    spec:
+      restartPolicy: Always
+
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          imagePullPolicy: IfNotPresent
+
+          volumeMounts:
+            - name: config
+              subPath: config.ini
+              mountPath: /etc/grafana/grafana.ini
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources/
+
+      volumes:
+        - name: config
+          configMap:
+            name: grafana-config
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stats
+  name: grafana
+spec:
+  selector:
+    app: grafana
+  type: ClusterIP
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 3000
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: stats
+  name: grafana-config
+data:
+  config.ini: |
+    [auth.anonymous]
+    enabled = true
+    org_name = Main Org.
+    org_role = Admin 
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: stats
+  name: grafana-datasources
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+ 
+    datasources:
+      - uid: prometheus
+        type: prometheus
+        name: Prometheus 
+        access: proxy 
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
