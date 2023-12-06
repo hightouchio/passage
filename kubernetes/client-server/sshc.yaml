@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: test
   name: openssh-client
   labels:
     app: openssh-client
@@ -50,6 +51,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  namespace: test
   name: openssh-client
 data:
   init.d: |

@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: passage
+  name: consul
+
+  labels:
+    app: consul
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consul
+  template:
+    metadata:
+      name: consul
+      labels:
+        app: consul
+    spec:
+      containers:
+        - name: consul
+          image: consul:1.15
+          imagePullPolicy: IfNotPresent
+          args: [
+            "consul", "agent", "-server",
+            "-data-dir=/consul/data",
+            "-config-dir=/consul/config",
+
+            # Bind client interfaces to 0.0.0.0 for external access to the API
+            "-client=0.0.0.0",
+
+            # Only expect one Consul node
+            "-bootstrap-expect=1"
+          ]
+
+          volumeMounts:
+            - name: config-volume
+              mountPath: /consul/config/server.hcl
+              subPath: server.hcl
+
+      restartPolicy: Always
+
+      volumes:
+        - name: config-volume
+          configMap:
+            name: consul-config
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: passage
+  name: consul
+
+spec:
+  selector:
+    app: consul
+  type: ClusterIP
+  ports:
+    - name: "http"
+      protocol: TCP
+      port: 8500
+      targetPort: 8500
+    - name: "https"
+      protocol: TCP
+      port: 8501
+      targetPort: 8501
+    - name: "grpc"
+      protocol: TCP
+      port: 8502
+      targetPort: 8502
+    - name: "grpc-tls"
+      protocol: TCP
+      port: 8503
+      targetPort: 8503
+    - name: "dns"
+      protocol: TCP
+      port: 8600
+      targetPort: 8600
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: passage
+  name: consul-config
+
+data:
+  server.hcl: |
+    server = true
+    log_level = "INFO"
+ 
+    ui_config {
+      enabled = true
+    }
+ 
+    ports {
+      http = 8500
+      https = 8501
+      grpc = 8502
+      grpc_tls = 8503
+    }
+ 
+    # https://developer.hashicorp.com/consul/docs/connect/config-entries/proxy-defaults
+    config_entries {
+      bootstrap = [
+        {
+          Kind = "proxy-defaults"
+          Name = "global"
+          Mode = "direct"
+        }
+      ]
+    }

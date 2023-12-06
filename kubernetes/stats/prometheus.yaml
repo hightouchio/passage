@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: stats
+  name: prometheus
+  labels:
+    app: prometheus
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      name: prometheus
+      labels:
+        app: prometheus
+    spec:
+      restartPolicy: Always
+
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          imagePullPolicy: IfNotPresent
+
+          args:
+            - "--config.file=/prometheus.yml"
+            - "--log.level=debug"
+            - "--web.listen-address=:9090"
+
+          volumeMounts:
+            - name: config
+              subPath: prometheus.yml
+              mountPath: /prometheus.yml
+
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: stats
+  name: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval:      15s
+      evaluation_interval:  15s
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'exporter'
+        static_configs:
+          - targets: ['statsd-exporter:9102']
+            
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stats
+  name: prometheus
+spec:
+  selector:
+    app: prometheus
+  type: ClusterIP
+  ports:
+    - name: "http"
+      port: 9090
+      targetPort: 9090
+
