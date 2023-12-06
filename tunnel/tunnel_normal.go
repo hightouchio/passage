@@ -106,15 +106,28 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		defer cancel()
 		if err := forwarder.Serve(); err != nil {
 			// If it's simply a closed error, we can return without logging an error.
-			if errors.Is(err, net.ErrClosed) {
-				return
+			if !errors.Is(err, net.ErrClosed) {
+				logger.Errorw("Forwarder serve", zap.Error(err))
 			}
-
-			logger.Errorw("Forwarder serve", zap.Error(err))
 		}
 	}()
 	logger.Info("Tunnel is online")
 	statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
+
+	// Update the tunnel self-reported status every 30 seconds
+	statusTicker := time.NewTicker(30 * time.Second)
+	defer statusTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-statusTicker.C:
+				statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
+			}
+		}
+	}()
 
 	<-ctx.Done()
 	return nil

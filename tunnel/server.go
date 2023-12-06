@@ -40,55 +40,64 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		statusUpdates := make(chan StatusUpdate)
 		defer close(statusUpdates)
 
-		// Create a channel to receive connectivity check updates
-		connCheckUpdates := make(chan error)
-		defer close(connCheckUpdates)
+		// Create a channel to signal that the connection check should begin
+		connCheckStartSignal := make(chan any)
+		defer close(connCheckStartSignal)
 
-		// Consume from the status update channel
-		go func() {
-			// TODO: Do we really want to shutdown the tunnel if healthchecks fail?
-			defer cancel()
+		// Start tunnel status update routine
+		go withTunnelHealthcheck(tunnel.GetID(), logger, serviceDiscovery, discovery.HealthcheckOptions{
+			ID:   StatusHealthcheck,
+			Name: "Tunnel Self-reported Status",
+			TTL:  30 * time.Second,
+		}, func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
+			var connCheckStarted bool
+			for update := range statusUpdates {
+				logStatus(logger, update)
 
-			withTunnelHealthcheck(tunnel.GetID(), logger, serviceDiscovery, discovery.HealthcheckOptions{
-				ID:   StatusHealthcheck,
-				Name: "Tunnel Self-reported Status",
-				TTL:  30 * time.Second,
-			}, func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-				var connCheckStarted bool
-				for update := range statusUpdates {
-					logStatus(logger, update)
-
-					// Now that the tunnel is online, start running the connectivity check
-					//	Only do this once
-					if update.Status == StatusReady && !connCheckStarted {
-						connCheckStarted = true
-						go tunnelConnectivityCheck(ctx, logger, "localhost", portFromNetAddr(tunnelListener.Addr()), connCheckUpdates)
-					}
-
-					// Map tunnel status to healthcheck status
-					var status discovery.HealthcheckStatus
-					switch update.Status {
-					case StatusBooting:
-						status = discovery.HealthcheckWarning
-					case StatusReady:
-						status = discovery.HealthcheckPassing
-					case StatusError:
-						status = discovery.HealthcheckCritical
-					}
-
-					// Update service discovery with tunnel health status
-					if err := serviceDiscovery.UpdateHealthcheck(tunnel.GetID(), StatusHealthcheck, status, update.Message); err != nil {
-						logger.Errorw("Failed to update tunnel health", zap.Error(err))
-					}
+				// Now that the tunnel is online, start running the connectivity check
+				//	Only do this once
+				if update.Status == StatusReady && !connCheckStarted {
+					connCheckStarted = true
+					close(connCheckStartSignal)
 				}
-			})
-		}()
 
-		// Consume from the connectivity check update channel
+				// Map tunnel status to healthcheck status
+				var status discovery.HealthcheckStatus
+				switch update.Status {
+				case StatusBooting:
+					status = discovery.HealthcheckWarning
+				case StatusReady:
+					status = discovery.HealthcheckPassing
+				case StatusError:
+					status = discovery.HealthcheckCritical
+				}
+
+				// Update service discovery with tunnel health status
+				if err := serviceDiscovery.UpdateHealthcheck(tunnel.GetID(), StatusHealthcheck, status, update.Message); err != nil {
+					logger.Errorw("Failed to update tunnel health", zap.Error(err))
+				}
+			}
+		})
+
+		// Start tunnel connectivity check routine
 		go func() {
-			// TODO: Do we really want to shutdown the tunnel if healthchecks fail?
-			defer cancel()
+			select {
+			// If the context is cancelled before the start signal is received, we should just exit early.
+			case <-ctx.Done():
+				return
 
+			// Wait for the start signal to be received.
+			case <-connCheckStartSignal:
+			}
+
+			// Create a channel to receive connectivity check updates
+			connCheckUpdates := make(chan error)
+			defer close(connCheckUpdates)
+
+			// Start the tunnel connectivity check
+			go tunnelConnectivityCheck(ctx, logger, "localhost", portFromNetAddr(tunnelListener.Addr()), connCheckUpdates)
+
+			// Register a tunnel connectivity healthcheck, and update it with the connectivity check updates
 			withTunnelHealthcheck(tunnel.GetID(), logger, serviceDiscovery, discovery.HealthcheckOptions{
 				ID:   ConnectivityHealthcheck,
 				Name: "Tunnel Network Connectivity",
