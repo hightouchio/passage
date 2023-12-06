@@ -32,14 +32,14 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	}
 
 	// Dial remote SSH server
-	logger.With(zap.String("addr", addr)).Infof("Dial %s", addr)
+	logger.With(zap.String("addr", addr)).Infof("Dial SSH server %s", addr)
 	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to remote server")
 	}
 
 	// Configure TCP keepalive for SSH connection
-	logger.Debugw("Set keepalive", zap.Duration("interval", options.KeepaliveInterval))
+	logger.Debugw("Set TCP keepalive", zap.Duration("interval", options.KeepaliveInterval))
 	if err := sshConn.SetKeepAlive(true); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to enable keepalive")
 	}
@@ -58,7 +58,7 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	logger.With(
 		zap.String("ssh_user", options.User),
 		zap.Int("ssh_auth_method_count", len(keySigners)),
-	).Infow("Open client connection")
+	).Infof("Authenticating as user %s", options.User)
 	c, chans, reqs, err := gossh.NewClientConn(
 		sshConn, addr,
 		&gossh.ClientConfig{
@@ -70,7 +70,7 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "establish SSH connection")
 	}
-	logger.Info("SSH connection established")
+	logger.Info("Connection established")
 	sshClient := gossh.NewClient(c, chans, reqs)
 
 	// Start sending keepalive packets to the upstream SSH server

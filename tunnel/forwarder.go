@@ -109,7 +109,7 @@ func (f *TCPForwarder) Close() error {
 // and forwards packets between the two.
 func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	sessionLogger := f.logger.With(zap.String("session_id", session.ID()))
-	sessionLogger.Infow("New session", zap.String("remote_addr", session.RemoteAddr().String()))
+	sessionLogger.Debugw("Session open", zap.String("remote_addr", session.RemoteAddr().String()))
 
 	defer func() {
 		if err := session.Close(); err != nil {
@@ -122,8 +122,8 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 		// Record pipeline metrics to logs and statsd
 		f.Stats.Count(StatTunnelBytesReceived, int64(session.bytesReceived), nil, 1)
 		f.Stats.Count(StatTunnelBytesSent, int64(session.bytesSent), nil, 1)
-		sessionLogger.Infow(
-			"Session closed",
+		sessionLogger.Debugw(
+			"Session close",
 			zap.Uint64("bytes_rcvd", session.bytesReceived),
 			zap.Uint64("bytes_sent", session.bytesSent),
 		)

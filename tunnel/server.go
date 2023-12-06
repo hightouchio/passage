@@ -24,8 +24,8 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		if err != nil {
 			return errors.Wrap(err, "open listener")
 		}
+		logger.Debugw("Start listener", "listen_addr", tunnelListener.Addr().String())
 		defer tunnelListener.Close()
-		logger.Infow("Open tunnel listener", "listen_addr", tunnelListener.Addr().String())
 
 		// Register tunnel with service discovery.
 		if err := serviceDiscovery.RegisterTunnel(tunnel.GetID(), portFromNetAddr(tunnelListener.Addr())); err != nil {
@@ -134,7 +134,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 
 		// Start the tunnel, and retry if it fails.
 		return retry(ctx, 30*time.Second, func() error {
-			logger.Info("Start")
+			logger.Info("Start tunnel")
 			if err := tunnel.Start(ctx, tunnelListener, statusUpdates); err != nil {
 				logger.Errorw("Error", zap.Error(err))
 
@@ -143,7 +143,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 
 				return err
 			}
-			logger.Info("Stop")
+			logger.Info("Stop tunnel")
 			return nil
 		})
 	}

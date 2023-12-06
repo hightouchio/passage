@@ -128,7 +128,7 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	defer forwarder.Close()
 
 	// Start port forwarding
-	logger.Info("Starting forwarder")
+	logger.Debug("Starting forwarder")
 	go func() {
 		defer cancel()
 		if err := forwarder.Serve(); err != nil {
