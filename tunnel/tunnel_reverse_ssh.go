@@ -140,7 +140,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			zap.String("bind_address", bindHost),
 			zap.Uint32("bind_port", bindPort),
 			zap.Bool("success", success),
-		).Info("reverse port forwarding request")
+		).Info("Reverse port forwarding request")
 		return success
 	}
 
