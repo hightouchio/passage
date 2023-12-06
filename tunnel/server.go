@@ -52,29 +52,36 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 			Name: "Tunnel Self-reported Status",
 			TTL:  30 * time.Second,
 		}, func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-			for update := range statusUpdates {
-				logStatus(logger, update)
+			for {
+				select {
+				case <-ctx.Done():
+					return
 
-				// Now that the tunnel is online, start running the connectivity check
-				//	Only do this once
-				if update.Status == StatusReady {
-					signalConnCheck()
-				}
+				case update, ok := <-statusUpdates:
+					if !ok {
+						return
+					}
 
-				// Map tunnel status to healthcheck status
-				var status discovery.HealthcheckStatus
-				switch update.Status {
-				case StatusBooting:
-					status = discovery.HealthcheckWarning
-				case StatusReady:
-					status = discovery.HealthcheckPassing
-				case StatusError:
-					status = discovery.HealthcheckCritical
-				}
+					logStatus(logger, update)
 
-				// Update service discovery with tunnel health status
-				if err := serviceDiscovery.UpdateHealthcheck(tunnel.GetID(), StatusHealthcheck, status, update.Message); err != nil {
-					logger.Errorw("Failed to update tunnel health", zap.Error(err))
+					// Now that the tunnel is online, start running the connectivity check
+					//	Only do this once
+					if update.Status == StatusReady {
+						signalConnCheck()
+					}
+
+					// Map tunnel status to healthcheck status
+					var status discovery.HealthcheckStatus
+					switch update.Status {
+					case StatusBooting:
+						status = discovery.HealthcheckWarning
+					case StatusReady:
+						status = discovery.HealthcheckPassing
+					case StatusError:
+						status = discovery.HealthcheckCritical
+					}
+
+					updateHealthcheck(status, update.Message)
 				}
 			}
 		})
@@ -103,13 +110,23 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 				Name: "Tunnel Network Connectivity",
 				TTL:  30 * time.Second,
 			}, func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-				// Listen for connection check updates
-				for connErr := range connCheckUpdates {
-					// Update service discovery with tunnel health status
-					if connErr == nil {
-						updateHealthcheck(discovery.HealthcheckPassing, "Tunnel is reachable")
-					} else {
-						updateHealthcheck(discovery.HealthcheckCritical, connErr.Error())
+				// Listen for connection status updates
+				for {
+					select {
+					case <-ctx.Done():
+						return
+
+					case connErr, ok := <-connCheckUpdates:
+						if !ok {
+							return
+						}
+
+						// Update service discovery with tunnel health status
+						if connErr == nil {
+							updateHealthcheck(discovery.HealthcheckPassing, "Tunnel is reachable")
+						} else {
+							updateHealthcheck(discovery.HealthcheckCritical, connErr.Error())
+						}
 					}
 				}
 			})

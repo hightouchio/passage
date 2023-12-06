@@ -21,6 +21,6 @@ type StatusUpdate struct {
 func logStatus(log *log.Logger, status StatusUpdate) {
 	log.With(
 		zap.String("status", string(status.Status)),
-		zap.String("message", string(status.Status)),
+		zap.String("message", status.Message),
 	).Debugf("[%s] %s", status.Status, status.Message)
 }
