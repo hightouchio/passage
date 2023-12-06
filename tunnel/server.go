@@ -133,7 +133,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		}()
 
 		// Start the tunnel, and retry if it fails.
-		return retry(ctx, 30*time.Second, func(ctx context.Context) error {
+		return retry(ctx, 30*time.Second, func() error {
 			logger.Info("Start")
 			if err := tunnel.Start(ctx, tunnelListener, statusUpdates); err != nil {
 				logger.Errorw("Error", zap.Error(err))
@@ -150,14 +150,14 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 }
 
 // retry the given function until it succeeds
-func retry(ctx context.Context, interval time.Duration, fn func(context.Context) error) error {
+func retry(ctx context.Context, interval time.Duration, fn func() error) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 
 		default:
-			if err := fn(ctx); err != nil {
+			if err := fn(); err != nil {
 				time.Sleep(interval)
 				continue
 			}
