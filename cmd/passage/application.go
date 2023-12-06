@@ -185,11 +185,11 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 		if err != nil {
 			return nil, errors.Wrap(err, "could not init Consul client")
 		}
-		discoveryService = discoveryConsul.Discovery{
-			Consul:         consulApi,
-			HostAddress:    "127.0.0.1", // TODO: Drive off of Pod IP
-			HealthcheckTTL: 30 * time.Second,
-		}
+		discoveryService = discoveryConsul.NewConsulDiscovery(
+			consulApi,
+			"127.0.0.1", // TODO: Drive off of Pod IP
+			30*time.Second,
+		)
 
 	default:
 		return nil, configError{"unknown discovery type"}

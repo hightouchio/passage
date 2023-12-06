@@ -42,7 +42,6 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	logger := log.FromContext(ctx)
 
 	// Establish a connection to the remote SSH server
-	statusUpdate <- StatusUpdate{StatusBooting, "Initialized"}
 	sshClient, keepalive, err := NewSSHClient(ctx, SSHClientOptions{
 		Host: t.SSHHost,
 		Port: t.SSHPort,
@@ -102,6 +101,11 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "upstream dial")
+	}
+
+	// If the context has been cancelled at this point in time, stop the tunnel.
+	if ctx.Err() != nil {
+		return nil
 	}
 
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local

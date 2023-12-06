@@ -70,7 +70,7 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "establish SSH connection")
 	}
-	logger.Info("Connection established")
+	logger.Info("Client connection established")
 	sshClient := gossh.NewClient(c, chans, reqs)
 
 	// Start sending keepalive packets to the upstream SSH server

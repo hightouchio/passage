@@ -4,20 +4,33 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	consul "github.com/hashicorp/consul/api"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"strings"
 	"time"
 )
 
 type Discovery struct {
-	HostAddress string
-	Consul      *consul.Client
-
+	HostAddress    string
+	Consul         *consul.Client
 	HealthcheckTTL time.Duration
+	Log            *log.Logger
+}
+
+func NewConsulDiscovery(consul *consul.Client, hostAddress string, healthcheckTTL time.Duration) *Discovery {
+	return &Discovery{
+		HostAddress:    hostAddress,
+		Consul:         consul,
+		HealthcheckTTL: healthcheckTTL,
+		Log:            log.Get().Named("Consul"),
+	}
 }
 
 func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
+	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Register tunnel %s", id.String())
+
 	serviceId := getTunnelServiceId(id)
 	err := d.Consul.Agent().ServiceRegister(&consul.AgentServiceRegistration{
 		ID:   serviceId,
@@ -36,6 +49,8 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 }
 
 func (d Discovery) DeregisterTunnel(id uuid.UUID) error {
+	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Deregister tunnel %s", id.String())
+
 	if err := d.Consul.Agent().ServiceDeregister(getTunnelServiceId(id)); err != nil {
 		return errors.Wrapf(err, "could not deregister tunnel %s", id.String())
 	}
@@ -76,6 +91,11 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 }
 
 func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
+	d.Log.With(
+		zap.String("tunnel_id", tunnelId.String()),
+		zap.String("check_id", options.ID),
+	).Debugf("Register tunnel healthcheck %s/%s", tunnelId.String(), options.ID)
+
 	if err := d.Consul.Agent().CheckRegister(&consul.AgentCheckRegistration{
 		ID:        getTunnelHealthcheckId(tunnelId, options.ID),
 		ServiceID: getTunnelServiceId(tunnelId),
@@ -95,6 +115,11 @@ func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.Hea
 }
 
 func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
+	d.Log.With(
+		zap.String("tunnel_id", tunnelId.String()),
+		zap.String("check_id", id),
+	).Debugf("Deregister tunnel healthcheck %s/%s", tunnelId.String(), id)
+
 	if err := d.Consul.Agent().CheckDeregister(getTunnelHealthcheckId(tunnelId, id)); err != nil {
 		return errors.Wrapf(err, "could not deregister healthcheck %s for tunnel %s", id, tunnelId.String())
 	}
@@ -102,6 +127,13 @@ func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
 }
 
 func (d Discovery) UpdateHealthcheck(tunnelId uuid.UUID, id string, status discovery.HealthcheckStatus, message string) error {
+	d.Log.With(
+		zap.String("tunnel_id", tunnelId.String()),
+		zap.String("check_id", id),
+		zap.String("status", string(status)),
+		zap.String("message", message),
+	).Debugf("Healthcheck status update: %s/%s: %s (%s)", tunnelId.String(), id, status, message)
+
 	if err := d.Consul.Agent().UpdateTTL(getTunnelHealthcheckId(tunnelId, id), message, string(status)); err != nil {
 		return errors.Wrap(err, "could not mark tunnel unhealthy")
 	}

@@ -113,11 +113,15 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			st := m.Stats.WithTags(stats.Tags{"tunnel_id": tunnelID.String()})
-			ctx = stats.InjectContext(ctx, st)
+			supervisor := NewSupervisor(
+				tunnel,
+				m.Stats,
+				m.TunnelOptions,
+				m.TunnelRestartInterval,
+				m.ServiceDiscovery,
+			)
 
-			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval, m.ServiceDiscovery)
-			go supervisor.Start(ctx)
+			go supervisor.Start()
 			m.supervisors[tunnelID] = supervisor
 		}
 	}

@@ -38,19 +38,15 @@ func TestSupervisor_Profile(t *testing.T) {
 	tunnel := dummyTunnel{}
 	supervisor := NewSupervisor(tunnel, st, TunnelOptions{BindHost: "0.0.0.0"}, 50*time.Millisecond, static.Discovery{})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	timer := time.NewTimer(60 * time.Second)
 	go func() {
 		defer timer.Stop()
 		<-timer.C
 		t.Logf("timer done\n")
 		supervisor.Stop()
-		cancel()
 	}()
 
 	t.Logf("start")
-	supervisor.Start(ctx)
+	supervisor.Start()
 	t.Logf("stop")
 }

@@ -18,7 +18,11 @@ type Supervisor struct {
 	Stats            stats.Stats
 	ServiceDiscovery discovery.DiscoveryService
 
-	stop chan bool
+	// stop is the signal to stop the tunnel
+	stop chan any
+
+	// isStopped is the signal when the tunnel is stopped
+	isStopped chan any
 }
 
 func NewSupervisor(
@@ -35,18 +39,32 @@ func NewSupervisor(
 		Stats:            st,
 		ServiceDiscovery: serviceDiscovery,
 
-		stop: make(chan bool),
+		stop:      make(chan any),
+		isStopped: make(chan any),
 	}
 }
 
-func (s *Supervisor) Start(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func (s *Supervisor) Start() {
+	ctx, cancel := context.WithCancel(context.Background())
 
-	initialRun := make(chan bool)
+	logger := loggerForTunnel(s.Tunnel, log.FromContext(ctx))
+	ctx = log.Context(
+		stats.InjectContext(ctx, statsForTunnel(s.Tunnel, s.Stats)),
+		logger,
+	)
+
+	// Once the stop channel is closed (by the Stop() function), cancel the context
+	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
 	go func() {
-		ticker := time.NewTicker(s.Retry)
-		defer ticker.Stop()
+		<-s.stop
+
+		logger.Info("Shutting down tunnel")
+		cancel()
+	}()
+
+	go func() {
+		// Signal that the tunnel is stopped once this function exits
+		defer close(s.isStopped)
 
 		for {
 			select {
@@ -54,39 +72,30 @@ func (s *Supervisor) Start(ctx context.Context) {
 				return
 
 			default:
-				select {
-				case <-ticker.C:
-				case <-initialRun:
+				if err := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)(ctx, s.Tunnel); err != nil {
+					logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
 				}
 
-				func() {
-					ctx, cancel := context.WithCancel(ctx)
-					defer cancel()
-
-					st := s.Stats.WithTags(stats.Tags{"tunnel_id": s.Tunnel.GetID().String()})
-
-					logger := log.Get().Named("Tunnel").With(
-						zap.String("tunnel_id", s.Tunnel.GetID().String()),
-					)
-
-					logger.Debug("Start supervisor")
-					defer logger.Debug("Stop supervisor")
-
-					ctx = log.Context(stats.InjectContext(ctx, st), logger)
-
-					// Serve the tunnel over TCP
-					if err := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)(ctx, s.Tunnel); err != nil {
-						logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
-					}
-				}()
+				time.Sleep(s.Retry)
 			}
 		}
 	}()
-
-	initialRun <- true
-	<-s.stop
 }
 
 func (s *Supervisor) Stop() {
+	// Trigger the tunnel to shut down
 	close(s.stop)
+
+	// Wait for the tunnel to completely shut down
+	<-s.isStopped
+}
+
+func loggerForTunnel(tunnel Tunnel, log *log.Logger) *log.Logger {
+	return log.Named("Tunnel").With(
+		zap.String("tunnel_id", tunnel.GetID().String()),
+	)
+}
+
+func statsForTunnel(tunnel Tunnel, st stats.Stats) stats.Stats {
+	return st.WithTags(stats.Tags{"tunnel_id": tunnel.GetID().String()})
 }
