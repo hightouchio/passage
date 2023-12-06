@@ -269,7 +269,8 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 
 func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.Router {
 	router := mux.NewRouter()
-	server := &http.Server{Addr: config.GetString(ConfigHTTPAddr), Handler: router}
+	bindAddr := config.GetString(ConfigHTTPAddr)
+	server := &http.Server{Addr: bindAddr, Handler: router}
 
 	logger := log.Named("HTTP")
 
@@ -287,7 +288,8 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.R
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.Info("Starting")
+			logger.With(zap.String("addr", bindAddr)).Infof("Listening on %s", bindAddr)
+
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
 					if !errors.Is(err, http.ErrServerClosed) {
@@ -391,7 +393,7 @@ func formatConnString(mapping map[string]string) string {
 // newHealthcheck provides a healthcheck registry and attaches to the HTTP server
 func newHealthcheck(router *mux.Router) *healthcheckManager {
 	mgr := newHealthcheckManager()
-	router.Handle("/healthcheck", mgr)
+	router.Handle("/healthz", mgr)
 	return mgr
 }
 
