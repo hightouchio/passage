@@ -1,6 +1,9 @@
 package discovery
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"time"
+)
 
 // DiscoveryService represents a service that can tell Passage where a tunnel is located.
 type DiscoveryService interface {
@@ -9,7 +12,9 @@ type DiscoveryService interface {
 
 	GetTunnel(id uuid.UUID) (TunnelDetails, error)
 
-	UpdateHealth(id uuid.UUID, status HealthcheckStatus, message string) error
+	RegisterHealthcheck(tunnelId uuid.UUID, options HealthcheckOptions) error
+	DeregisterHealthcheck(tunnelId uuid.UUID, id string) error
+	UpdateHealthcheck(tunnelId uuid.UUID, id string, status HealthcheckStatus, message string) error
 }
 
 type TunnelDetails struct {
@@ -19,11 +24,17 @@ type TunnelDetails struct {
 	StatusReason string
 }
 
+type HealthcheckOptions struct {
+	ID   string
+	Name string
+	TTL  time.Duration
+}
+
 type HealthcheckStatus string
 
 // Healthcheck status codes
 const (
 	HealthcheckCritical HealthcheckStatus = "critical"
-	HealthcheckWarning                    = "warning"
-	HealthcheckPassing                    = "passing"
+	HealthcheckWarning  HealthcheckStatus = "warning"
+	HealthcheckPassing  HealthcheckStatus = "passing"
 )
