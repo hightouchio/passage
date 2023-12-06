@@ -58,6 +58,11 @@ spec:
     app: consul
   type: ClusterIP
   ports:
+    - name: "webui"
+      protocol: TCP
+      port: 80
+      targetPort: 8500
+
     - name: "http"
       protocol: TCP
       port: 8500
