@@ -117,13 +117,31 @@ func (m *Manager) refreshSupervisors(ctx context.Context) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	shutdownWg := sync.WaitGroup{}
+	doShutdown := func(supervisor *Supervisor) {
+		shutdownWg.Add(1)
+		go func() {
+			defer shutdownWg.Done()
+			supervisor.Stop()
+		}()
+	}
+
 	// shut down supervisors or supervisors that need a restart
 	for tunnelID, supervisor := range m.supervisors {
 		tunnel, stillExists := m.tunnels[tunnelID]
+
 		if !stillExists || tunnel.needsRestart {
-			supervisor.Stop()
+			doShutdown(supervisor)
 			delete(m.supervisors, tunnelID)
 		}
+	}
+
+	// Wait for all supervisors to shut down
+	shutdownWg.Wait()
+
+	// If the context has been cancelled, we can end it here.
+	if ctx.Err() != nil {
+		return
 	}
 
 	// start new supervisors
