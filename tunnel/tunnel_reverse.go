@@ -21,7 +21,7 @@ type ReverseTunnel struct {
 	Enabled   bool      `json:"enabled"`
 
 	SSHDPort           int `json:"sshdPort"`
-	AuthorizedKeysHash string
+	authorizedKeysHash string
 
 	services ReverseTunnelServices
 }
@@ -119,7 +119,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.AuthorizedKeysHash == t2.AuthorizedKeysHash
+	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.authorizedKeysHash == t2.authorizedKeysHash
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -129,7 +129,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		CreatedAt:          record.CreatedAt,
 		Enabled:            record.Enabled,
 		SSHDPort:           record.SSHDPort,
-		AuthorizedKeysHash: record.AuthorizedKeysHash,
+		authorizedKeysHash: record.AuthorizedKeysHash,
 	}
 }
 
