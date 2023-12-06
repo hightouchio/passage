@@ -21,6 +21,7 @@ type SSHServer struct {
 	tunnels map[uuid.UUID]SSHServerRegisteredTunnel
 	close   chan bool
 	logger  *log.Logger
+	stats   stats.Stats
 
 	sync.RWMutex
 }
@@ -36,13 +37,15 @@ type SSHServerRegisteredTunnel struct {
 	Stats        stats.Stats
 }
 
-func NewSSHServer(addr string, hostKey []byte, logger *log.Logger) *SSHServer {
+func NewSSHServer(addr string, hostKey []byte, logger *log.Logger, st stats.Stats) *SSHServer {
 	return &SSHServer{
 		BindAddr: addr,
 		HostKey:  hostKey,
-		logger:   logger,
-		tunnels:  make(map[uuid.UUID]SSHServerRegisteredTunnel),
-		close:    make(chan bool),
+
+		logger:  logger,
+		stats:   st,
+		tunnels: make(map[uuid.UUID]SSHServerRegisteredTunnel),
+		close:   make(chan bool),
 	}
 }
 
@@ -98,6 +101,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 			zap.Bool("success", success),
 			zap.Int("authorized_tunnels", len(authorizedTunnels)),
 		).Info("Handle authentication attempt")
+		s.stats.Incr(StatSshdConnectionsRequests, stats.Tags{"success": success}, 1)
 
 		// Register the authorized tunnels onto the ssh.Context
 		registerAuthorizedTunnels(ctx, authorizedTunnels)

@@ -110,6 +110,7 @@ func runTunnels(
 			),
 			hostKey,
 			logger,
+			st,
 		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
@@ -143,6 +144,7 @@ func runTunnels(
 					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
 					hostKey,
 					logger,
+					st,
 				)
 			},
 		}))
