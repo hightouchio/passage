@@ -17,11 +17,17 @@ type DiscoveryService interface {
 	UpdateHealthcheck(tunnelId uuid.UUID, id string, status HealthcheckStatus, message string) error
 }
 
+type HealthcheckDetails struct {
+	ID      string
+	Status  string
+	Message string
+}
+
 type TunnelDetails struct {
-	Host         string
-	Port         int
-	Status       string
-	StatusReason string
+	Host string
+	Port int
+
+	Checks []HealthcheckDetails
 }
 
 type HealthcheckOptions struct {

@@ -18,17 +18,6 @@ type TunnelOptions struct {
 	BindHost string
 }
 
-// ConnectionDetails describes how the SaaS will use the tunnel
-type ConnectionDetails struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
-}
-
-type HealthcheckDetails struct {
-	Status string `json:"status"`
-	Reason string `json:"reason"`
-}
-
 //goland:noinspection GoNameStartsWithPackageName
 type TunnelType string
 

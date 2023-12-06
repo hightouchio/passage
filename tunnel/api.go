@@ -60,8 +60,19 @@ type GetTunnelRequest struct {
 type GetTunnelResponse struct {
 	TunnelType         `json:"type"`
 	Tunnel             `json:"tunnel"`
-	ConnectionDetails  `json:"connection"`
-	HealthcheckDetails `json:"healthcheck"`
+	*ConnectionDetails `json:"connection"`
+	Healthchecks       []HealthcheckDetails `json:"healthchecks"`
+}
+
+type ConnectionDetails struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+type HealthcheckDetails struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Message string `json:"reason"`
 }
 
 // GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
@@ -73,23 +84,33 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
-	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get tunnel details")
-	}
-
-	return &GetTunnelResponse{
+	response := GetTunnelResponse{
 		TunnelType: tunnelType,
 		Tunnel:     tunnel,
-		ConnectionDetails: ConnectionDetails{
-			Host: tunnelDetails.Host,
-			Port: tunnelDetails.Port,
-		},
-		HealthcheckDetails: HealthcheckDetails{
-			Status: tunnelDetails.Status,
-			Reason: tunnelDetails.StatusReason,
-		},
-	}, nil
+	}
+
+	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
+	if err != nil {
+		return &response, errors.Wrap(err, "could not find tunnel in service discovery")
+	}
+
+	// Populate connection details
+	response.ConnectionDetails = &ConnectionDetails{
+		Host: tunnelDetails.Host,
+		Port: tunnelDetails.Port,
+	}
+
+	// Populate healthchecks
+	response.Healthchecks = make([]HealthcheckDetails, len(tunnelDetails.Checks))
+	for i, check := range tunnelDetails.Checks {
+		response.Healthchecks[i] = HealthcheckDetails{
+			ID:      check.ID,
+			Status:  check.Status,
+			Message: check.Message,
+		}
+	}
+
+	return &response, nil
 }
 
 type UpdateTunnelRequest struct {

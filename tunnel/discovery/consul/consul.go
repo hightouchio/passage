@@ -6,6 +6,7 @@ import (
 	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
+	"strings"
 	"time"
 )
 
@@ -52,25 +53,26 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 	}
 	service := services[0]
 
-	var check *consul.HealthCheck
-	for _, c := range service.Checks {
-		// TODO: Refactor this to support multiple healthchecks
-		//	Prioritize self-reported status over connectivity check status
-		if c.CheckID == getTunnelHealthcheckId(id, "check_in") {
-			check = c
-			break
-		}
-	}
-	if check == nil {
-		return discovery.TunnelDetails{}, errors.Wrapf(err, "could not find healthcheck for tunnel %s", id.String())
+	response := discovery.TunnelDetails{
+		Host:   service.Service.Address,
+		Port:   service.Service.Port,
+		Checks: make([]discovery.HealthcheckDetails, 0),
 	}
 
-	return discovery.TunnelDetails{
-		Host:         service.Service.Address,
-		Port:         service.Service.Port,
-		Status:       check.Status,
-		StatusReason: check.Output,
-	}, nil
+	// All relevant custom checks must start with this prefix
+	checkPrefix := getTunnelServiceId(id)
+	for _, c := range service.Checks {
+		// Only consider checks that have this prefix (this means that Passage manages them)
+		if strings.HasPrefix(c.CheckID, checkPrefix) {
+			response.Checks = append(response.Checks, discovery.HealthcheckDetails{
+				ID:      strings.Replace(c.CheckID, checkPrefix, "", 1)[1:],
+				Status:  c.Status,
+				Message: c.Output,
+			})
+		}
+	}
+
+	return response, nil
 }
 
 func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
