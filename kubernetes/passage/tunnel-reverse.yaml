@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: passage
+  name: passage-reverse
+
+  labels:
+    app: passage-reverse
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: passage-reverse
+  template:
+    metadata:
+      name: passage-reverse
+      labels:
+        app: passage-reverse
+
+    spec:
+      containers:
+        - name: passage-reverse
+          image: passage:latest
+          imagePullPolicy: IfNotPresent
+
+          command: ["passage", "server"]
+
+          envFrom:
+            - configMapRef:
+                name: passage-global-config
+
+          env:
+            - name: PASSAGE_TUNNEL_REVERSE_ENABLED
+              value: "true"
+
+            - name: PASSAGE_TUNNEL_REVERSE_BIND_HOST
+              value: "0.0.0.0"
+
+            - name: PASSAGE_TUNNEL_REVERSE_SSHD_PORT
+              value: "2222"
+
+      restartPolicy: Always
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: passage
+  name: passage-reverse
+spec:
+  selector:
+    app: passage-reverse
+  type: ClusterIP
+
+  ports:
+    - name: "ssh"
+      port: 22
+      targetPort: 2222

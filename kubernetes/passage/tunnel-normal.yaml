@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: passage
+  name: passage-normal
+
+  labels:
+    app: passage-normal
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: passage-normal
+  template:
+    metadata:
+      name: passage-normal
+      labels:
+        app: passage-normal
+
+    spec:
+      containers:
+        - name: passage-normal
+          image: passage:latest
+          imagePullPolicy: IfNotPresent
+
+          command: ["passage", "server"]
+
+          envFrom:
+            - configMapRef:
+                name: passage-global-config
+
+          env:
+            - name: PASSAGE_TUNNEL_NORMAL_ENABLED
+              value: "true"
+
+            - name: PASSAGE_TUNNEL_NORMAL_SSH_USER
+              value: "passage"
+
+      restartPolicy: Always
