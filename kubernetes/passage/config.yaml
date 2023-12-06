@@ -24,6 +24,8 @@ data:
   PASSAGE_KEYSTORE_S3_BUCKET_REGION: "us-east-1"
   PASSAGE_KEYSTORE_S3_DISABLE_SSL: "true"
   PASSAGE_KEYSTORE_S3_FORCE_PATH_STYLE: "true"
+  AWS_ACCESS_KEY_ID: "passage"
+  AWS_SECRET_ACCESS_KEY: "passage123"
 
   # Postgres
   PGHOST: "postgres"
