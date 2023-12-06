@@ -143,6 +143,8 @@ func startApplication(bootFuncs ...interface{}) error {
 	defer cancel()
 
 	go func() {
+		log.Get().Named("Passage").Infow("Starting", zap.String("version", version))
+
 		if err := app.Start(startCtx); err != nil {
 			switch v := dig.RootCause(err).(type) {
 			case configError:
@@ -151,10 +153,8 @@ func startApplication(bootFuncs ...interface{}) error {
 				log.Get().Fatalf("Startup error: %v", v)
 			}
 		}
-
-		log.Get().Named("Passage").Infow("Start", zap.String("version", version))
 	}()
-	defer log.Get().Named("Passage").Info("Stop")
+	defer log.Get().Named("Passage").Info("Shutdown complete")
 
 	<-app.Done()
 
@@ -287,7 +287,7 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.R
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.Info("Start")
+			logger.Info("Starting")
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
 					if !errors.Is(err, http.ErrServerClosed) {

@@ -72,12 +72,12 @@ func runTunnels(
 
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				go manager.Start(ctx)
+				manager.Start()
 				healthchecks.AddCheck(fmt.Sprintf("tunnel_%s", name), manager.Check)
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
-				go manager.Stop(ctx)
+				manager.Stop()
 				return nil
 			},
 		})

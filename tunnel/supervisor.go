@@ -22,7 +22,7 @@ type Supervisor struct {
 	stop chan any
 
 	// isStopped is the signal when the tunnel is stopped
-	isStopped chan any
+	doneStopping chan any
 }
 
 func NewSupervisor(
@@ -39,8 +39,8 @@ func NewSupervisor(
 		Stats:            st,
 		ServiceDiscovery: serviceDiscovery,
 
-		stop:      make(chan any),
-		isStopped: make(chan any),
+		stop:         make(chan any),
+		doneStopping: make(chan any),
 	}
 }
 
@@ -64,7 +64,7 @@ func (s *Supervisor) Start() {
 
 	go func() {
 		// Signal that the tunnel is stopped once this function exits
-		defer close(s.isStopped)
+		defer close(s.doneStopping)
 
 		for {
 			select {
@@ -87,7 +87,7 @@ func (s *Supervisor) Stop() {
 	close(s.stop)
 
 	// Wait for the tunnel to completely shut down
-	<-s.isStopped
+	<-s.doneStopping
 }
 
 func loggerForTunnel(tunnel Tunnel, log *log.Logger) *log.Logger {

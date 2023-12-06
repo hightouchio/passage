@@ -23,7 +23,7 @@ type Manager struct {
 	// TunnelOptions are the config options for the tunnel server we run.
 	TunnelOptions
 
-	RefreshDuration       time.Duration
+	RefreshInterval       time.Duration
 	TunnelRestartInterval time.Duration
 	Stats                 stats.Stats
 	ServiceDiscovery      discovery.DiscoveryService
@@ -36,8 +36,9 @@ type Manager struct {
 
 	logger *log.Logger
 
-	lock sync.Mutex
-	stop chan bool
+	lock         sync.Mutex
+	stop         chan any
+	doneStopping chan any
 }
 
 func NewManager(
@@ -51,7 +52,7 @@ func NewManager(
 	return &Manager{
 		ListFunc:              listFunc,
 		TunnelOptions:         tunnelOptions,
-		RefreshDuration:       refreshDuration,
+		RefreshInterval:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
 
 		Stats:            st,
@@ -61,40 +62,55 @@ func NewManager(
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
 
-		stop: make(chan bool),
+		stop:         make(chan any),
+		doneStopping: make(chan any),
 	}
 }
 
-func (m *Manager) Start(ctx context.Context) {
-	m.logger.Info("Start")
-	m.startWorker()
-}
-
-func (m *Manager) Stop(ctx context.Context) {
-	m.logger.Info("Stop")
-	m.stop <- true
-}
-
-func (m *Manager) startWorker() {
-	ticker := time.NewTicker(m.RefreshDuration)
-	defer ticker.Stop()
+func (m *Manager) Start() {
+	m.logger.Info("Starting")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	for {
-		select {
-		case <-ticker.C:
-			if err := m.refreshTunnels(ctx); err != nil {
-				m.logger.Errorw("Could not refresh tunnels from DB", zap.Error(err))
-				continue
-			}
-			m.refreshSupervisors(ctx)
-			m.lastRefresh = time.Now()
 
-		case <-m.stop:
-			return
+	// Once the stop channel is closed (by the Stop() function), cancel the context
+	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
+	go func() {
+		<-m.stop
+
+		m.logger.Info("Stopping")
+		cancel()
+	}()
+
+	go func() {
+		// Signal that the manager is done stopping once this function exits
+		defer close(m.doneStopping)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			default:
+				if err := m.refreshTunnels(ctx); err != nil {
+					m.logger.Errorw("refresh tunnels from DB", zap.Error(err))
+					continue
+				}
+
+				m.refreshSupervisors(ctx)
+				m.lastRefresh = time.Now()
+
+				time.Sleep(m.RefreshInterval)
+			}
 		}
-	}
+	}()
+}
+
+func (m *Manager) Stop() {
+	// Trigger the manager to shut down
+	close(m.stop)
+
+	// Wait for the manager to completely shut down
+	<-m.doneStopping
 }
 
 func (m *Manager) refreshSupervisors(ctx context.Context) {
@@ -164,7 +180,7 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 
 // Check performs a healthcheck on the manager
 func (m *Manager) Check(ctx context.Context) error {
-	maxDelay := m.RefreshDuration * 2
+	maxDelay := m.RefreshInterval * 2
 	secondsSinceLastRefresh := time.Now().Sub(m.lastRefresh)
 	if secondsSinceLastRefresh > maxDelay {
 		return fmt.Errorf("manager has not refreshed in %0.2f seconds. max: %0.2f", secondsSinceLastRefresh.Seconds(), maxDelay.Seconds())
