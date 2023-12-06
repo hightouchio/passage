@@ -117,7 +117,7 @@ func runTunnels(
 				go func() {
 					// We want to pass context.Background() here, not the context.Context accepted from the hook,
 					//	because the hook's context.Context is cancelled after the application has booted completely
-					if err := sshServer.Start(context.Background()); err != nil {
+					if err := sshServer.Start(); err != nil {
 						if !errors.Is(err, tunnel.ErrSshServerClosed) {
 							logger.Errorw("SSH", zap.Error(err))
 						}

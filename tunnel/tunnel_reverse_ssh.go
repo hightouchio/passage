@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"context"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
@@ -51,7 +50,7 @@ func NewSSHServer(addr string, hostKey []byte, logger *log.Logger, st stats.Stat
 
 var ErrSshServerClosed = ssh.ErrServerClosed
 
-func (s *SSHServer) Start(ctx context.Context) error {
+func (s *SSHServer) Start() error {
 	server := &ssh.Server{
 		Addr: s.BindAddr,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
@@ -68,17 +67,23 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// SSH session handler. Hold connections open until cancelled.
 	server.Handler = func(session ssh.Session) {
+		logger := sshSessionLogger(s.logger, session.Context())
+		logger.Info("Connection opened")
+		defer logger.Info("Connection closed")
+
 		select {
-		case <-session.Context().Done(): // Block until session ends
-		case <-s.close: // or until server closes
-		case <-ctx.Done(): // or until start context is cancelled
+		// Close session if client closes
+		case <-session.Context().Done():
+
+		// Close session if server closes
+		case <-s.close:
 		}
 	}
 
 	// Validate incoming public keys, match them against registered tunnels, and store the list of authorized
 	// 	tunnels in the session context for future reference when evaluating reverse port forwarding requests.
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
-		logger := s.logger.With(zap.String("session_id", ctx.SessionID()))
+		logger := sshSessionLogger(s.logger, ctx)
 
 		success, authorizedTunnels := func() (bool, []SSHServerRegisteredTunnel) {
 			// Identify the set of tunnels that match the incoming public key
@@ -86,7 +91,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 			// Reject the SSH session if there are no authorized tunnels
 			if len(authorizedTunnels) == 0 {
-				logger.Debug("no authorized tunnels for public key")
+				logger.Debug("No authorized tunnels for public key")
 				return false, []SSHServerRegisteredTunnel{}
 			}
 
@@ -94,10 +99,10 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		}()
 
 		logger.With(
-			zap.String("remote_addr", ctx.RemoteAddr().String()),
-			zap.String("user", ctx.User()),
-			zap.String("key_type", incomingKey.Type()),
-			zap.String("fingerprint", gossh.FingerprintSHA256(incomingKey)),
+			zap.Dict("req",
+				zap.String("key_type", incomingKey.Type()),
+				zap.String("fingerprint", gossh.FingerprintSHA256(incomingKey))),
+
 			zap.Bool("success", success),
 			zap.Int("authorized_tunnels", len(authorizedTunnels)),
 		).Info("Handle authentication attempt")
@@ -113,7 +118,7 @@ func (s *SSHServer) Start(ctx context.Context) error {
 
 	// Validate incoming port forward requests against the set of authorized tunnels for this session
 	server.ReversePortForwardingCallback = func(ctx ssh.Context, bindHost string, bindPort uint32) bool {
-		logger := s.logger.With(zap.String("session_id", ctx.SessionID()))
+		logger := sshSessionLogger(s.logger, ctx)
 
 		success, tunnelId := func() (bool, string) {
 			tunnels := getAuthorizedTunnels(ctx)
@@ -139,10 +144,10 @@ func (s *SSHServer) Start(ctx context.Context) error {
 		}()
 
 		logger.With(
-			zap.String("remote_addr", ctx.RemoteAddr().String()),
 			zap.String("tunnel_id", tunnelId),
-			zap.String("bind_address", bindHost),
-			zap.Uint32("bind_port", bindPort),
+			zap.Dict("req",
+				zap.String("bind_address", bindHost),
+				zap.Uint32("bind_port", bindPort)),
 			zap.Bool("success", success),
 		).Info("Reverse port forwarding request")
 		s.stats.Incr(StatSshReversePortForwardingRequests, stats.Tags{"success": success}, 1)
@@ -246,6 +251,16 @@ func (s *SSHServer) getHostSigners() ([]ssh.Signer, error) {
 	}
 
 	return hostSigners, nil
+}
+
+func sshSessionLogger(logger *log.Logger, ctx ssh.Context) *log.Logger {
+	return logger.With(
+		zap.Dict("session",
+			zap.String("id", ctx.SessionID()),
+			zap.String("user", ctx.User()),
+			zap.String("remote_addr", ctx.RemoteAddr().String()),
+		),
+	)
 }
 
 // registerAuthorizedTunnels adds new authorized tunnels to the ssh.Context
