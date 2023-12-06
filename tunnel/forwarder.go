@@ -17,7 +17,7 @@ import (
 type TCPForwarder struct {
 	Listener *net.TCPListener
 
-	// GetUpstreamConn is a function thats job is to initiate a connection to the upstream service.
+	// GetUpstreamConn is a function that's job is to initiate a connection to the upstream service.
 	// It is called once for each incoming TunnelConnection.
 	// It should return a dedicated io.ReadWriteCloser for each incoming TunnelConnection.
 	GetUpstreamConn func(net.Conn) (io.ReadWriteCloser, error)
