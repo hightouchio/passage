@@ -89,12 +89,12 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 
 	// Initially test the upstream connection to make sure it works
 
-	logger.With(zap.String("addr", upstreamAddr)).Infof("Testing upstream connection %s", upstreamAddr)
+	logger.With(zap.String("addr", upstreamAddr)).Debugf("Testing upstream connection %s", upstreamAddr)
 	if _, err := getUpstreamConn(); err != nil {
 		statusUpdate <- StatusUpdate{StatusError, err.Error()}
 		return errors.Wrap(err, "upstream dial")
 	}
-	logger.Info("Upstream connection successful")
+	logger.Debug("Upstream connection successful")
 
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
