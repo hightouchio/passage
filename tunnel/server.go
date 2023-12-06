@@ -7,6 +7,7 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -42,7 +43,8 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 
 		// Create a channel to signal that the connection check should begin
 		connCheckStartSignal := make(chan any)
-		defer close(connCheckStartSignal)
+		// Ensure we only close the channel once
+		signalConnCheck := sync.OnceFunc(func() { close(connCheckStartSignal) })
 
 		// Start tunnel status update routine
 		go withTunnelHealthcheck(tunnel.GetID(), logger, serviceDiscovery, discovery.HealthcheckOptions{
@@ -50,15 +52,13 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 			Name: "Tunnel Self-reported Status",
 			TTL:  30 * time.Second,
 		}, func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-			var connCheckStarted bool
 			for update := range statusUpdates {
 				logStatus(logger, update)
 
 				// Now that the tunnel is online, start running the connectivity check
 				//	Only do this once
-				if update.Status == StatusReady && !connCheckStarted {
-					connCheckStarted = true
-					close(connCheckStartSignal)
+				if update.Status == StatusReady {
+					signalConnCheck()
 				}
 
 				// Map tunnel status to healthcheck status
@@ -115,8 +115,38 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 			})
 		}()
 
-		// Run the tunnel
-		return tunnel.Start(ctx, tunnelListener, statusUpdates)
+		// Start the tunnel, and retry if it fails.
+		return retry(ctx, 30*time.Second, func(ctx context.Context) error {
+			logger.Info("Start")
+			if err := tunnel.Start(ctx, tunnelListener, statusUpdates); err != nil {
+				logger.Errorw("Error", zap.Error(err))
+
+				// Record a healthcheck status update
+				statusUpdates <- StatusUpdate{StatusError, errors.Cause(err).Error()}
+
+				return err
+			}
+			logger.Info("Stop")
+			return nil
+		})
+	}
+}
+
+// retry the given function until it succeeds
+func retry(ctx context.Context, interval time.Duration, fn func(context.Context) error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+
+		default:
+			if err := fn(ctx); err != nil {
+				time.Sleep(interval)
+				continue
+			}
+
+			return nil
+		}
 	}
 }
 
@@ -133,7 +163,7 @@ func withTunnelHealthcheck(
 	}
 	defer func() {
 		if err := serviceDiscovery.DeregisterHealthcheck(tunnelId, options.ID); err != nil {
-			log.Errorw("Failed to deregister healthcheck", zap.Error(err))
+			// It's OK if we fail to deregister the healthcheck
 		}
 	}()
 

@@ -90,6 +90,9 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
 			serviceConn, err := sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
 			if err != nil {
+				// Any upstream dial errors should be reported as part of the tunnel status
+				statusUpdate <- StatusUpdate{StatusError, err.Error()}
+
 				return nil, err
 			}
 			return serviceConn, err

@@ -69,8 +69,8 @@ func (s *Supervisor) Start(ctx context.Context) {
 						zap.String("tunnel_id", s.Tunnel.GetID().String()),
 					)
 
-					logger.Info("Start")
-					defer logger.Info("Stop")
+					logger.Info("Start supervisor")
+					defer logger.Info("Stop supervisor")
 
 					ctx = log.Context(stats.InjectContext(ctx, st), logger)
 

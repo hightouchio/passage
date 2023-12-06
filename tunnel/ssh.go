@@ -77,8 +77,10 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	keepaliveErrors := make(chan error)
 	go func() {
 		if err := sshKeepalive(ctx, sshConn, sshClient, options.KeepaliveInterval, options.DialTimeout); err != nil {
-			logger.Errorw("Keepalive failed", zap.Error(err))
-			keepaliveErrors <- err
+			if !errors.Is(err, net.ErrClosed) {
+				logger.Errorw("Keepalive failed", zap.Error(err))
+				keepaliveErrors <- err
+			}
 		}
 	}()
 	return sshClient, keepaliveErrors, nil
