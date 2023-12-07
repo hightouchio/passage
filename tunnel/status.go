@@ -27,8 +27,8 @@ type StatusUpdate struct {
 }
 
 const (
-	statusHealthcheckID       = "status"
-	statusHealthcheckName     = "Self-reported status"
+	statusHealthcheckID       = "tunnel"
+	statusHealthcheckName     = "Tunnel"
 	statusHealthcheckTTL      = 60 * time.Second
 	statusHealthcheckInterval = 15 * time.Second
 )
