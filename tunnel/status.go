@@ -1,8 +1,8 @@
 package tunnel
 
 import (
-	"github.com/hightouchio/passage/log"
-	"go.uber.org/zap"
+	"context"
+	"time"
 )
 
 type Status string
@@ -18,9 +18,29 @@ type StatusUpdate struct {
 	Message string
 }
 
-func logStatus(log *log.Logger, status StatusUpdate) {
-	log.With(
-		zap.String("status", string(status.Status)),
-		zap.String("message", status.Message),
-	).Debugf("[%s] %s", status.Status, status.Message)
+const (
+	// Define the frequency at which Passage reports tunnel status to service discovery.
+	tunnelStatusReportInterval = 15 * time.Second
+)
+
+// tunnelStatusReporter reports the Ready status regularly until the context is cancelled
+func tunnelStatusReporter(ctx context.Context, statusUpdate chan<- StatusUpdate) {
+	// Send one update immediately
+	statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
+	defer func() {
+		statusUpdate <- StatusUpdate{StatusError, "Tunnel is offline"}
+	}()
+
+	// Report regularly
+	ticker := time.NewTicker(tunnelStatusReportInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
+		}
+	}
 }

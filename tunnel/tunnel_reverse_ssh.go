@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
-	"net"
 	"sync"
 )
 
@@ -29,11 +28,7 @@ type SSHServerRegisteredTunnel struct {
 	ID             uuid.UUID
 	RegisteredPort int
 	AuthorizedKeys []ssh.PublicKey
-	Listener       *net.TCPListener
-
-	StatusUpdate chan<- StatusUpdate
-	Logger       *log.Logger
-	Stats        stats.Stats
+	Connections    chan<- ReverseForwardingConnection
 }
 
 func NewSSHServer(addr string, hostKey []byte, logger *log.Logger, st stats.Stats) *SSHServer {
@@ -67,10 +62,6 @@ func (s *SSHServer) Start() error {
 
 	// SSH session handler. Hold connections open until cancelled.
 	server.Handler = func(session ssh.Session) {
-		logger := sshSessionLogger(s.logger, session.Context())
-		logger.Info("Connection opened")
-		defer logger.Info("Connection closed")
-
 		select {
 		// Close session if client closes
 		case <-session.Context().Done():
@@ -105,7 +96,7 @@ func (s *SSHServer) Start() error {
 
 			zap.Bool("success", success),
 			zap.Int("authorized_tunnels", len(authorizedTunnels)),
-		).Info("Handle authentication attempt")
+		).Debug("Handle authentication attempt")
 		s.stats.Incr(StatSshdConnectionsRequests, stats.Tags{"success": success}, 1)
 
 		// Register the authorized tunnels onto the ssh.Context
@@ -149,7 +140,7 @@ func (s *SSHServer) Start() error {
 				zap.String("bind_address", bindHost),
 				zap.Uint32("bind_port", bindPort)),
 			zap.Bool("success", success),
-		).Info("Reverse port forwarding request")
+		).Debug("Reverse port forwarding request")
 		s.stats.Incr(StatSshReversePortForwardingRequests, stats.Tags{"success": success}, 1)
 
 		return success
@@ -208,6 +199,8 @@ func (s *SSHServer) RegisterTunnel(tunnel SSHServerRegisteredTunnel) {
 }
 
 // DeregisterTunnel removes the reverse tunnel from the SSH server
+//
+//	TODO: Make this shut down the forwarder
 func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 	s.Lock()
 	defer s.Unlock()

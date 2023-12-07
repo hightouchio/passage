@@ -81,26 +81,14 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	}()
 
 	// Function which gets a connection to the upstream server
-	upstreamAddr := net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort))
-	getUpstreamConn := func() (net.Conn, error) {
-		return sshClient.Dial("tcp", upstreamAddr)
+	getUpstreamConn := func() (io.ReadWriteCloser, error) {
+		return sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
 	}
 
 	// Initially test the upstream connection to make sure it works
 	// 	Retry it until it succeeds.
-	// TODO: Support a maximum number of retries.
-	if err := retry(ctx, 5*time.Second, func() error {
-		logger.With(zap.String("addr", upstreamAddr)).Debugf("Testing upstream connection %s", upstreamAddr)
-		if _, err := getUpstreamConn(); err != nil {
-			statusUpdate <- StatusUpdate{StatusError, err.Error()}
-			logger.Errorw("Upstream dial failed", zap.Error(err))
-			return err
-		}
-
-		logger.Debug("Upstream connection successful")
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "upstream dial")
+	if err := testUpstreamConnection(ctx, logger, statusUpdate, getUpstreamConn); err != nil {
+		return errors.Wrap(err, "test upstream connection")
 	}
 
 	// If the context has been cancelled at this point in time, stop the tunnel.
@@ -142,22 +130,9 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 			}
 		}
 	}()
-	statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
 
-	// Update the tunnel self-reported status every 30 seconds
-	statusTicker := time.NewTicker(30 * time.Second)
-	defer statusTicker.Stop()
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case <-statusTicker.C:
-				statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
-			}
-		}
-	}()
+	// Continually report tunnel status until the tunnel shuts down
+	go tunnelStatusReporter(ctx, statusUpdate)
 
 	<-ctx.Done()
 	return nil

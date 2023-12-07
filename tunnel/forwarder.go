@@ -60,7 +60,7 @@ func (f *TCPForwarder) Serve() error {
 	for {
 		select {
 		case <-f.close:
-			return nil
+			return net.ErrClosed
 
 		default:
 			// Accept incoming tunnel connections
@@ -98,9 +98,6 @@ func (f *TCPForwarder) Serve() error {
 func (f *TCPForwarder) Close() error {
 	if f.close != nil {
 		close(f.close)
-	}
-	if f.Listener != nil {
-		return f.Listener.Close()
 	}
 	return nil
 }
