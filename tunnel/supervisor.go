@@ -53,6 +53,9 @@ func (s *Supervisor) Start() {
 		logger,
 	)
 
+	// Serve the tunnel via a TCP socket
+	serveStrategy := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)
+
 	// Once the stop channel is closed (by the Stop() function), cancel the context
 	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
 	go func() {
@@ -72,7 +75,7 @@ func (s *Supervisor) Start() {
 				return
 
 			default:
-				if err := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)(ctx, s.Tunnel); err != nil {
+				if err := serveStrategy(ctx, s.Tunnel); err != nil {
 					logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
 				}
 

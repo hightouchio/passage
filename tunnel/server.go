@@ -13,6 +13,9 @@ import (
 
 type ServeStrategy func(ctx context.Context, tunnel Tunnel) error
 
+// TCPServeStrategy opens a tunnel listener on an ephemeral TCP port, registers the tunnel with service discovery,
+//
+//	manages healthchecks, and serves the tunnel itself.
 func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryService) ServeStrategy {
 	return func(ctx context.Context, tunnel Tunnel) error {
 		logger := log.FromContext(ctx)
