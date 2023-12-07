@@ -121,21 +121,13 @@ func upstreamHealthcheck(
 		serviceDiscovery,
 		options,
 		func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-
-				case <-ticker.C:
-					err := testUpstream(ctx, fn)
-
-					if err == nil {
-						updateHealthcheck(discovery.HealthcheckPassing, "Upstream is reachable")
-					} else {
-						updateHealthcheck(discovery.HealthcheckCritical, err.Error())
-					}
+			runOnceAndTick(ctx, upstreamHealthcheckInterval, func() {
+				if err := testUpstream(ctx, fn); err != nil {
+					updateHealthcheck(discovery.HealthcheckCritical, err.Error())
+				} else {
+					updateHealthcheck(discovery.HealthcheckPassing, "Upstream is reachable")
 				}
-			}
+			})
 		},
 	)
 }
@@ -185,9 +177,6 @@ func listenerHealthcheck(
 		TTL:  listenerHealthcheckTTL,
 	}
 
-	ticker := time.NewTicker(listenerHealthcheckInterval)
-	defer ticker.Stop()
-
 	// Register the healthcheck
 	withTunnelHealthcheck(
 		tunnel.GetID(),
@@ -195,19 +184,13 @@ func listenerHealthcheck(
 		serviceDiscovery,
 		options,
 		func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-
-				case <-ticker.C:
-					if err := testListener(ctx, addr); err != nil {
-						updateHealthcheck(discovery.HealthcheckCritical, err.Error())
-					} else {
-						updateHealthcheck(discovery.HealthcheckPassing, "Listener is reachable")
-					}
+			runOnceAndTick(ctx, listenerHealthcheckInterval, func() {
+				if err := testListener(ctx, addr); err != nil {
+					updateHealthcheck(discovery.HealthcheckCritical, err.Error())
+				} else {
+					updateHealthcheck(discovery.HealthcheckPassing, "Listener is reachable")
 				}
-			}
+			})
 		},
 	)
 }
