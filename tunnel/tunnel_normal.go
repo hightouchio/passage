@@ -117,7 +117,7 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	}()
 
 	// Continually report tunnel status until the tunnel shuts down
-	go intervalStatusReporter(ctx, statusUpdate, 5*time.Second, func() StatusUpdate {
+	go intervalStatusReporter(ctx, statusUpdate, func() StatusUpdate {
 		// If we're at this point in the tunnel, we're online
 		return StatusUpdate{Status: StatusReady, Message: "Tunnel is online"}
 	})

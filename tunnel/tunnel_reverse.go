@@ -65,7 +65,7 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 	var connectionCount atomic.Int32
 
 	// Regularly report status based on the number of active connections
-	go intervalStatusReporter(ctx, statusUpdate, 5*time.Second, func() StatusUpdate {
+	go intervalStatusReporter(ctx, statusUpdate, func() StatusUpdate {
 		if connectionCount.Load() > 0 {
 			return StatusUpdate{StatusReady, "Tunnel is online"}
 		} else {
