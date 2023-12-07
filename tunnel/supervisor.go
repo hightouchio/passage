@@ -76,6 +76,11 @@ func (s *Supervisor) Start() {
 					logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
 				}
 
+				// If the context is cancelled, immediately stop
+				if ctx.Err() != nil {
+					return
+				}
+
 				time.Sleep(s.Retry)
 			}
 		}

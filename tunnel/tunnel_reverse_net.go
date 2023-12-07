@@ -2,10 +2,8 @@ package tunnel
 
 import (
 	"github.com/gliderlabs/ssh"
-	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
-	"net"
-	"strconv"
+	"io"
 )
 
 type ReverseForwardingHandler struct {
@@ -15,7 +13,7 @@ type ReverseForwardingHandler struct {
 type ReverseForwardingConnection struct {
 	ssh.Context
 
-	Dial  func(originAddr string) (gossh.Channel, error)
+	Dial  func() (io.ReadWriteCloser, error)
 	Close func() error
 }
 
@@ -65,23 +63,19 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx ssh.Context, payload r
 		Context: ctx,
 
 		// Dial exposes an interface to make upstream connections through this SSH tunnel
-		Dial: func(originAddr string) (gossh.Channel, error) {
-			originHost, originPortStr, _ := net.SplitHostPort(originAddr)
-			originPort, _ := strconv.Atoi(originPortStr)
-
+		Dial: func() (io.ReadWriteCloser, error) {
 			// Open an upstream connection through a new `forwarded-tcpip` channel
 			ch, reqs, err := conn.OpenChannel(forwardedTCPChannelType, gossh.Marshal(remoteForwardChannelData{
-				// Pass along the origin address of this connection
-				// TODO: Is this necessary?
-				OriginAddr: originHost,
-				OriginPort: uint32(originPort),
+				// Pass along a fake originator address and port, since we don't know what the client's address is.
+				OriginAddr: "[::1]",
+				OriginPort: 22,
 
 				// We should initiate an upstream connection to the port that was bound in this forwarding request.
 				DestAddr: payload.BindAddr,
 				DestPort: payload.BindPort,
 			}))
 			if err != nil {
-				return nil, errors.Wrap(err, "could not open forwarding channel")
+				return nil, err
 			}
 			go gossh.DiscardRequests(reqs)
 

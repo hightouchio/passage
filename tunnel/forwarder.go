@@ -20,7 +20,7 @@ type TCPForwarder struct {
 	// GetUpstreamConn is a function that's job is to initiate a connection to the upstream service.
 	// It is called once for each incoming TunnelConnection.
 	// It should return a dedicated io.ReadWriteCloser for each incoming TunnelConnection.
-	GetUpstreamConn func(net.Conn) (io.ReadWriteCloser, error)
+	GetUpstreamConn func() (io.ReadWriteCloser, error)
 
 	// KeepaliveInterval is the interval between OS level TCP keepalive handshakes
 	KeepaliveInterval time.Duration
@@ -127,7 +127,7 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	}()
 
 	// Get upstream connection.
-	upstream, err := f.GetUpstreamConn(session)
+	upstream, err := f.GetUpstreamConn()
 	if err != nil {
 		// Set SO_LINGER=0 so the tunnel net.TCPConn does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 		if err := session.SetLinger(0); err != nil {

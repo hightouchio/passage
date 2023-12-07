@@ -85,11 +85,8 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		return sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
 	}
 
-	// Initially test the upstream connection to make sure it works
-	// 	Retry it until it succeeds.
-	if err := testUpstreamConnection(ctx, logger, statusUpdate, getUpstreamConn); err != nil {
-		return errors.Wrap(err, "test upstream connection")
-	}
+	// Start upstream reachability test
+	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
 
 	// If the context has been cancelled at this point in time, stop the tunnel.
 	if ctx.Err() != nil {
@@ -99,20 +96,8 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
 	forwarder := &TCPForwarder{
-		Listener: listener,
-
-		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
-		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
-			serviceConn, err := getUpstreamConn()
-			if err != nil {
-				// Any upstream dial errors should be reported as part of the tunnel status
-				statusUpdate <- StatusUpdate{StatusError, err.Error()}
-
-				return nil, err
-			}
-			return serviceConn, err
-		},
-
+		Listener:          listener,
+		GetUpstreamConn:   getUpstreamConn,
 		KeepaliveInterval: 5 * time.Second,
 		Stats:             stats.GetStats(ctx),
 		logger:            logger.Named("Forwarder"),

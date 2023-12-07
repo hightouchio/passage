@@ -8,8 +8,8 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"go.uber.org/zap"
-	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,23 +65,35 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 	statusUpdate <- StatusUpdate{StatusBooting, "ssh server is online. Waiting for connections"}
 
 	// Handle incoming SSH port forwarding connections
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
+	connWg := sync.WaitGroup{}
+	func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
 
-			// Wait for incoming connections
-		case conn, ok := <-connectionChan:
-			if !ok {
-				return nil
+				// Wait for incoming connections
+			case conn, ok := <-connectionChan:
+				if !ok {
+					return
+				}
+
+				connWg.Add(1)
+				go func() {
+					defer connWg.Done()
+					t.handleConnection(ctx, conn, logger, listener, statusUpdate)
+				}()
 			}
-			go handleConnection(ctx, conn, logger, listener, statusUpdate)
 		}
-	}
+	}()
+
+	// Wait for all connections to close
+	connWg.Wait()
+	return nil
 }
 
 // handleConnection handles an SSH protocol connection and sets up port forwarding
-func handleConnection(
+func (t *ReverseTunnel) handleConnection(
 	ctx context.Context,
 	conn ReverseForwardingConnection,
 	log *log.Logger,
@@ -105,23 +117,14 @@ func handleConnection(
 		}
 	}()
 
+	// Start upstream reachability test
+	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
 	forwarder := &TCPForwarder{
-		Listener: listener,
-
-		// Implement GetUpstreamConn by opening a channel on the SSH connection.
-		GetUpstreamConn: func(tConn net.Conn) (io.ReadWriteCloser, error) {
-			conn, err := conn.Dial(tConn.RemoteAddr().String())
-			if err != nil {
-				// Any upstream dial errors should be reported as part of the tunnel status
-				statusUpdate <- StatusUpdate{StatusError, err.Error()}
-				return nil, err
-			}
-
-			return conn, nil
-		},
-
+		Listener:          listener,
+		GetUpstreamConn:   conn.Dial,
 		KeepaliveInterval: 5 * time.Second,
 		Stats:             stats.GetStats(ctx),
 		logger:            logger.Named("Forwarder"),

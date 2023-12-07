@@ -88,6 +88,11 @@ func (m *Manager) Start() {
 		for {
 			select {
 			case <-ctx.Done():
+				// Replace `tunnels` with an empty map
+				m.tunnels = make(map[uuid.UUID]runningTunnel)
+
+				// Refresh supervisors again, which should shut them all down.
+				m.refreshSupervisors(ctx)
 				return
 
 			default:
