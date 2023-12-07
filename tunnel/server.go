@@ -16,7 +16,7 @@ type ServeStrategy func(ctx context.Context, tunnel Tunnel) error
 // TCPServeStrategy opens a tunnel listener on an ephemeral TCP port, registers the tunnel with service discovery,
 //
 //	manages healthchecks, and serves the tunnel itself.
-func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryService) ServeStrategy {
+func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryService, retryInterval time.Duration) ServeStrategy {
 	return func(ctx context.Context, tunnel Tunnel) error {
 		logger := log.FromContext(ctx)
 
@@ -52,6 +52,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		// Ensure we only close the channel once
 		signalConnCheck := sync.OnceFunc(func() { close(connCheckStartSignal) })
 
+		// Track all goroutines
 		wg := sync.WaitGroup{}
 
 		// Start tunnel status update routine
@@ -146,7 +147,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 		}()
 
 		// Run the tunnel, and restart it if it crashes
-		err = retry(ctx, 30*time.Second, func() error {
+		err = retry(ctx, retryInterval, func() error {
 			logger.Info("Starting tunnel")
 			if err := tunnel.Start(ctx, tunnelListener, statusUpdates); err != nil {
 				logger.Errorw("Error", zap.Error(err))
@@ -156,7 +157,9 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 
 				return err
 			}
+
 			logger.Info("Stopped tunnel")
+			statusUpdates <- StatusUpdate{StatusError, "Tunnel offline"}
 
 			return nil
 		})
@@ -172,24 +175,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 	}
 }
 
-// retry the given function until it succeeds
-func retry(ctx context.Context, interval time.Duration, fn func() error) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-
-		default:
-			if err := fn(); err != nil {
-				time.Sleep(interval)
-				continue
-			}
-
-			return nil
-		}
-	}
-}
-
+// withTunnelHealthcheck registers a healthcheck with service discovery, calls the given function, and deregisters the healthcheck when the function exits
 func withTunnelHealthcheck(
 	tunnelId uuid.UUID,
 	log *log.Logger,
@@ -202,6 +188,7 @@ func withTunnelHealthcheck(
 		return
 	}
 
+	// Deregister the healthcheck when the function exits
 	defer func() {
 		if err := serviceDiscovery.DeregisterHealthcheck(tunnelId, options.ID); err != nil {
 			// It's OK if we fail to deregister the healthcheck
@@ -209,13 +196,12 @@ func withTunnelHealthcheck(
 		}
 	}()
 
-	updateFunc := func(status discovery.HealthcheckStatus, message string) {
+	// Call the function add pass it a function which it can use to update the healthcheck status
+	fn(func(status discovery.HealthcheckStatus, message string) {
 		if err := serviceDiscovery.UpdateHealthcheck(tunnelId, options.ID, status, message); err != nil {
 			log.Errorw("Failed to update healthcheck", zap.Error(err))
 		}
-	}
-
-	fn(updateFunc)
+	})
 }
 
 const (

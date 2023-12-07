@@ -21,29 +21,27 @@ type StatusUpdate struct {
 	Message string
 }
 
-const (
-	// Define the frequency at which Passage reports tunnel status to service discovery.
-	tunnelStatusReportInterval = 15 * time.Second
-)
+type intervalStatusReporterOpts struct {
+	interval time.Duration
+	update   StatusUpdate
+}
 
-// tunnelStatusReporter reports the Ready status regularly until the context is cancelled
-func tunnelStatusReporter(ctx context.Context, statusUpdate chan<- StatusUpdate) {
+// intervalStatusReporter sends regular status updates to a StatusUpdate channel
+func intervalStatusReporter(ctx context.Context, ch chan<- StatusUpdate, interval time.Duration, getStatus func() StatusUpdate) {
 	// Send one update immediately
-	statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
-	defer func() {
-		statusUpdate <- StatusUpdate{StatusError, "Tunnel is offline"}
-	}()
+	ch <- getStatus()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
 	// Report regularly
-	ticker := time.NewTicker(tunnelStatusReportInterval)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-ticker.C:
-			statusUpdate <- StatusUpdate{StatusReady, "Tunnel is online"}
+			ch <- getStatus()
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,11 +61,20 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 	})
 	defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
 
-	// Register this tunnel with the global reverse SSH server
-	logger.Info("Tunnel registered with ssh server. Waiting for connections")
-	statusUpdate <- StatusUpdate{StatusBooting, "ssh server is online. Waiting for connections"}
+	// Keep track of the number of active connections on this tunnel
+	var connectionCount atomic.Int32
+
+	// Regularly report status based on the number of active connections
+	go intervalStatusReporter(ctx, statusUpdate, 5*time.Second, func() StatusUpdate {
+		if connectionCount.Load() > 0 {
+			return StatusUpdate{StatusReady, "Tunnel is online"}
+		} else {
+			return StatusUpdate{StatusBooting, "Tunnel is waiting for connections"}
+		}
+	})
 
 	// Handle incoming SSH port forwarding connections
+	logger.Info("Tunnel registered with SSH server. Waiting for connections")
 	connWg := sync.WaitGroup{}
 	func() {
 		for {
@@ -78,10 +88,13 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 					return
 				}
 
+				connectionCount.Add(1)
 				connWg.Add(1)
 				go func() {
 					defer connWg.Done()
-					t.handleConnection(ctx, conn, logger, listener, statusUpdate)
+					defer connectionCount.Add(-1)
+
+					t.handleConnection(ctx, conn, logger, listener)
 				}()
 			}
 		}
@@ -93,12 +106,11 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 }
 
 // handleConnection handles an SSH protocol connection and sets up port forwarding
-func (t *ReverseTunnel) handleConnection(
+func (t ReverseTunnel) handleConnection(
 	ctx context.Context,
 	conn ReverseForwardingConnection,
 	log *log.Logger,
 	listener *net.TCPListener,
-	statusUpdate chan<- StatusUpdate,
 ) {
 	// Create a new context to handle this connection's lifecycle
 	ctx, cancel := context.WithCancel(ctx)
@@ -118,6 +130,8 @@ func (t *ReverseTunnel) handleConnection(
 	}()
 
 	// Start upstream reachability test
+	// TODO: If we have multiple forwarders, the healthchecks can conflict.
+	//	We should probably have a single healthcheck for the tunnel
 	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
 
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
@@ -141,9 +155,6 @@ func (t *ReverseTunnel) handleConnection(
 			}
 		}
 	}()
-
-	// Continually report tunnel status until the tunnel shuts down
-	go tunnelStatusReporter(ctx, statusUpdate)
 
 	// Wait for connection to end
 	<-conn.Done()

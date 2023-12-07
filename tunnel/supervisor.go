@@ -54,7 +54,7 @@ func (s *Supervisor) Start() {
 	)
 
 	// Serve the tunnel via a TCP socket
-	serveStrategy := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery)
+	serveStrategy := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery, s.Retry)
 
 	// Once the stop channel is closed (by the Stop() function), cancel the context
 	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
@@ -69,6 +69,7 @@ func (s *Supervisor) Start() {
 		// Signal that the tunnel is stopped once this function exits
 		defer close(s.doneStopping)
 
+		// Retry if the serve strategy fails
 		for {
 			select {
 			case <-ctx.Done():
