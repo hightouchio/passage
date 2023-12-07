@@ -165,7 +165,7 @@ func testUpstream(ctx context.Context, fn GetUpstreamFn) error {
 }
 
 const (
-	listenerHealthcheckID       = "Listener"
+	listenerHealthcheckID       = "listener"
 	listenerHealthcheckName     = "Listener reachability"
 	listenerHealthcheckTTL      = 60 * time.Second
 	listenerHealthcheckInterval = 15 * time.Second
