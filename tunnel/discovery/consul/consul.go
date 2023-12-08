@@ -95,7 +95,7 @@ func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.Hea
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
 		zap.String("check_id", options.ID),
-	).Debugf("Register tunnel healthcheck: %s", consulCheckId)
+	).Debugf("Register healthcheck: %s", consulCheckId)
 
 	if err := d.Consul.Agent().CheckRegister(&consul.AgentCheckRegistration{
 		ServiceID: getTunnelServiceId(tunnelId),
@@ -120,7 +120,7 @@ func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
 		zap.String("check_id", id),
-	).Debugf("Deregister tunnel healthcheck: %s", consulCheckId)
+	).Debugf("Deregister healthcheck: %s", consulCheckId)
 
 	if err := d.Consul.Agent().CheckDeregister(consulCheckId); err != nil {
 		return errors.Wrapf(err, "could not deregister healthcheck %s for tunnel %s", id, tunnelId.String())
@@ -136,7 +136,7 @@ func (d Discovery) UpdateHealthcheck(tunnelId uuid.UUID, id string, status disco
 		zap.String("check_id", id),
 		zap.String("status", string(status)),
 		zap.String("message", message),
-	).Debugf("Healthcheck status update: %s: %s (%s)", consulCheckId, status, message)
+	).Debugf("Healthcheck update: %s: %s (%s)", consulCheckId, status, message)
 
 	if err := d.Consul.Agent().UpdateTTL(consulCheckId, message, string(status)); err != nil {
 		return errors.Wrap(err, "could not mark tunnel unhealthy")
