@@ -73,14 +73,6 @@ func (f *TCPForwarder) Serve() error {
 				return errors.Wrap(err, "accept tcp")
 			}
 
-			// Configure keepalive
-			if err := conn.SetKeepAlive(true); err != nil {
-				return errors.Wrap(err, "set keepalive")
-			}
-			if err := conn.SetKeepAlivePeriod(f.KeepaliveInterval); err != nil {
-				return errors.Wrap(err, "set keepalive period")
-			}
-
 			// Pass connections off to tunnel connection handler.
 			go func() {
 				session := &TCPSession{
@@ -138,6 +130,16 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 		return
 	}
 	defer upstream.Close()
+
+	// Configure keepalive
+	if err := session.SetKeepAlive(true); err != nil {
+		sessionLogger.Errorw("Set keepalive", zap.Error(err))
+		return
+	}
+	if err := session.SetKeepAlivePeriod(f.KeepaliveInterval); err != nil {
+		sessionLogger.Errorw("Set keepalive period", zap.Error(err))
+		return
+	}
 
 	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
 	pipeline := NewBidirectionalPipeline(session, upstream)

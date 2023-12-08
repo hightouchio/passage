@@ -89,7 +89,7 @@ const (
 func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigHTTPAddr, ":8080")
 	config.SetDefault(ConfigTunnelRefreshInterval, 1*time.Second)
-	config.SetDefault(ConfigTunnelRestartInterval, 15*time.Second)
+	config.SetDefault(ConfigTunnelRestartInterval, 5*time.Second)
 	config.SetDefault(ConfigTunnelNormalSshUser, "passage")
 	config.SetDefault(ConfigTunnelNormalDialTimeout, 15*time.Second)
 	config.SetDefault(ConfigTunnelNormalKeepaliveInterval, 1*time.Minute)

@@ -14,7 +14,12 @@ func retry(ctx context.Context, interval time.Duration, fn func() error) error {
 
 		default:
 			if err := fn(); err != nil {
-				time.Sleep(interval)
+				// If we get an error, either wait until the context is cancelled or the interval has passed
+				//	before retrying again
+				select {
+				case <-ctx.Done():
+				case <-time.After(interval):
+				}
 				continue
 			}
 

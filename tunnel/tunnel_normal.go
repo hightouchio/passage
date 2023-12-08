@@ -8,7 +8,6 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
-	"go.uber.org/zap"
 	"io"
 	"net"
 	"strconv"
@@ -36,8 +35,8 @@ type NormalTunnel struct {
 }
 
 func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
 	logger := log.FromContext(ctx)
 
@@ -63,20 +62,26 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	}
 	statusUpdate <- StatusUpdate{StatusBooting, "SSH connection established"}
 
+	// Shut down the tunnel if the SSH connection ends
+	go func() {
+		if err := sshClient.Wait(); err != nil {
+			cancel(errors.Wrap(err, "SSH connection closed"))
+		}
+	}()
+
 	// Listen for keepalive failures
 	go func() {
-		defer cancel()
+		defer cancel(nil)
 
 		select {
+		case <-ctx.Done():
+			return
 		case err, ok := <-keepalive:
 			// If the channel closed, just ignore it
 			if !ok {
 				return
 			}
 			statusUpdate <- StatusUpdate{StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error())}
-
-		case <-ctx.Done():
-			return
 		}
 	}()
 
@@ -107,11 +112,11 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	// Start port forwarding
 	logger.Debug("Starting forwarder")
 	go func() {
-		defer cancel()
+		defer logger.Debug("Forwarder stopped")
 		if err := forwarder.Serve(); err != nil {
 			// If it's simply a closed error, we can return without logging an error.
 			if !errors.Is(err, net.ErrClosed) {
-				logger.Errorw("Forwarder serve", zap.Error(err))
+				cancel(errors.Wrap(err, "forwarder serve"))
 			}
 		}
 	}()
@@ -123,7 +128,14 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	})
 
 	<-ctx.Done()
-	return nil
+
+	// If the context was simply cancelled (with no error), return nil
+	//	If the context was cancelled with a real error, return that
+	if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
+		return cause
+	} else {
+		return nil
+	}
 }
 
 // firstNotEmptyString returns the first string that is not empty

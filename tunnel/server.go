@@ -45,7 +45,9 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.DiscoveryServi
 
 		// Create a channel to receive tunnel status updates
 		statusUpdates := make(chan StatusUpdate)
-		closeStatusUpdates := sync.OnceFunc(func() { close(statusUpdates) })
+		closeStatusUpdates := sync.OnceFunc(func() {
+			close(statusUpdates)
+		})
 		defer closeStatusUpdates()
 
 		// Start status healthcheck
