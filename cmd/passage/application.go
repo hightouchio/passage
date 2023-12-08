@@ -12,9 +12,6 @@ import (
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
-	"go.uber.org/zap"
-	"net/http/pprof"
-
 	"github.com/hightouchio/passage/tunnel/discovery"
 	discoveryConsul "github.com/hightouchio/passage/tunnel/discovery/consul"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -22,6 +19,8 @@ import (
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+	"go.uber.org/zap"
+	"net/http/pprof"
 
 	consul "github.com/hashicorp/consul/api"
 
@@ -33,7 +32,6 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/fx"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -87,6 +85,17 @@ const (
 )
 
 func initDefaults(config *viper.Viper) {
+	// Set aliases
+	_ = config.BindEnv(ConfigLogLevel, "LOG_LEVEL")
+	_ = config.BindEnv(ConfigLogFormat, "LOG_FORMAT")
+	_ = config.BindEnv(ConfigPostgresHost, "PGHOST")
+	_ = config.BindEnv(ConfigPostgresPort, "PGPORT")
+	_ = config.BindEnv(ConfigPostgresUser, "PGUSER")
+	_ = config.BindEnv(ConfigPostgresPass, "PGPASSWORD")
+	_ = config.BindEnv(ConfigPostgresDbName, "PGDBNAME")
+	_ = config.BindEnv(ConfigPostgresSslmode, "PGSSLMODE")
+
+	// Set defaults
 	config.SetDefault(ConfigHTTPAddr, ":8080")
 	config.SetDefault(ConfigTunnelRefreshInterval, 1*time.Second)
 	config.SetDefault(ConfigTunnelRestartInterval, 5*time.Second)
@@ -333,19 +342,15 @@ func newConfig() (*viper.Viper, error) {
 
 func newLogger(config *viper.Viper) *log.Logger {
 	// Init new zap
-	log.Init(config.GetString(ConfigLogLevel), config.GetString(ConfigLogFormat))
+	log.Init(
+		config.GetString(ConfigLogLevel),
+		config.GetString(ConfigLogFormat),
+	)
 	return log.Get()
 }
 
 // newPostgres initializes a connection to the Postgres database
 func newPostgres(lc fx.Lifecycle, config *viper.Viper) (*sqlx.DB, error) {
-	config.SetDefault(ConfigPostgresHost, os.Getenv("PGHOST"))
-	config.SetDefault(ConfigPostgresPort, os.Getenv("PGPORT"))
-	config.SetDefault(ConfigPostgresUser, os.Getenv("PGUSER"))
-	config.SetDefault(ConfigPostgresPass, os.Getenv("PGPASSWORD"))
-	config.SetDefault(ConfigPostgresDbName, os.Getenv("PGDBNAME"))
-	config.SetDefault(ConfigPostgresSslmode, os.Getenv("PGSSLMODE"))
-
 	db, err := sqlx.Connect("postgres", getPostgresConnString(config))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not connect to postgres")
