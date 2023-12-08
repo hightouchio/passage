@@ -47,7 +47,7 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 	defer close(connectionChan)
 
 	logger.Debug("Register tunnel with SSHD")
-	t.services.GlobalSSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
+	t.services.SSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
 		ID:             t.ID,
 		AuthorizedKeys: authorizedKeys,
 
@@ -59,7 +59,7 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 		// Pass the receiver channel, so we can receive SSH connections from the SSHD server
 		Connections: connectionChan,
 	})
-	defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
+	defer t.services.SSHServer.DeregisterTunnel(t.ID)
 
 	// Keep track of the number of active connections on this tunnel
 	var connectionCount atomic.Int32
@@ -189,12 +189,9 @@ type ReverseTunnelServices struct {
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
-	GlobalSSHServer *SSHServer
-	Keystore        keystore.Keystore
-	Discovery       discovery.DiscoveryService
-
-	EnableIndividualSSHD bool
-	GetIndividualSSHD    func(sshdPort int) *SSHServer
+	SSHServer *SSHServer
+	Keystore  keystore.Keystore
+	Discovery discovery.DiscoveryService
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {

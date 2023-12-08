@@ -135,18 +135,7 @@ func runTunnels(
 			SQL:       postgres.NewClient(sql),
 			Keystore:  keystore,
 			Discovery: discovery,
-
-			GlobalSSHServer: sshServer,
-
-			EnableIndividualSSHD: config.GetBool(ConfigTunnelReverseEnableIndividualSSHD),
-			GetIndividualSSHD: func(sshdPort int) *tunnel.SSHServer {
-				return tunnel.NewSSHServer(
-					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
-					hostKey,
-					logger,
-					st,
-				)
-			},
+			SSHServer: sshServer,
 		}))
 	}
 

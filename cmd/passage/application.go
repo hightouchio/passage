@@ -50,11 +50,10 @@ const (
 	ConfigTunnelNormalDialTimeout       = "tunnel.normal.dial.timeout"
 	ConfigTunnelNormalKeepaliveInterval = "tunnel.normal.keepalive_interval"
 
-	ConfigTunnelReverseEnabled              = "tunnel.reverse.enabled"
-	ConfigTunnelReverseHostKey              = "tunnel.reverse.host_key"
-	ConfigTunnelReverseBindHost             = "tunnel.reverse.bind_host"
-	ConfigTunnelReverseSshdPort             = "tunnel.reverse.sshd_port"
-	ConfigTunnelReverseEnableIndividualSSHD = "tunnel.reverse.enable_individual_sshd"
+	ConfigTunnelReverseEnabled  = "tunnel.reverse.enabled"
+	ConfigTunnelReverseHostKey  = "tunnel.reverse.host_key"
+	ConfigTunnelReverseBindHost = "tunnel.reverse.bind_host"
+	ConfigTunnelReverseSshdPort = "tunnel.reverse.sshd_port"
 
 	ConfigDiscoveryType = "discovery.type"
 
@@ -104,7 +103,6 @@ func initDefaults(config *viper.Viper) {
 	config.SetDefault(ConfigTunnelNormalKeepaliveInterval, 1*time.Minute)
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigTunnelReverseSshdPort, 22)
-	config.SetDefault(ConfigTunnelReverseEnableIndividualSSHD, true)
 	config.SetDefault(ConfigDiscoveryType, "consul")
 	config.SetDefault(ConfigKeystoreType, "in-memory")
 	config.SetDefault(ConfigLogLevel, "info")
