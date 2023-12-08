@@ -95,7 +95,7 @@ func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.Hea
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
 		zap.String("check_id", options.ID),
-	).Debugf("Deregister tunnel healthcheck: %s", consulCheckId)
+	).Debugf("Register tunnel healthcheck: %s", consulCheckId)
 
 	if err := d.Consul.Agent().CheckRegister(&consul.AgentCheckRegistration{
 		ServiceID: getTunnelServiceId(tunnelId),
