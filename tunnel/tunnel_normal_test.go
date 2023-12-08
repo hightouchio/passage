@@ -149,8 +149,3 @@ type MockNormalDatabase struct {
 func (d MockNormalDatabase) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error) {
 	return []postgres.Key{}, nil
 }
-
-func (d MockNormalDatabase) UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error {
-	// no op
-	return nil
-}

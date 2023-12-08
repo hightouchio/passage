@@ -69,14 +69,3 @@ func (c Client) AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tu
 	}
 	return nil
 }
-
-const updateErrorForNormalTunnel = `
-UPDATE passage.tunnels set error = $1 where id = $2
-`
-
-func (c Client) UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error {
-	if _, err := c.db.ExecContext(ctx, updateErrorForNormalTunnel, error, tunnelID.String()); err != nil {
-		return err
-	}
-	return nil
-}

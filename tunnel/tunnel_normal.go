@@ -186,7 +186,6 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 type NormalTunnelServices struct {
 	SQL interface {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-		UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error
 	}
 	Keystore keystore.Keystore
 
