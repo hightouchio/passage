@@ -23,27 +23,31 @@ type SSHClientOptions struct {
 
 func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client, <-chan error, error) {
 	logger := log.FromContext(ctx).Named("SSH")
+	logger.With(
+		zap.String("user", options.User),
+		zap.String("host", options.Host),
+		zap.Int("port", options.Port),
+	).Infof("Connect to ssh://%s@%s:%d", options.User, options.Host, options.Port)
 
 	// Validate the address
-	addr := net.JoinHostPort(options.Host, strconv.Itoa(options.Port))
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	addr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(options.Host, strconv.Itoa(options.Port)))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "resolve address")
 	}
 
 	// Dial remote SSH server
-	logger.With(zap.String("addr", addr)).Infof("Dial SSH server %s", addr)
-	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
+	logger.With(zap.String("addr", addr.String())).Debugf("Dial %s", addr.String())
+	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to remote server")
 	}
 
 	// Configure TCP keepalive for SSH connection
 	logger.Debugw("Set TCP keepalive", zap.Duration("interval", options.KeepaliveInterval))
-	if err := sshConn.SetKeepAlive(true); err != nil {
+	if err := conn.SetKeepAlive(true); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to enable keepalive")
 	}
-	if err := sshConn.SetKeepAlivePeriod(options.KeepaliveInterval); err != nil {
+	if err := conn.SetKeepAlivePeriod(options.KeepaliveInterval); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to set keepalive period")
 	}
 
@@ -58,9 +62,9 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	logger.With(
 		zap.String("ssh_user", options.User),
 		zap.Int("ssh_auth_method_count", len(keySigners)),
-	).Infof("Authenticating as user %s", options.User)
+	).Debugf("Authenticating as user %s", options.User)
 	c, chans, reqs, err := gossh.NewClientConn(
-		sshConn, addr,
+		conn, addr.String(),
 		&gossh.ClientConfig{
 			User:            options.User,
 			Auth:            []gossh.AuthMethod{gossh.PublicKeys(keySigners...)},
@@ -76,7 +80,7 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	// Start sending keepalive packets to the upstream SSH server
 	keepaliveErrors := make(chan error)
 	go func() {
-		if err := sshKeepalive(ctx, sshConn, sshClient, options.KeepaliveInterval, options.DialTimeout); err != nil {
+		if err := sshKeepalive(ctx, conn, sshClient, options.KeepaliveInterval, options.DialTimeout); err != nil {
 			if !errors.Is(err, net.ErrClosed) {
 				logger.Errorw("Keepalive failed", zap.Error(err))
 				keepaliveErrors <- err
