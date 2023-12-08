@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -18,16 +19,31 @@ type ReverseTunnel struct {
 	AuthorizedKeysHash string       `db:"authorized_keys_hash"`
 }
 
-func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel) (ReverseTunnel, error) {
-	var tunnel ReverseTunnel
+func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel, authorizedKeys []uuid.UUID) (ReverseTunnel, error) {
 	query, args, err := psql.Insert("passage.reverse_tunnels").Values(sq.Expr("DEFAULT")).Suffix("RETURNING *").ToSql()
 	if err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not generate SQL")
+		return ReverseTunnel{}, errors.Wrap(err, "could not generate sql")
 	}
-	result := c.db.QueryRowxContext(ctx, query, args...)
-	if err = result.StructScan(&tunnel); err != nil {
-		return ReverseTunnel{}, errors.Wrap(err, "could not scan")
+
+	var tunnel ReverseTunnel
+	if err := withTx(ctx, c.db, func(tx *sqlx.Tx) error {
+		// Insert tunnel record
+		if err = tx.QueryRowxContext(ctx, query, args...).StructScan(&tunnel); err != nil {
+			return errors.Wrap(err, "could not scan tunnel record")
+		}
+
+		// Insert authorized keys
+		for _, keyId := range authorizedKeys {
+			if err := authorizeKeyForTunnel(ctx, tx, "reverse", tunnel.ID, keyId); err != nil {
+				return errors.Wrapf(err, "could not authorize key %s", keyId.String())
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return ReverseTunnel{}, errors.Wrap(err, "could not create reverse tunnel")
 	}
+
 	return tunnel, nil
 }
 
@@ -87,3 +103,24 @@ func (c Client) ListReverseActiveTunnels(ctx context.Context) ([]ReverseTunnel, 
 }
 
 var reverseTunnelAllowedFields = []string{"enabled"}
+
+// withTx is a helper function to wrap a function in a transaction, and commit or rollback depending on if the fn
+//
+//	returned with an error
+func withTx(ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) error) error {
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "could not open tx")
+	}
+
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	} else {
+		if err := tx.Commit(); err != nil {
+			return errors.Wrap(err, "could not commit")
+		}
+	}
+
+	return nil
+}

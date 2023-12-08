@@ -191,7 +191,7 @@ func (s API) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*Delete
 }
 
 type sqlClient interface {
-	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
+	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel, authorizedKeys []uuid.UUID) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
 	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)

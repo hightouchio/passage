@@ -127,26 +127,12 @@ type CreateReverseTunnelResponse struct {
 
 func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
 	var tunnelData postgres.ReverseTunnel
+	var response CreateReverseTunnelResponse
 
-	record, err := s.SQL.CreateReverseTunnel(ctx, tunnelData)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not insert")
-	}
+	// Default authorized keys to those provided in API request
+	authorizedKeys := request.Keys
 
-	// add keys
-	for _, keyID := range request.Keys {
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Reverse, record.ID, keyID); err != nil {
-			return nil, errors.Wrapf(err, "could not add key %d", keyID)
-		}
-	}
-
-	tunnel := reverseTunnelFromSQL(record)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get connection details")
-	}
-	response := &CreateReverseTunnelResponse{Tunnel: tunnel}
-
-	// if requested, we will generate a keypair and return the public key to the user
+	// If requested, we will generate a keypair and return the public key to the user
 	if request.CreateKeyPair {
 		keyId := uuid.New()
 		keyPair, err := GenerateKeyPair()
@@ -154,22 +140,28 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 			return nil, errors.Wrap(err, "could not generate keypair")
 		}
 
-		// insert into Keystore
+		// Insert into Keystore
 		if err := s.Keystore.Set(ctx, keyId, keyPair.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "could not set key")
 		}
 
-		// add to DB and attach to tunnel
-		if err := s.SQL.AuthorizeKeyForTunnel(ctx, Reverse, record.ID, keyId); err != nil {
-			return nil, errors.Wrap(err, "could not auth key for tunnel")
-		}
-
-		// return the public key to the user
+		// Return the public key to the user
 		b64 := keyPair.Base64PrivateKey()
 		response.PrivateKey = &b64
+
+		// Record this key so it is authorized on the tunnel
+		authorizedKeys = append(authorizedKeys, keyId)
 	}
 
-	return response, nil
+	// Create tunnel with authorized keys
+	record, err := s.SQL.CreateReverseTunnel(ctx, tunnelData, authorizedKeys)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not insert")
+	}
+
+	response.Tunnel = reverseTunnelFromSQL(record)
+
+	return &response, nil
 }
 
 // findTunnel finds whichever tunnel type matches the UUID
