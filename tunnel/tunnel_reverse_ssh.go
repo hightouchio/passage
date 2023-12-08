@@ -11,6 +11,7 @@ import (
 	"sync"
 )
 
+// SSHServer runs a reverse SSH server that accepts connections from SSH clients and forwards them to the appropriate tunnel.
 type SSHServer struct {
 	BindAddr string
 	HostKey  []byte
@@ -24,6 +25,7 @@ type SSHServer struct {
 	sync.RWMutex
 }
 
+// SSHServerRegisteredTunnel is a tunnel that is registered with the SSH server.
 type SSHServerRegisteredTunnel struct {
 	ID             uuid.UUID
 	RegisteredPort int
@@ -199,8 +201,6 @@ func (s *SSHServer) RegisterTunnel(tunnel SSHServerRegisteredTunnel) {
 }
 
 // DeregisterTunnel removes the reverse tunnel from the SSH server
-//
-//	TODO: Make this shut down the forwarder
 func (s *SSHServer) DeregisterTunnel(tunnelId uuid.UUID) {
 	s.Lock()
 	defer s.Unlock()

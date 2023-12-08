@@ -13,8 +13,7 @@ type ReverseForwardingHandler struct {
 type ReverseForwardingConnection struct {
 	ssh.Context
 
-	Dial  func() (io.ReadWriteCloser, error)
-	Close func() error
+	Dial func() (io.ReadWriteCloser, error)
 }
 
 func (h *ReverseForwardingHandler) HandleSSHRequest(ctx ssh.Context, srv *ssh.Server, req *gossh.Request) (bool, []byte) {
@@ -80,10 +79,6 @@ func (h *ReverseForwardingHandler) openPortForwarding(ctx ssh.Context, payload r
 			go gossh.DiscardRequests(reqs)
 
 			return ch, nil
-		},
-
-		Close: func() error {
-			return conn.Close()
 		},
 	}
 	return true, gossh.Marshal(&remoteForwardSuccess{payload.BindPort})
