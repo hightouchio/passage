@@ -190,6 +190,31 @@ func (s API) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*Delete
 	return &DeleteTunnelResponse{}, nil
 }
 
+type CheckTunnelRequest struct {
+	ID uuid.UUID
+}
+
+type CheckTunnelResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
+func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
+	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get connection details")
+	}
+
+	for _, check := range details.Healthchecks {
+		if discovery.HealthcheckStatus(check.Status) != discovery.HealthcheckPassing {
+			return &CheckTunnelResponse{Success: false, Error: fmt.Sprintf("%s: %s", check.ID, check.Message)}, nil
+		}
+	}
+
+	return &CheckTunnelResponse{Success: true}, nil
+}
+
 type sqlClient interface {
 	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel, authorizedKeys []uuid.UUID) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)

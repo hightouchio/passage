@@ -22,11 +22,10 @@ type ReverseTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
+	SSHDPort  int       `json:"sshdPort"`
 
-	SSHDPort           int `json:"sshdPort"`
 	authorizedKeysHash string
-
-	services ReverseTunnelServices
+	services           ReverseTunnelServices
 }
 
 func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {

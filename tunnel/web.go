@@ -16,6 +16,7 @@ func (s API) ConfigureWebRoutes(router *mux.Router) {
 
 	tunnelRouter := router.PathPrefix("/tunnel/{tunnelID}").Subrouter()
 	tunnelRouter.HandleFunc("", s.handleWebTunnelGet).Methods(http.MethodGet)
+	tunnelRouter.HandleFunc("/check", s.handleWebTunnelCheck).Methods(http.MethodGet)
 	tunnelRouter.HandleFunc("", s.handleWebTunnelUpdate).Methods(http.MethodPut)
 	tunnelRouter.HandleFunc("", s.handleWebTunnelDelete).Methods(http.MethodDelete)
 }
@@ -28,6 +29,28 @@ func (s API) handleWebTunnelGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := s.GetTunnel(r.Context(), request)
+	if err != nil {
+		switch err {
+		case postgres.ErrTunnelNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			setRequestError(r, err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	renderJSON(w, response)
+}
+
+func (s API) handleWebTunnelCheck(w http.ResponseWriter, r *http.Request) {
+	var request CheckTunnelRequest
+	if err := getTunnelID(r, &request.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response, err := s.CheckTunnel(r.Context(), request)
 	if err != nil {
 		switch err {
 		case postgres.ErrTunnelNotFound:
