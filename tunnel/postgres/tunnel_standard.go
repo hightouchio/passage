@@ -22,9 +22,9 @@ type NormalTunnel struct {
 	ServicePort int            `db:"service_port"`
 
 	// Deprecated
-	tunnelPort int            `db:"tunnel_port"`
-	httpProxy  bool           `db:"http_proxy"`
-	error      sql.NullString `db:"error"`
+	TunnelPort int            `db:"tunnel_port"`
+	HttpProxy  bool           `db:"http_proxy"`
+	Error      sql.NullString `db:"error"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {

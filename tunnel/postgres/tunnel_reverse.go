@@ -18,10 +18,10 @@ type ReverseTunnel struct {
 	AuthorizedKeysHash string    `db:"authorized_keys_hash"`
 
 	// Deprecated
-	tunnelPort int            `db:"tunnel_port"`
-	httpProxy  bool           `db:"http_proxy"`
-	error      sql.NullString `db:"error"`
-	lastUsedAt sql.NullTime   `db:"last_used_at"`
+	TunnelPort int            `db:"tunnel_port"`
+	HttpProxy  bool           `db:"http_proxy"`
+	Error      sql.NullString `db:"error"`
+	LastUsedAt sql.NullTime   `db:"last_used_at"`
 }
 
 func (c Client) CreateReverseTunnel(ctx context.Context, input ReverseTunnel, authorizedKeys []uuid.UUID) (ReverseTunnel, error) {
