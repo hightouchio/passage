@@ -90,14 +90,12 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 	}
 
 	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
-	if err != nil {
-		return &response, errors.Wrap(err, "could not find tunnel in service discovery")
-	}
-
-	// Populate connection details
-	response.ConnectionDetails = &ConnectionDetails{
-		Host: tunnelDetails.Host,
-		Port: tunnelDetails.Port,
+	if err == nil {
+		// Populate connection details
+		response.ConnectionDetails = &ConnectionDetails{
+			Host: tunnelDetails.Host,
+			Port: tunnelDetails.Port,
+		}
 	}
 
 	// Populate healthchecks
