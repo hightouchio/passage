@@ -25,8 +25,10 @@ func NewSSHClient(ctx context.Context, options SSHClientOptions) (*gossh.Client,
 	logger := log.FromContext(ctx).Named("SSH")
 	logger.With(
 		zap.String("user", options.User),
-		zap.String("host", options.Host),
-		zap.Int("port", options.Port),
+		zap.Dict("sshd",
+			zap.String("host", options.Host),
+			zap.Int("port", options.Port),
+		),
 	).Infof("Connect to ssh://%s@%s:%d", options.User, options.Host, options.Port)
 
 	// Validate the address
