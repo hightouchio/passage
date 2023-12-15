@@ -30,6 +30,9 @@ type NormalTunnel struct {
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
 
+	// Deprecated
+	TunnelPort int `json:"tunnelPort"`
+
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
 }
@@ -244,6 +247,7 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
+		TunnelPort:  record.TunnelPort,
 	}
 }
 
