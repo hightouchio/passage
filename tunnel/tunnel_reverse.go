@@ -22,7 +22,9 @@ type ReverseTunnel struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
-	SSHDPort  int       `json:"sshdPort"`
+
+	SSHDPort   int `json:"sshdPort"`
+	TunnelPort int `json:"tunnelPort"`
 
 	authorizedKeysHash string
 	services           ReverseTunnelServices
@@ -53,7 +55,7 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 		// This is not actually the port that the tunnel is listening on,
 		//	but the port that the tunnel is *registered* on, which is how we uniquely identify incoming requests
 		//	for tunnels.
-		RegisteredPort: t.SSHDPort,
+		RegisteredPort: t.TunnelPort,
 
 		// Pass the receiver channel, so we can receive SSH connections from the SSHD server
 		Connections: connectionChan,
@@ -215,7 +217,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.authorizedKeysHash == t2.authorizedKeysHash
+	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.TunnelPort == t2.TunnelPort && t.authorizedKeysHash == t2.authorizedKeysHash
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -224,6 +226,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		ID:                 record.ID,
 		CreatedAt:          record.CreatedAt,
 		Enabled:            record.Enabled,
+		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
 		authorizedKeysHash: record.AuthorizedKeysHash,
 	}

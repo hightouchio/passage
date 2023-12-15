@@ -16,9 +16,9 @@ type ReverseTunnel struct {
 	Enabled            bool      `db:"enabled"`
 	SSHDPort           int       `db:"sshd_port"`
 	AuthorizedKeysHash string    `db:"authorized_keys_hash"`
+	TunnelPort         int       `db:"tunnel_port"`
 
 	// Deprecated
-	TunnelPort int            `db:"tunnel_port"`
 	HttpProxy  bool           `db:"http_proxy"`
 	Error      sql.NullString `db:"error"`
 	LastUsedAt sql.NullTime   `db:"last_used_at"`
