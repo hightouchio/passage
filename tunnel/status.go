@@ -54,7 +54,7 @@ func intervalStatusReporter(ctx context.Context, ch chan<- StatusUpdate, getStat
 }
 
 // statusHealthcheck reports the self-reported tunnel status into a healthcheck
-func statusHealthcheck(ctx context.Context, tunnel Tunnel, log *log.Logger, serviceDiscovery discovery.DiscoveryService, statusUpdates <-chan StatusUpdate) {
+func statusHealthcheck(ctx context.Context, tunnel Tunnel, log *log.Logger, serviceDiscovery discovery.Service, statusUpdates <-chan StatusUpdate) {
 	options := discovery.HealthcheckOptions{
 		ID:   statusHealthcheckID,
 		Name: statusHealthcheckName,
@@ -102,7 +102,7 @@ func upstreamHealthcheck(
 	ctx context.Context,
 	tunnel Tunnel,
 	log *log.Logger,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 	fn GetUpstreamFn,
 ) {
 	options := discovery.HealthcheckOptions{
@@ -168,7 +168,7 @@ func listenerHealthcheck(
 	ctx context.Context,
 	tunnel Tunnel,
 	log *log.Logger,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 	addr net.Addr,
 ) {
 	options := discovery.HealthcheckOptions{
@@ -255,7 +255,7 @@ func waitForReadError(ctx context.Context, reader io.ReadCloser, waitDuration ti
 func withTunnelHealthcheck(
 	tunnelId uuid.UUID,
 	log *log.Logger,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 	options discovery.HealthcheckOptions,
 	fn func(update func(status discovery.HealthcheckStatus, message string)),
 ) {

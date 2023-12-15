@@ -1,15 +1,17 @@
 package discovery
 
 import (
+	"context"
 	"github.com/google/uuid"
 	"time"
 )
 
-// DiscoveryService represents a service that can tell Passage where a tunnel is located.
-type DiscoveryService interface {
+// Service represents a service that can tell Passage where a tunnel is located.
+type Service interface {
+	Wait(ctx context.Context) error
+
 	RegisterTunnel(id uuid.UUID, port int) error
 	DeregisterTunnel(id uuid.UUID) error
-
 	GetTunnel(id uuid.UUID) (TunnelDetails, error)
 
 	RegisterHealthcheck(tunnelId uuid.UUID, options HealthcheckOptions) error

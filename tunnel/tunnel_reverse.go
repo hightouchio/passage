@@ -192,7 +192,7 @@ type ReverseTunnelServices struct {
 	}
 	SSHServer *SSHServer
 	Keystore  keystore.Keystore
-	Discovery discovery.DiscoveryService
+	Discovery discovery.Service
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {

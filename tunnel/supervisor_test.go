@@ -21,7 +21,7 @@ func (d dummyTunnel) Start(ctx context.Context, listener *net.TCPListener, statu
 	return fmt.Errorf("bad tunnel")
 }
 
-func (d dummyTunnel) GetConnectionDetails(service discovery.DiscoveryService) (ConnectionDetails, error) {
+func (d dummyTunnel) GetConnectionDetails(service discovery.Service) (ConnectionDetails, error) {
 	return ConnectionDetails{Host: "", Port: 0}, nil
 }
 

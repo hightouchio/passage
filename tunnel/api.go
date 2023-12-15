@@ -14,7 +14,7 @@ import (
 // API provides a source of truth for Tunnel configuration. It serves remote clients via HTTP APIs, as well as Manager instances via an exported ListFunc
 type API struct {
 	SQL              sqlClient
-	DiscoveryService discovery.DiscoveryService
+	DiscoveryService discovery.Service
 	Keystore         keystore.Keystore
 	Stats            stats.Stats
 }

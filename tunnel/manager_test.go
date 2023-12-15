@@ -115,7 +115,7 @@ func (m *mockTunnel) WaitForStop(ctx context.Context) bool {
 	}
 }
 
-func (m *mockTunnel) GetConnectionDetails(discovery.DiscoveryService) (ConnectionDetails, error) {
+func (m *mockTunnel) GetConnectionDetails(discovery.Service) (ConnectionDetails, error) {
 	return ConnectionDetails{
 		Host: "127.0.0.1",
 		Port: m.port,

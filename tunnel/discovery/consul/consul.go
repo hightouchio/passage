@@ -1,6 +1,7 @@
 package consul
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/uuid"
 	consul "github.com/hashicorp/consul/api"
@@ -26,6 +27,33 @@ func NewConsulDiscovery(consul *consul.Client, hostAddress string, healthcheckTT
 		HealthcheckTTL: healthcheckTTL,
 		Log:            log.Get().Named("Consul"),
 	}
+}
+
+// Wait for discovery service to be ready
+func (d Discovery) Wait(ctx context.Context) error {
+	d.Log.Debug("Waiting for readiness")
+
+	for {
+		// If the context is cancelled, give up and return an error
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		_, err := d.Consul.Status().Leader()
+		if err == nil {
+			break
+		}
+
+		d.Log.Warnw("Error connecting", zap.Error(err))
+
+		// Try again
+		time.Sleep(5 * time.Second)
+	}
+
+	d.Log.Info("Ready")
+
+	// No error means the service is ready
+	return nil
 }
 
 func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {

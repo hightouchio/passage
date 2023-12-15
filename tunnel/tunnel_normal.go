@@ -192,7 +192,7 @@ type NormalTunnelServices struct {
 	}
 	Keystore keystore.Keystore
 
-	Discovery discovery.DiscoveryService
+	Discovery discovery.Service
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {

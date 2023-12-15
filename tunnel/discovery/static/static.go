@@ -1,6 +1,7 @@
 package static
 
 import (
+	"context"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/discovery"
 )
@@ -8,6 +9,10 @@ import (
 // StaticDiscovery is a tunnel discovery provider that returns a static host
 type Discovery struct {
 	Host string
+}
+
+func (d Discovery) Wait(ctx context.Context) error {
+	return nil
 }
 
 func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {

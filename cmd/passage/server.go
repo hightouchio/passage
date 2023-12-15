@@ -49,12 +49,12 @@ func runTunnels(
 	server tunnel.API,
 	sql *sqlx.DB,
 	config *viper.Viper,
-	discovery discovery.DiscoveryService,
+	discovery discovery.Service,
 	keystore keystore.Keystore,
 	healthchecks *healthcheckManager,
 	st stats.Stats,
 	logger *log.Logger,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 ) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {

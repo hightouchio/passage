@@ -170,7 +170,7 @@ func startApplication(bootFuncs ...interface{}) error {
 	return nil
 }
 
-func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.API, error) {
+func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.Service) (tunnel.API, error) {
 	return tunnel.API{
 		SQL:              postgres.NewClient(sql),
 		DiscoveryService: discovery,
@@ -179,8 +179,8 @@ func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, d
 	}, nil
 }
 
-func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService, error) {
-	var discoveryService discovery.DiscoveryService
+func newTunnelDiscoveryService(config *viper.Viper, log *log.Logger) (discovery.Service, error) {
+	var discoveryService discovery.Service
 	switch config.GetString(ConfigDiscoveryType) {
 	case "consul":
 		consulApi, err := consul.NewClient(consul.DefaultConfig())
@@ -188,12 +188,13 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 			return nil, errors.Wrap(err, "could not init Consul client")
 		}
 
-		// Get Private IP Address
+		// Get private IP address
 		privateIp, err := sockaddr.GetPrivateIP()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not determine private IP")
 		}
 
+		// Initialize Consul discovery service
 		discoveryService = discoveryConsul.NewConsulDiscovery(
 			consulApi,
 			privateIp,
@@ -203,6 +204,15 @@ func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService,
 	default:
 		return nil, configError{"unknown discovery type"}
 	}
+
+	// Wait for Service Discovery to come online before allowing the boot to proceed
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := discoveryService.Wait(ctx); err != nil {
+		log.Fatalw("Discovery service did not come online", zap.Error(err))
+		return nil, nil
+	}
+
 	return discoveryService, nil
 }
 

@@ -26,7 +26,7 @@ type Manager struct {
 	RefreshInterval       time.Duration
 	TunnelRestartInterval time.Duration
 	Stats                 stats.Stats
-	ServiceDiscovery      discovery.DiscoveryService
+	ServiceDiscovery      discovery.Service
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
@@ -47,7 +47,7 @@ func NewManager(
 	listFunc ListFunc,
 	tunnelOptions TunnelOptions,
 	refreshDuration, tunnelRestartInterval time.Duration,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 ) *Manager {
 	return &Manager{
 		ListFunc:              listFunc,

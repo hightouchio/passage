@@ -16,7 +16,7 @@ type Supervisor struct {
 
 	Retry            time.Duration
 	Stats            stats.Stats
-	ServiceDiscovery discovery.DiscoveryService
+	ServiceDiscovery discovery.Service
 
 	// stop is the signal to stop the tunnel
 	stop chan any
@@ -30,7 +30,7 @@ func NewSupervisor(
 	st stats.Stats,
 	options TunnelOptions,
 	retry time.Duration,
-	serviceDiscovery discovery.DiscoveryService,
+	serviceDiscovery discovery.Service,
 ) *Supervisor {
 	return &Supervisor{
 		Tunnel:           tunnel,
