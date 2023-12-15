@@ -96,15 +96,15 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 			Host: tunnelDetails.Host,
 			Port: tunnelDetails.Port,
 		}
-	}
 
-	// Populate healthchecks
-	response.Healthchecks = make([]HealthcheckDetails, len(tunnelDetails.Checks))
-	for i, check := range tunnelDetails.Checks {
-		response.Healthchecks[i] = HealthcheckDetails{
-			ID:      check.ID,
-			Status:  check.Status,
-			Message: check.Message,
+		// Populate healthchecks
+		response.Healthchecks = make([]HealthcheckDetails, len(tunnelDetails.Checks))
+		for i, check := range tunnelDetails.Checks {
+			response.Healthchecks[i] = HealthcheckDetails{
+				ID:      check.ID,
+				Status:  check.Status,
+				Message: check.Message,
+			}
 		}
 	}
 
@@ -204,9 +204,13 @@ func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTun
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
 
+	if len(details.Healthchecks) == 0 {
+		return &CheckTunnelResponse{Success: false, Error: "Tunnel is not online"}, nil
+	}
+
 	for _, check := range details.Healthchecks {
 		if discovery.HealthcheckStatus(check.Status) != discovery.HealthcheckPassing {
-			return &CheckTunnelResponse{Success: false, Error: fmt.Sprintf("%s: %s", check.ID, check.Message)}, nil
+			return &CheckTunnelResponse{Success: false, Error: check.Message}, nil
 		}
 	}
 
