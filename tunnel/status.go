@@ -29,7 +29,7 @@ type StatusUpdate struct {
 const (
 	statusHealthcheckID       = "tunnel"
 	statusHealthcheckName     = "Tunnel"
-	statusHealthcheckTTL      = 60 * time.Second
+	statusHealthcheckTTL      = 180 * time.Second
 	statusHealthcheckInterval = 15 * time.Second
 )
 
@@ -93,7 +93,7 @@ func statusHealthcheck(ctx context.Context, tunnel Tunnel, log *log.Logger, serv
 const (
 	upstreamHealthcheckID       = "upstream"
 	upstreamHealthcheckName     = "Upstream reachability"
-	upstreamHealthcheckTTL      = 60 * time.Second
+	upstreamHealthcheckTTL      = 180 * time.Second
 	upstreamHealthcheckInterval = 15 * time.Second
 )
 
