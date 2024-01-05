@@ -122,7 +122,9 @@ func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.Hea
 	consulCheckId := getTunnelHealthcheckId(tunnelId, options.ID)
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
-		zap.String("check_id", options.ID),
+		zap.Dict("check",
+			zap.String("id", options.ID),
+		),
 	).Debugf("Register healthcheck: %s", consulCheckId)
 
 	if err := d.Consul.Agent().CheckRegister(&consul.AgentCheckRegistration{
@@ -147,7 +149,9 @@ func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
 	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
-		zap.String("check_id", id),
+		zap.Dict("check",
+			zap.String("id", id),
+		),
 	).Debugf("Deregister healthcheck: %s", consulCheckId)
 
 	if err := d.Consul.Agent().CheckDeregister(consulCheckId); err != nil {
@@ -161,9 +165,11 @@ func (d Discovery) UpdateHealthcheck(tunnelId uuid.UUID, id string, status disco
 
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
-		zap.String("check_id", id),
-		zap.String("status", string(status)),
-		zap.String("message", message),
+		zap.Dict("check",
+			zap.String("id", id),
+			zap.String("status", string(status)),
+			zap.String("message", message),
+		),
 	).Debugf("Healthcheck update: %s: %s (%s)", consulCheckId, status, message)
 
 	if err := d.Consul.Agent().UpdateTTL(consulCheckId, message, string(status)); err != nil {
