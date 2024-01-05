@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: passage
+  labels:
+    name: passage
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: passage
+  name: passage-global-config
+data:
+  # General
+  PASSAGE_LOG_LEVEL: "debug"
+  PASSAGE_HTTP_ADDR: "0.0.0.0:6000"
+
+  # Keystore
+  PASSAGE_KEYSTORE_TYPE: "s3"
+  PASSAGE_KEYSTORE_S3_ENDPOINT: "http://minio:9079"
+  PASSAGE_KEYSTORE_S3_BUCKET_NAME: "passage"
+  PASSAGE_KEYSTORE_S3_BUCKET_REGION: "us-east-1"
+  PASSAGE_KEYSTORE_S3_DISABLE_SSL: "true"
+  PASSAGE_KEYSTORE_S3_FORCE_PATH_STYLE: "true"
+  AWS_ACCESS_KEY_ID: "passage"
+  AWS_SECRET_ACCESS_KEY: "passage123"
+
+  # Postgres
+  PGHOST: "postgres"
+  PGPORT: "5432"
+  PGUSER: "passage"
+  PGDBNAME: "passage"
+  PGSSLMODE: "disable"
+
+  # Consul
+  PASSAGE_DISCOVERY_TYPE: "consul"
+  CONSUL_HTTP_ADDR: "consul:8500"
+

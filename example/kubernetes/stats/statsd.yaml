@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: stats
+  name: statsd-exporter
+  labels:
+    app: statsd-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: statsd-exporter
+  template:
+    metadata:
+      name: statsd-exporter
+      labels:
+        app: statsd-exporter
+    spec:
+      restartPolicy: Always
+
+      containers:
+        - name: statsd-exporter
+          image: prom/statsd-exporter:latest
+          imagePullPolicy: IfNotPresent
+
+          args: ["--log.level=debug"]
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: stats
+  name: statsd-exporter
+spec:
+  selector:
+    app: statsd-exporter
+  type: ClusterIP
+  ports:
+    - name: "prometheus"
+      port: 9102
+      targetPort: 9102
+    - name: "statsd"
+      port: 9125
+      targetPort: 9125
+    - name: "statsd-udp"
+      port: 9125
+      targetPort: 9125
+      protocol: "UDP"

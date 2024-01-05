@@ -1,10 +1,13 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 	"net"
 	"sync"
@@ -12,27 +15,21 @@ import (
 )
 
 type TCPForwarder struct {
-	BindAddr string
+	Listener *net.TCPListener
+
+	// GetUpstreamConn is a function that's job is to initiate a connection to the upstream service.
+	// It is called once for each incoming TunnelConnection.
+	// It should return a dedicated io.ReadWriteCloser for each incoming TunnelConnection.
+	GetUpstreamConn func() (io.ReadWriteCloser, error)
 
 	// KeepaliveInterval is the interval between OS level TCP keepalive handshakes
 	KeepaliveInterval time.Duration
 
-	// GetUpstreamConn is a function thats job is to initiate a connection to the upstream service.
-	// It is called once for each incoming TunnelConnection.
-	// It should return a dedicated io.ReadWriteCloser for each incoming TunnelConnection.
-	GetUpstreamConn func(net.Conn) (io.ReadWriteCloser, error)
+	logger *log.Logger
+	Stats  stats.Stats
 
-	Lifecycle Lifecycle
-	Stats     stats.Stats
-
-	// HTTPProxyEnabled determines if this forwarder should run as an HTTPS proxy
-	//	https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/CONNECT
-	HTTPProxyEnabled bool
-
-	listener  *net.TCPListener
-	conns     map[string]net.Conn
-	close     chan struct{}
-	closeOnce sync.Once
+	conns map[string]net.Conn
+	close chan struct{}
 
 	sync.RWMutex
 }
@@ -48,107 +45,98 @@ func (s *TCPSession) ID() string {
 	return s.id
 }
 
-func (f *TCPForwarder) Listen() error {
-	f.close = make(chan struct{})
-
-	// Open tunnel TCP listener
-	f.Lifecycle.BootEvent("listener_start", stats.Tags{"listen_addr": f.BindAddr})
-	listenTcpAddr, err := net.ResolveTCPAddr("tcp", f.BindAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: errors.Wrap(err, "resolve addr")}
-	}
-	listener, err := net.ListenTCP("tcp", listenTcpAddr)
-	if err != nil {
-		return bootError{event: "listener_start", err: err}
-	}
-	f.listener = listener
-	f.Lifecycle.Open()
-
-	// Wait for close signal
-	go func() {
-		<-f.close
-		f.listener.Close()
-		f.Lifecycle.Close()
-	}()
-
-	return nil
-}
-
 func (f *TCPForwarder) Serve() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if f.Listener == nil {
+		return fmt.Errorf("must set listener")
+	}
+
+	if f.close == nil {
+		f.close = make(chan struct{})
+	}
+
 	for {
-		if f.listener == nil {
-			return fmt.Errorf("cannot serve without first starting listener")
-		}
+		select {
+		case <-f.close:
+			return net.ErrClosed
 
-		// Accept incoming tunnel connections
-		conn, err := f.listener.AcceptTCP()
-		if err != nil {
-			return errors.Wrap(err, "accept tcp")
-		}
+		default:
+			// Accept incoming tunnel connections
+			conn, err := f.Listener.AcceptTCP()
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return err
+				}
 
-		// Configure keepalive
-		conn.SetKeepAlive(true)
-		conn.SetKeepAlivePeriod(f.KeepaliveInterval)
-
-		// Pass connections off to tunnel connection handler.
-		go func() {
-			session := &TCPSession{
-				TCPConn: conn,
-				id:      uuid.New().String(),
+				return errors.Wrap(err, "accept tcp")
 			}
-			defer session.Close()
 
-			f.handleSession(session)
-		}()
+			// Pass connections off to tunnel connection handler.
+			go func() {
+				session := &TCPSession{
+					TCPConn: conn,
+					id:      uuid.New().String(),
+				}
+				defer session.Close()
+
+				f.handleSession(ctx, session)
+			}()
+		}
 	}
 }
 
 func (f *TCPForwarder) Close() error {
-	f.closeOnce.Do(func() { close(f.close) })
+	if f.close != nil {
+		close(f.close)
+	}
 	return nil
 }
 
 // handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleSession(session *TCPSession) {
-	f.Lifecycle.SessionEvent(session.ID(), "open", stats.Tags{"remote_addr": session.RemoteAddr().String()})
+func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
+	sessionLogger := f.logger.With(zap.String("session_id", session.ID()))
 
 	defer func() {
-		session.Close()
+		if err := session.Close(); err != nil {
+			// If the session is already closed, we can ignore this error.
+			if !errors.Is(err, net.ErrClosed) {
+				sessionLogger.Warnw("Could not close session", zap.Error(err))
+			}
+		}
+
 		// Record pipeline metrics to logs and statsd
-		f.Stats.Count("bytes_rcvd", int64(session.bytesReceived), nil, 1)
-		f.Stats.Count("bytes_sent", int64(session.bytesSent), nil, 1)
-		f.Lifecycle.SessionEvent(session.ID(), "close", stats.Tags{
-			"bytes_rcvd": session.bytesReceived,
-			"bytes_sent": session.bytesSent,
-		})
+		f.Stats.Count(StatTunnelBytesReceived, int64(session.bytesReceived), nil, 1)
+		f.Stats.Count(StatTunnelBytesSent, int64(session.bytesSent), nil, 1)
 	}()
 
 	// Get upstream connection.
-	upstream, err := f.GetUpstreamConn(session)
+	upstream, err := f.GetUpstreamConn()
 	if err != nil {
 		// Set SO_LINGER=0 so the tunnel net.TCPConn does not perform a graceful shutdown, indicating that the upstream couldn't be reached.
 		if err := session.SetLinger(0); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "set linger"))
+			sessionLogger.Warnw("Could not set error", zap.Error(err))
 		}
 
-		f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "dial upstream"))
+		sessionLogger.Errorw("Could not dial upstream", zap.Error(err))
 		return
 	}
 	defer upstream.Close()
 
+	// Configure keepalive
+	if err := session.SetKeepAlive(true); err != nil {
+		sessionLogger.Errorw("Set keepalive", zap.Error(err))
+		return
+	}
+	if err := session.SetKeepAlivePeriod(f.KeepaliveInterval); err != nil {
+		sessionLogger.Errorw("Set keepalive period", zap.Error(err))
+		return
+	}
+
 	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
 	pipeline := NewBidirectionalPipeline(session, upstream)
-
-	// If we're running in proxy mode, lets first read a CONNECT request from the client, then forward subsequent data on
-	// 	to the upstream.
-	if f.HTTPProxyEnabled {
-		if err := handleHttpProxy(session, upstream); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "could not handle proxy CONNECT"))
-			return
-		}
-		f.Lifecycle.SessionEvent(session.ID(), "HTTP proxy connection established", stats.Tags{})
-	}
 
 	done := make(chan struct{})
 	go func() {
@@ -158,14 +146,14 @@ func (f *TCPForwarder) handleSession(session *TCPSession) {
 
 		// Forward bytes.
 		if err := pipeline.Run(); err != nil {
-			f.Lifecycle.SessionError(session.ID(), errors.Wrap(err, "pipeline"))
+			sessionLogger.Errorw("Pipeline", zap.Error(err))
 		}
 
 		close(done)
 	}()
 
 	select {
-	case <-f.close: // Forwarder close
+	case <-ctx.Done():
 	case <-done: // Finished pipeline
 	}
 }

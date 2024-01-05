@@ -9,36 +9,34 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
-	"net/http/pprof"
-
 	"github.com/hightouchio/passage/tunnel/discovery"
-	discoveryDNS "github.com/hightouchio/passage/tunnel/discovery/dns"
-	discoverySRV "github.com/hightouchio/passage/tunnel/discovery/srv"
-	discoveryStatic "github.com/hightouchio/passage/tunnel/discovery/static"
-
+	discoveryConsul "github.com/hightouchio/passage/tunnel/discovery/consul"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	keystoreGCS "github.com/hightouchio/passage/tunnel/keystore/gcs"
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+	"go.uber.org/zap"
+	"net/http/pprof"
 
+	consul "github.com/hashicorp/consul/api"
+
+	"github.com/hashicorp/go-sockaddr"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"go.uber.org/dig"
 	"go.uber.org/fx"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 const (
-	ConfigEnv          = "env"
 	ConfigHTTPAddr     = "http.addr"
 	ConfigApiEnabled   = "api.enabled"
 	ConfigPprofEnabled = "pprof.enabled"
@@ -52,18 +50,12 @@ const (
 	ConfigTunnelNormalDialTimeout       = "tunnel.normal.dial.timeout"
 	ConfigTunnelNormalKeepaliveInterval = "tunnel.normal.keepalive_interval"
 
-	ConfigTunnelReverseEnabled              = "tunnel.reverse.enabled"
-	ConfigTunnelReverseHostKey              = "tunnel.reverse.host_key"
-	ConfigTunnelReverseBindHost             = "tunnel.reverse.bind_host"
-	ConfigTunnelReverseSshdPort             = "tunnel.reverse.sshd_port"
-	ConfigTunnelReverseEnableIndividualSSHD = "tunnel.reverse.enable_individual_sshd"
+	ConfigTunnelReverseEnabled  = "tunnel.reverse.enabled"
+	ConfigTunnelReverseHostKey  = "tunnel.reverse.host_key"
+	ConfigTunnelReverseBindHost = "tunnel.reverse.bind_host"
+	ConfigTunnelReverseSshdPort = "tunnel.reverse.sshd_port"
 
-	ConfigDiscoveryType           = "discovery.type"
-	ConfigDiscoverySrvRegistry    = "discovery.srv.registry"
-	ConfigDiscoverySrvPrefix      = "discovery.srv.prefix"
-	ConfigDiscoveryStaticHost     = "discovery.static.host"
-	ConfigDiscoveryDnsHostNormal  = "discovery.dns.host_normal"
-	ConfigDiscoveryDnsHostReverse = "discovery.dns.host_reverse"
+	ConfigDiscoveryType = "discovery.type"
 
 	ConfigKeystoreType              = "keystore.type"
 	ConfigKeystorePostgresTableName = "keystore.postgres.table_name"
@@ -92,17 +84,26 @@ const (
 )
 
 func initDefaults(config *viper.Viper) {
+	// Set aliases
+	_ = config.BindEnv(ConfigLogLevel, "LOG_LEVEL")
+	_ = config.BindEnv(ConfigLogFormat, "LOG_FORMAT")
+	_ = config.BindEnv(ConfigPostgresHost, "PGHOST")
+	_ = config.BindEnv(ConfigPostgresPort, "PGPORT")
+	_ = config.BindEnv(ConfigPostgresUser, "PGUSER")
+	_ = config.BindEnv(ConfigPostgresPass, "PGPASSWORD")
+	_ = config.BindEnv(ConfigPostgresDbName, "PGDBNAME")
+	_ = config.BindEnv(ConfigPostgresSslmode, "PGSSLMODE")
+
+	// Set defaults
 	config.SetDefault(ConfigHTTPAddr, ":8080")
 	config.SetDefault(ConfigTunnelRefreshInterval, 1*time.Second)
-	config.SetDefault(ConfigTunnelRestartInterval, 15*time.Second)
+	config.SetDefault(ConfigTunnelRestartInterval, 5*time.Second)
 	config.SetDefault(ConfigTunnelNormalSshUser, "passage")
 	config.SetDefault(ConfigTunnelNormalDialTimeout, 15*time.Second)
 	config.SetDefault(ConfigTunnelNormalKeepaliveInterval, 1*time.Minute)
 	config.SetDefault(ConfigTunnelReverseBindHost, "0.0.0.0")
 	config.SetDefault(ConfigTunnelReverseSshdPort, 22)
-	config.SetDefault(ConfigTunnelReverseEnableIndividualSSHD, true)
-	config.SetDefault(ConfigDiscoveryType, "static")
-	config.SetDefault(ConfigDiscoveryStaticHost, "localhost")
+	config.SetDefault(ConfigDiscoveryType, "consul")
 	config.SetDefault(ConfigKeystoreType, "in-memory")
 	config.SetDefault(ConfigLogLevel, "info")
 	config.SetDefault(ConfigLogFormat, "text")
@@ -144,15 +145,18 @@ func startApplication(bootFuncs ...interface{}) error {
 	defer cancel()
 
 	go func() {
+		log.Get().Named("Passage").Infow("Starting", zap.String("version", version))
+
 		if err := app.Start(startCtx); err != nil {
 			switch v := dig.RootCause(err).(type) {
 			case configError:
-				logrus.Fatalf("config error: %v", v)
+				log.Get().Fatalf("Config error: %v", v)
 			default:
-				logrus.Fatalf("startup error: %v", v)
+				log.Get().Fatalf("Startup error: %v", v)
 			}
 		}
 	}()
+	defer log.Get().Named("Passage").Info("Shutdown complete")
 
 	<-app.Done()
 
@@ -160,46 +164,55 @@ func startApplication(bootFuncs ...interface{}) error {
 	defer cancel()
 
 	if err := app.Stop(stopCtx); err != nil {
-		logrus.Fatalf("shutdown error: %v", dig.RootCause(err))
+		log.Get().Fatalf("Shutdown error: %v", dig.RootCause(err))
 	}
 
 	return nil
 }
 
-func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.DiscoveryService) (tunnel.API, error) {
+func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.Service) (tunnel.API, error) {
 	return tunnel.API{
 		SQL:              postgres.NewClient(sql),
 		DiscoveryService: discovery,
 		Keystore:         keystore,
-		Stats:            stats.WithPrefix("tunnel"),
+		Stats:            stats,
 	}, nil
 }
 
-func newTunnelDiscoveryService(config *viper.Viper) (discovery.DiscoveryService, error) {
-	var discoveryService discovery.DiscoveryService
+func newTunnelDiscoveryService(config *viper.Viper, log *log.Logger) (discovery.Service, error) {
+	var discoveryService discovery.Service
 	switch config.GetString(ConfigDiscoveryType) {
-	case "srv":
-		discoveryService = discoverySRV.Discovery{
-			SrvRegistry: config.GetString(ConfigDiscoverySrvRegistry),
-			Prefix:      config.GetString(ConfigDiscoverySrvPrefix),
+	case "consul":
+		consulApi, err := consul.NewClient(consul.DefaultConfig())
+		if err != nil {
+			return nil, errors.Wrap(err, "could not init Consul client")
 		}
-		break
 
-	case "static":
-		discoveryService = discoveryStatic.Discovery{
-			Host: config.GetString(ConfigDiscoveryStaticHost),
+		// Get private IP address
+		privateIp, err := sockaddr.GetPrivateIP()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not determine private IP")
 		}
-		break
 
-	case "dns":
-		discoveryService = discoveryDNS.Discovery{
-			HostNormal:  config.GetString(ConfigDiscoveryDnsHostNormal),
-			HostReverse: config.GetString(ConfigDiscoveryDnsHostReverse),
-		}
+		// Initialize Consul discovery service
+		discoveryService = discoveryConsul.NewConsulDiscovery(
+			consulApi,
+			privateIp,
+			30*time.Second,
+		)
 
 	default:
 		return nil, configError{"unknown discovery type"}
 	}
+
+	// Wait for Service Discovery to come online before allowing the boot to proceed
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := discoveryService.Wait(ctx); err != nil {
+		log.Fatalw("Discovery service did not come online", zap.Error(err))
+		return nil, nil
+	}
+
 	return discoveryService, nil
 }
 
@@ -273,9 +286,12 @@ func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, err
 	}
 }
 
-func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) *mux.Router {
+func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger) *mux.Router {
 	router := mux.NewRouter()
-	server := &http.Server{Addr: config.GetString(ConfigHTTPAddr), Handler: router}
+	bindAddr := config.GetString(ConfigHTTPAddr)
+	server := &http.Server{Addr: bindAddr, Handler: router}
+
+	logger := log.Named("HTTP")
 
 	// Log every request.
 	router.Use(LoggingMiddleware(logger))
@@ -291,10 +307,13 @@ func newHTTPServer(lc fx.Lifecycle, config *viper.Viper, logger *logrus.Logger) 
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithField("addr", server.Addr).Debug("http server start")
+			logger.With(zap.String("addr", bindAddr)).Infof("Listening on %s", bindAddr)
+
 			go func() {
 				if err := server.ListenAndServe(); err != nil {
-					logrus.Fatal(errors.Wrap(err, "http"))
+					if !errors.Is(err, http.ErrServerClosed) {
+						logger.Errorw("Listener", zap.Error(err))
+					}
 				}
 			}()
 			return nil
@@ -329,41 +348,17 @@ func newConfig() (*viper.Viper, error) {
 	return config, nil
 }
 
-func newLogger(config *viper.Viper) *logrus.Logger {
-	logger := logrus.New()
-	switch config.GetString(ConfigLogLevel) {
-	case "trace":
-		logger.SetLevel(logrus.TraceLevel)
-	case "debug":
-		logger.SetLevel(logrus.DebugLevel)
-	case "info":
-		logger.SetLevel(logrus.InfoLevel)
-	case "warning", "warn":
-		logger.SetLevel(logrus.WarnLevel)
-	case "error":
-		logger.SetLevel(logrus.ErrorLevel)
-	default:
-		logger.SetLevel(logrus.InfoLevel)
-	}
-
-	switch config.GetString(ConfigLogFormat) {
-	case "json":
-		logger.SetFormatter(&logrus.JSONFormatter{})
-	default:
-		logger.SetFormatter(&logrus.TextFormatter{})
-	}
-	return logger
+func newLogger(config *viper.Viper) *log.Logger {
+	// Init new zap
+	log.Init(
+		config.GetString(ConfigLogLevel),
+		config.GetString(ConfigLogFormat),
+	)
+	return log.Get()
 }
 
 // newPostgres initializes a connection to the Postgres database
-func newPostgres(lc fx.Lifecycle, logger *logrus.Logger, config *viper.Viper) (*sqlx.DB, error) {
-	config.SetDefault(ConfigPostgresHost, os.Getenv("PGHOST"))
-	config.SetDefault(ConfigPostgresPort, os.Getenv("PGPORT"))
-	config.SetDefault(ConfigPostgresUser, os.Getenv("PGUSER"))
-	config.SetDefault(ConfigPostgresPass, os.Getenv("PGPASSWORD"))
-	config.SetDefault(ConfigPostgresDbName, os.Getenv("PGDBNAME"))
-	config.SetDefault(ConfigPostgresSslmode, os.Getenv("PGSSLMODE"))
-
+func newPostgres(lc fx.Lifecycle, config *viper.Viper) (*sqlx.DB, error) {
 	db, err := sqlx.Connect("postgres", getPostgresConnString(config))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not connect to postgres")
@@ -413,12 +408,12 @@ func formatConnString(mapping map[string]string) string {
 // newHealthcheck provides a healthcheck registry and attaches to the HTTP server
 func newHealthcheck(router *mux.Router) *healthcheckManager {
 	mgr := newHealthcheckManager()
-	router.Handle("/healthcheck", mgr)
+	router.Handle("/healthz", mgr)
 	return mgr
 }
 
 // newStats initializes a Stats client for the server
-func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
+func newStats(config *viper.Viper) (stats.Stats, error) {
 	var statsdClient statsd.ClientInterface
 
 	if statsdAddr := config.GetString(ConfigStatsdAddr); statsdAddr != "" {
@@ -430,9 +425,7 @@ func newStats(config *viper.Viper, logger *logrus.Logger) (stats.Stats, error) {
 	} else {
 		statsdClient = &statsd.NoOpClient{}
 	}
-	st := stats.
-		New(statsdClient, logger).
-		WithPrefix("passage")
+	st := stats.New(statsdClient)
 	if version != "" {
 		st = st.WithTags(stats.Tags{"version": version})
 	}

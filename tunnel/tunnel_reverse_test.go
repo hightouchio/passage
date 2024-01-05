@@ -50,7 +50,6 @@ package tunnel
 //		st := stats.New(&statsd.NoOpClient{}, logger)
 //
 //		ctx = stats.InjectContext(ctx, st)
-//		ctx = injectCtxLifecycle(ctx, lifecycleLogger{st})
 //
 //		keystore := keystoreInMemory.New()
 //		database := MockReverseDatabase{}

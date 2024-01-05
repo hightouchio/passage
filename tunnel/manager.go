@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 )
@@ -21,9 +23,10 @@ type Manager struct {
 	// TunnelOptions are the config options for the tunnel server we run.
 	TunnelOptions
 
-	RefreshDuration       time.Duration
+	RefreshInterval       time.Duration
 	TunnelRestartInterval time.Duration
 	Stats                 stats.Stats
+	ServiceDiscovery      discovery.Service
 
 	tunnels     map[uuid.UUID]runningTunnel
 	supervisors map[uuid.UUID]*Supervisor
@@ -31,84 +34,138 @@ type Manager struct {
 	// lastRefresh records when the last successful refresh took place. indicating that nothing is frozen
 	lastRefresh time.Time
 
-	lock sync.Mutex
-	stop chan bool
+	logger *log.Logger
+
+	lock         sync.Mutex
+	stop         chan any
+	doneStopping chan any
 }
 
-func NewManager(st stats.Stats, listFunc ListFunc, tunnelOptions TunnelOptions, refreshDuration, tunnelRestartInterval time.Duration) *Manager {
+func NewManager(
+	logger *log.Logger,
+	st stats.Stats,
+	listFunc ListFunc,
+	tunnelOptions TunnelOptions,
+	refreshDuration, tunnelRestartInterval time.Duration,
+	serviceDiscovery discovery.Service,
+) *Manager {
 	return &Manager{
-		Stats:    st,
-		ListFunc: listFunc,
-
+		ListFunc:              listFunc,
 		TunnelOptions:         tunnelOptions,
-		RefreshDuration:       refreshDuration,
+		RefreshInterval:       refreshDuration,
 		TunnelRestartInterval: tunnelRestartInterval,
+
+		Stats:            st,
+		ServiceDiscovery: serviceDiscovery,
+		logger:           logger,
 
 		tunnels:     make(map[uuid.UUID]runningTunnel),
 		supervisors: make(map[uuid.UUID]*Supervisor),
 
-		stop: make(chan bool),
+		stop:         make(chan any),
+		doneStopping: make(chan any),
 	}
 }
 
-func (m *Manager) Start(ctx context.Context) {
-	m.Stats.SimpleEvent("manager.start")
-	m.startWorker()
-}
-
-func (m *Manager) Stop(ctx context.Context) {
-	m.Stats.SimpleEvent("manager.stop")
-	m.stop <- true
-}
-
-func (m *Manager) startWorker() {
-	ticker := time.NewTicker(m.RefreshDuration)
-	defer ticker.Stop()
+func (m *Manager) Start() {
+	m.logger.Info("Starting")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	for {
-		select {
-		case <-ticker.C:
-			if err := m.refreshTunnels(ctx); err != nil {
-				logrus.WithError(err).Error("could not refresh tunnels from DB")
-				continue
-			}
-			m.refreshSupervisors(ctx)
-			m.lastRefresh = time.Now()
 
-		case <-m.stop:
-			return
+	// Once the stop channel is closed (by the Stop() function), cancel the context
+	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
+	go func() {
+		<-m.stop
+
+		m.logger.Info("Stopping")
+		cancel()
+	}()
+
+	go func() {
+		// Signal that the manager is done stopping once this function exits
+		defer close(m.doneStopping)
+
+		for {
+			select {
+			case <-ctx.Done():
+				// Replace `tunnels` with an empty map
+				m.tunnels = make(map[uuid.UUID]runningTunnel)
+
+				// Refresh supervisors again, which should shut them all down.
+				m.refreshSupervisors(ctx)
+				return
+
+			default:
+				if err := m.refreshTunnels(ctx); err != nil {
+					m.logger.Errorw("refresh tunnels from DB", zap.Error(err))
+					continue
+				}
+
+				m.refreshSupervisors(ctx)
+				m.lastRefresh = time.Now()
+
+				time.Sleep(m.RefreshInterval)
+			}
 		}
-	}
+	}()
+}
+
+func (m *Manager) Stop() {
+	// Trigger the manager to shut down
+	close(m.stop)
+
+	// Wait for the manager to completely shut down
+	<-m.doneStopping
 }
 
 func (m *Manager) refreshSupervisors(ctx context.Context) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
+	shutdownWg := sync.WaitGroup{}
+	doShutdown := func(supervisor *Supervisor) {
+		shutdownWg.Add(1)
+		go func() {
+			defer shutdownWg.Done()
+			supervisor.Stop()
+		}()
+	}
+
 	// shut down supervisors or supervisors that need a restart
 	for tunnelID, supervisor := range m.supervisors {
 		tunnel, stillExists := m.tunnels[tunnelID]
+
 		if !stillExists || tunnel.needsRestart {
-			supervisor.Stop()
+			doShutdown(supervisor)
 			delete(m.supervisors, tunnelID)
 		}
+	}
+
+	// Wait for all supervisors to shut down
+	shutdownWg.Wait()
+
+	// If the context has been cancelled, we can end it here.
+	if ctx.Err() != nil {
+		return
 	}
 
 	// start new supervisors
 	for tunnelID, tunnel := range m.tunnels {
 		if _, alreadyRunning := m.supervisors[tunnelID]; !alreadyRunning {
-			st := m.Stats.WithEventTags(stats.Tags{"tunnel_id": tunnelID.String()})
-			ctx = stats.InjectContext(ctx, st)
+			supervisor := NewSupervisor(
+				tunnel,
+				m.Stats,
+				m.TunnelOptions,
+				m.TunnelRestartInterval,
+				m.ServiceDiscovery,
+			)
 
-			supervisor := NewSupervisor(tunnel, st, m.TunnelOptions, m.TunnelRestartInterval)
-			go supervisor.Start(ctx)
+			go supervisor.Start()
 			m.supervisors[tunnelID] = supervisor
 		}
 	}
 
-	m.Stats.Gauge("tunnel.count", float64(len(m.supervisors)), nil, 1)
+	m.Stats.Gauge(StatTunnelCount, float64(len(m.supervisors)), nil, 1)
 }
 
 // runningTunnel is useful because it has more stateful information about the tunnel such as if it needs to restart
@@ -146,7 +203,7 @@ func (m *Manager) refreshTunnels(ctx context.Context) error {
 
 // Check performs a healthcheck on the manager
 func (m *Manager) Check(ctx context.Context) error {
-	maxDelay := m.RefreshDuration * 2
+	maxDelay := m.RefreshInterval * 2
 	secondsSinceLastRefresh := time.Now().Sub(m.lastRefresh)
 	if secondsSinceLastRefresh > maxDelay {
 		return fmt.Errorf("manager has not refreshed in %0.2f seconds. max: %0.2f", secondsSinceLastRefresh.Seconds(), maxDelay.Seconds())

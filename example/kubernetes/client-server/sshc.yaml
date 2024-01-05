@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: test
+  name: openssh-client
+  labels:
+    app: openssh-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openssh-client
+  template:
+    metadata:
+      name: openssh-client
+      labels:
+        app: openssh-client
+    spec:
+      containers:
+        - name: openssh-client
+          image: lscr.io/linuxserver/openssh-server:latest
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: PASSWORD_ACCESS
+              value: "false"
+            - name: SUDO_ACCESS
+              value: "false"
+            - name: "LOG_STDOUT"
+              value: "true"
+
+          volumeMounts:
+            - name: ssh
+              subPath: init.d
+              mountPath: /custom-cont-init.d/init
+
+            - name: ssh
+              subPath: key.pem
+              mountPath: /config/keys/passage.pem
+              readOnly: false
+
+      restartPolicy: Always
+
+      volumes:
+        - name: ssh
+          configMap:
+            name: openssh-client
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: test
+  name: openssh-client
+data:
+  init.d: |
+    #!/bin/bash
+    cp /config/keys/passage.pem /tmp/passage.pem
+    chmod 0400 /tmp/passage.pem
+    
+    ssh -i /tmp/passage.pem \
+      -R 0.0.0.0:5050:upstream-nginx:80 \
+      192.168.0.222 -p 2222 -o ExitOnForwardFailure=yes
+
+  key.pem: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIJKQIBAAKCAgEAzNitlQk8e/itJ80+5wJ4ES0muYxOvM4SsBUwAPYE0F4mqATH
+    xM47eHlErfAyUnO4rcpzTW92LPOAb0dhPSIWTQBGxER8QrhN9svO41TxMNGiYWHf
+    DB8WIuXpIFTiRFe/gCQS/qBqv/TMdY1qjy38eZZtYbT/EVtWhSE6xf7a5tm+vIuv
+    mw66DoezQFE2yPc/filmbOxTXrVLm5HxIu3JcxXX3AHcg4iO65sEekCBZ//ZyRb4
+    TRMNzja48I/JjPfv9CYnVKOtQBMrFVWwtQGeEcHtgZlva0UrLyG0d/1Qm/jY/NmO
+    Arnn4g+JINlcfLTmKwNK8Z3cA0cEMN4YwRpsit+sLVi0AaXKde5Qw2rkOWLAwePa
+    LDDHKxjcjzlpyvg2USDLzmcVtzEmdBQ1VCYSghLNSKjYG8AIdVuSB0ywFfy0RSGX
+    sQqQesBCv5tD9twP6Tb6HzaFqn/86niqlzHMseJ7eS0Odnt35GaHes6r8s2ulOrw
+    63vPfBdbBHdCboL0lDhyTcKsgJZia70MF9oXgCxP1sO7hURd7JY3dmJX+dSDZPzl
+    HUcYCstMbOHiyI78H13sRYPCaUfKZOBGSK472Tm+6uU1bXKsDqX5/kxZQuhqF1bl
+    M8DOOJCFfbYytkkpQ+5PEIr2dKBbXjDEAzIlcpxplgtklTbIbvZox5QCKW0CAwEA
+    AQKCAgEArZPJeqlJ7E6rAzgC3iMUdJGK591BdvEzmqtJcvcE2z98iBEM6fJLKGmx
+    zaXkLkPKsNEE5Q/W1n47TY/xkKjKttLOJE9X7/1WaxMGK1H10oVAkD4rj4zj6Axj
+    f7cNyBWGuuFWixaJfkDD47RCIDM6ZhkWdJ23KRD5fnPK5q1u9gB6hC/lTIGtHNTW
+    CmEHCEGiNpiEJzYV6wG6oIeJCizt76wJrm6RWY+kc3Z209THEsYU2DWzjzPfFeb+
+    zTE5+064sGyIFUtgahQUBM8InkhRlgB67b+DTyVcU2K/FpG69X9m9tKuaBb5q2+4
+    pfIpUa7D/pyaq6Q1Iz3RCkuYNEDcyUhi6BjCPlLBRsxcMAhJNLtLwqcxJ1OL1ycQ
+    wz8N92r2c7/L2kxCoZqkVn4KdxPvHvcD4vX9HOERKuKqxezd4glJkgpHfxJPc2+0
+    8J2E3ChCenLAlqcPu4oucpAsMqfkUwNaCKO0CeOqUoETb+VJx6a6HV0LT8KGBmvD
+    tijcE0zRmKdr8tjq3As6aPOAEYo6qAESk2MO4ReUPmMj573iIqVvSnBs8xlGXJ5L
+    doi+izZY2e0zYNmBolL5zfBRbmr/9L/nnh2wVtrCDdrFqo3GZ2rUv7lpRy6+CVq4
+    SLDIIhikCMtyVZtZROb8RiQNorSrFYDc3Qkcm9579Iuw8UE2fSECggEBAOef29qU
+    OSUN4aL7XOqSafk/aTLJ6fZFTFsmXUpxfELTdE6i2R/sNDN/gTT3i2ZskxauvWPe
+    Pj77dNBhchpnnH4KpFRy1v9r/4zKdmP/U9VrxhEX/4Wu73Bz9UmMZUlfItTdUWoL
+    g/ERuNa+RiostYsu0avA0Dd0S+wrKQO2Rlr9M6C1idas4J5rZpl5bNjEieS1WnkK
+    IQ/E9adAePqV35k8dLRLX6JR2U0Kgi16WII28BPjxKUf91eHMjfpSGjXkNqVqex3
+    rtxuZYl+txz6F11692UxMjFBGdARazfkCvsjJQX9YeURvGzydsdrUws4l2BjCm6v
+    ++rGpTz2V0QnoqUCggEBAOJnZd/cb+3GmTzb0V13xI7kxun1namAxjnoGZ8x9NIr
+    utcmU1BxMPKbbsGH6jue25viYqN7kIlvmSisfSJxyLp8mhz08JF4xPHHB8R2MJg0
+    Qvy/zli6gZzkZCCBeVQIHBuHuUYI5pDHN2Xh61Zwh4umS9Kgfv9r0iIFm6z+n7RU
+    ArCGxyK0ihqEt6zSkeFHqrFg/5Bs3EIbhVqKF2a+npxQsGa7xedMEILaaFT85OpN
+    TJR/6tLQBzxR9rSqUtrcSI6HzojnUrFAIh3X+ygxwxBBYqhQYSHsQhn0qtXkHM9h
+    g5gWmOU/WmJXkfwGPK6+ApR5NjbhMLBzyQ2Q0pf7GSkCggEBAIlEVK/B/ee2xUyo
+    eNVPNdyPttFxleTsBqdSIiF3BfQ4ion7un9PpVQLsU/pkER//d+IaRbhY7RBo2XH
+    Ci8ZzkVoGyEs+btfjpAqgGUcsNsfRr9koHriRGY5YllXCcOkzOinzJLzBht8rDUf
+    iEeAPYqhkYKe/waONlxc666WfDV6LvmD/I8r3uYjsicsLdR9DVdsHpTy6ssEp6yZ
+    6dhfr6aJjIQ40xFIPmaI3sMC6acp1beD2UsemZ/WsG0wJEh10BOqdIx+FTPvfN8y
+    KGTU1boBoNHoiN1lvl1vpUH3NIbGui9FjZmKnEdYngnq0ckpnZRyvYEBbGMjnFN3
+    jhoG/z0CggEAD0wFKhbuyRX+DIqdnr8U3MLAXdZmjKlSu17fPE5XyEuEGD1Sq8C6
+    Geo+lXzlapnVJLcrCviyT1bm9kSRP96IPXFlyEcUaf/K7rsP30pNBjuhuwoKmxwe
+    3cbgrQGSfQb/Pyzwa7b2PRn4uD2HdROtVNYrkVOewQs762iNmCasC7cRZ3PzyHiC
+    TEBjWJ3xlVMOSWXQXqW8TAsn+3IRGrQOa2lYQdi2CmatRuoS2osrvFj0r6Pk7dF4
+    a67uCE7pwjfX/ylV3xIiGC/JHlMVeSXDlDmWvOCRb4VTAgXx9PmwqKJiDciZFAQv
+    yy03g9u4BeZ4ridybkrQy1tHXk9Gq1Yf4QKCAQAXBff58Jvz7nTg+onWe1BVQeLC
+    5KfzT3B/TaF7PwrEi2Tymh/ecL+nuQJt5T2m+tU/gtbHmFmV8wGRRdiWyX/WzoWg
+    Zvc2XQWiwnZFbp1Gb/I3/S/CMcMV6qWupuPORL/bKnfvYze7I9yYAHV62NKU3+xv
+    dG8zZoO6BPstb63pXb7gFLvM956zI3l2lgqY9Xwgxso36ZLkVny4zhjsTra9995k
+    5mNDPH/L17v8P7BkjBUtnbNaTKIiAD86g2L3DRZijoEj05dVYk7O9EpCqW2KbBSm
+    X6hEgptSmZNQ4aQ/w8O+xRBr/r/JF7eJBn+YHHr0xhCfThaWA4IuxN//xsgt
+    -----END RSA PRIVATE KEY-----

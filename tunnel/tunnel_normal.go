@@ -3,6 +3,8 @@ package tunnel
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
@@ -14,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -23,132 +24,136 @@ type NormalTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	TunnelPort  int     `json:"tunnelPort"`
-	SSHUser     string  `json:"sshUser"`
-	SSHHost     string  `json:"sshHost"`
-	SSHPort     int     `json:"sshPort"`
-	ServiceHost string  `json:"serviceHost"`
-	ServicePort int     `json:"servicePort"`
-	HTTPProxy   bool    `json:"httpProxy"`
-	Error       *string `json:"error"`
+	SSHUser     string `json:"sshUser"`
+	SSHHost     string `json:"sshHost"`
+	SSHPort     int    `json:"sshPort"`
+	ServiceHost string `json:"serviceHost"`
+	ServicePort int    `json:"servicePort"`
+
+	// Deprecated
+	TunnelPort int `json:"tunnelPort"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
 }
 
-func (t NormalTunnel) Start(ctx context.Context, options TunnelOptions) error {
-	err := t.start(ctx, options)
+func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	logger := log.FromContext(ctx)
+
+	// Establish a connection to the remote SSH server
+	sshClient, keepalive, err := NewSSHClient(ctx, SSHClientOptions{
+		Host: t.SSHHost,
+		Port: t.SSHPort,
+
+		// Select the SSH user to use for the client connection
+		//	If the tunnel has explicitly set a user, use that.
+		//	If not, fall back to the default.
+		User: firstNotEmptyString(t.SSHUser, t.clientOptions.User),
+
+		// Select the SSH auth methods to use for the client connection
+		GetKeySigners: t.getAuthSigners,
+
+		// Pass these options in from the global config
+		DialTimeout:       t.clientOptions.DialTimeout,
+		KeepaliveInterval: t.clientOptions.KeepaliveInterval,
+	})
 	if err != nil {
-		if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, err.Error()); err != nil {
-			return errors.Wrap(err, "failed to persist tunnel start error")
-		}
-		return err
+		return errors.Wrap(err, "SSH connect")
 	}
-	return nil
-}
+	statusUpdate <- StatusUpdate{StatusBooting, "SSH connection established"}
 
-func (t NormalTunnel) start(ctx context.Context, options TunnelOptions) error {
-	lifecycle := getCtxLifecycle(ctx)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Get a list of key signers to use for authentication
-	keySigners, err := t.getAuthSigners(ctx)
-	if err != nil {
-		return bootError{event: "generate_auth_signers", err: err}
-	}
-
-	// Determine SSH user to use, either from the database or from the config.
-	var sshUser string
-	if t.SSHUser != "" {
-		sshUser = t.SSHUser
-	} else {
-		sshUser = t.clientOptions.User
-	}
-
-	// Dial external SSH server
-	lifecycle.BootEvent("remote_dial", stats.Tags{"ssh_host": t.SSHHost, "ssh_port": t.SSHPort})
-	addr := net.JoinHostPort(t.SSHHost, strconv.Itoa(t.SSHPort))
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return bootError{event: "remote_dial", err: errors.Wrapf(err, "resolve addr %s", addr)}
-	}
-	sshConn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		return bootError{event: "remote_dial", err: err}
-	}
-	defer sshConn.Close()
-	// Configure TCP keepalive for SSH connection
-	sshConn.SetKeepAlive(true)
-	sshConn.SetKeepAlivePeriod(t.clientOptions.KeepaliveInterval)
-
-	// Init SSH connection protocol
-	lifecycle.BootEvent("ssh_connect", stats.Tags{"ssh_user": sshUser, "ssh_auth_method_count": len(keySigners)})
-	c, chans, reqs, err := ssh.NewClientConn(
-		sshConn, addr,
-		&ssh.ClientConfig{
-			User:            sshUser,
-			Auth:            []ssh.AuthMethod{ssh.PublicKeys(keySigners...)},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		},
-	)
-	if err != nil {
-		return bootError{event: "ssh_connect", err: err}
-	}
-	sshClient := ssh.NewClient(c, chans, reqs)
-
-	// Start sending keepalive packets to the upstream SSH server
+	// Shut down the tunnel if the SSH connection ends
 	go func() {
-		if err := sshKeepaliver(ctx, sshConn, sshClient, t.clientOptions.KeepaliveInterval, t.clientOptions.DialTimeout); err != nil {
-			lifecycle.Error(errors.Wrap(err, "ssh keepalive failed"))
-			cancel()
+		if err := sshClient.Wait(); err != nil {
+			cancel(errors.Wrap(err, "SSH connection closed"))
 		}
 	}()
 
-	// Configure TCPForwarder
-	forwarder := &TCPForwarder{
-		BindAddr:          net.JoinHostPort(options.BindHost, strconv.Itoa(t.TunnelPort)),
-		HTTPProxyEnabled:  t.HTTPProxy,
-		KeepaliveInterval: 5 * time.Second,
+	// Listen for keepalive failures
+	go func() {
+		defer cancel(nil)
 
-		// Implement GetUpstreamConn by initiating upstream connections through the SSH client.
-		GetUpstreamConn: func(conn net.Conn) (io.ReadWriteCloser, error) {
-			serviceConn, err := sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
-			if err != nil {
-				return nil, err
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-keepalive:
+			// If the channel closed, just ignore it
+			if !ok {
+				return
 			}
-			return serviceConn, err
-		},
+			statusUpdate <- StatusUpdate{StatusError, fmt.Sprintf("SSH keepalive failed: %s", err.Error())}
+		}
+	}()
 
-		Lifecycle: lifecycle,
-		Stats:     stats.GetStats(ctx),
+	// Function which gets a connection to the upstream server
+	getUpstreamConn := func() (io.ReadWriteCloser, error) {
+		return sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
+	}
+
+	// Start upstream reachability test
+	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
+
+	// If the context has been cancelled at this point in time, stop the tunnel.
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
+	//	tunnel listener and a remote SSH connection.
+	forwarder := &TCPForwarder{
+		Listener:          listener,
+		GetUpstreamConn:   getUpstreamConn,
+		KeepaliveInterval: 5 * time.Second,
+		Stats:             stats.GetStats(ctx),
+		logger:            logger.Named("Forwarder"),
 	}
 	defer forwarder.Close()
 
-	// Start tunnel listener
-	if err := forwarder.Listen(); err != nil {
-		switch err.(type) {
-		case bootError:
-			lifecycle.BootError(err)
-		default:
-			lifecycle.Error(err)
+	// Start port forwarding
+	logger.Debug("Starting forwarder")
+	go func() {
+		defer logger.Debug("Forwarder stopped")
+		if err := forwarder.Serve(); err != nil {
+			// If it's simply a closed error, we can return without logging an error.
+			if !errors.Is(err, net.ErrClosed) {
+				cancel(errors.Wrap(err, "forwarder serve"))
+			}
+		}
+	}()
+
+	// Continually report tunnel status until the tunnel shuts down
+	go intervalStatusReporter(ctx, statusUpdate, func() StatusUpdate {
+		// If we're at this point in the tunnel, we're online
+		return StatusUpdate{Status: StatusReady, Message: "Tunnel is online"}
+	})
+
+	<-ctx.Done()
+
+	// If the context was simply cancelled (with no error), return nil
+	//	If the context was cancelled with a real error, return that
+	if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
+		return cause
+	} else {
+		return nil
+	}
+}
+
+// firstNotEmptyString returns the first string that is not empty
+func firstNotEmptyString(options ...string) string {
+	if len(options) == 0 {
+		return ""
+	}
+
+	for _, str := range options {
+		if str != "" {
+			return str
 		}
 	}
 
-	// Start port forwarding
-	go func() {
-		defer cancel()
-		forwarder.Serve()
-	}()
-
-	// Set tunnel error to empty once it successfully initialized the session
-	if err := t.services.SQL.UpdateNormalTunnelError(ctx, t.ID, ""); err != nil {
-		return errors.Wrap(err, "failed to unset tunnel error to empty")
-	}
-
-	<-ctx.Done()
-	return nil
+	return ""
 }
 
 // getAuthSigners finds the SSH keys that are configured for this tunnel and structure them for use by the SSH client library
@@ -180,26 +185,14 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 	return signers, nil
 }
 
-func (t NormalTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost(Normal, t.ID)
-	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
-	}
-
-	return ConnectionDetails{
-		Host: tunnelHost,
-		Port: t.TunnelPort,
-	}, nil
-}
-
 // NormalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type NormalTunnelServices struct {
 	SQL interface {
 		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
-		UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error
 	}
 	Keystore keystore.Keystore
-	Logger   *logrus.Logger
+
+	Discovery discovery.Service
 }
 
 func InjectNormalTunnelDependencies(f func(ctx context.Context) ([]NormalTunnel, error), services NormalTunnelServices, options SSHClientOptions) ListFunc {
@@ -228,10 +221,8 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHUser == t2.SSHUser &&
 		t.SSHHost == t2.SSHHost &&
 		t.SSHPort == t2.SSHPort &&
-		t.TunnelPort == t2.TunnelPort &&
 		t.ServiceHost == t2.ServiceHost &&
-		t.ServicePort == t2.ServicePort &&
-		t.HTTPProxy == t2.HTTPProxy
+		t.ServicePort == t2.ServicePort
 }
 
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
@@ -242,7 +233,6 @@ func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 		SSHPort:     tunnel.SSHPort,
 		ServiceHost: tunnel.ServiceHost,
 		ServicePort: tunnel.ServicePort,
-		HTTPProxy:   tunnel.HTTPProxy,
 	}
 }
 
@@ -252,20 +242,15 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		ID:          record.ID,
 		CreatedAt:   record.CreatedAt,
 		Enabled:     record.Enabled,
-		TunnelPort:  record.TunnelPort,
 		SSHUser:     record.SSHUser.String,
 		SSHHost:     record.SSHHost,
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
-		HTTPProxy:   record.HTTPProxy,
+		TunnelPort:  record.TunnelPort,
 	}
 }
 
 func (t NormalTunnel) GetID() uuid.UUID {
 	return t.ID
-}
-
-func (t NormalTunnel) GetError() *string {
-	return t.Error
 }

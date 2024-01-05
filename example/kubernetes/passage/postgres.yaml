@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: passage
+  name: postgres
+  labels:
+    app: postgres
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      name: postgres
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:11.6
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: POSTGRES_USER
+              value: passage
+            - name: POSTGRES_DB
+              value: passage
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: trust
+
+      restartPolicy: Always
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: passage
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  type: ClusterIP
+
+  ports:
+    - name: "postgres"
+      port: 5432
+      targetPort: 5432

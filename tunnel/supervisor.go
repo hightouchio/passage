@@ -2,7 +2,10 @@ package tunnel
 
 import (
 	"context"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/tunnel/discovery"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -10,77 +13,98 @@ import (
 type Supervisor struct {
 	Tunnel        Tunnel
 	TunnelOptions TunnelOptions
-	Retry         time.Duration
-	Stats         stats.Stats
 
-	stop chan bool
+	Retry            time.Duration
+	Stats            stats.Stats
+	ServiceDiscovery discovery.Service
+
+	// stop is the signal to stop the tunnel
+	stop chan any
+
+	// isStopped is the signal when the tunnel is stopped
+	doneStopping chan any
 }
 
-func NewSupervisor(tunnel Tunnel, st stats.Stats, options TunnelOptions, retry time.Duration) *Supervisor {
+func NewSupervisor(
+	tunnel Tunnel,
+	st stats.Stats,
+	options TunnelOptions,
+	retry time.Duration,
+	serviceDiscovery discovery.Service,
+) *Supervisor {
 	return &Supervisor{
-		Tunnel:        tunnel,
-		TunnelOptions: options,
-		Retry:         retry,
-		Stats:         st,
+		Tunnel:           tunnel,
+		TunnelOptions:    options,
+		Retry:            retry,
+		Stats:            st,
+		ServiceDiscovery: serviceDiscovery,
 
-		stop: make(chan bool),
+		stop:         make(chan any),
+		doneStopping: make(chan any),
 	}
 }
 
-func (s *Supervisor) Start(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func (s *Supervisor) Start() {
+	ctx, cancel := context.WithCancel(context.Background())
 
-	initialRun := make(chan bool)
+	logger := loggerForTunnel(s.Tunnel, log.FromContext(ctx))
+	ctx = log.Context(
+		stats.InjectContext(ctx, statsForTunnel(s.Tunnel, s.Stats)),
+		logger,
+	)
+
+	// Serve the tunnel via a TCP socket
+	serveStrategy := TCPServeStrategy(s.TunnelOptions.BindHost, s.ServiceDiscovery, s.Retry)
+
+	// Once the stop channel is closed (by the Stop() function), cancel the context
+	//	We propagate the cancellation to the tunnel's context, which will cause the tunnel to shut down internally
 	go func() {
-		ticker := time.NewTicker(s.Retry)
-		defer ticker.Stop()
+		<-s.stop
 
+		logger.Info("Shutting down tunnel")
+		cancel()
+	}()
+
+	go func() {
+		// Signal that the tunnel is stopped once this function exits
+		defer close(s.doneStopping)
+
+		// Retry if the serve strategy fails
 		for {
 			select {
 			case <-ctx.Done():
 				return
 
 			default:
-				select {
-				case <-ticker.C:
-				case <-initialRun:
+				if err := serveStrategy(ctx, s.Tunnel); err != nil {
+					logger.With(zap.Error(err)).Errorf("Error: %s", err.Error())
 				}
 
-				func() {
-					// Build visibility interfaces
-					st := s.Stats.
-						WithPrefix("tunnel").
-						WithTags(stats.Tags{
-							"tunnel_id": s.Tunnel.GetID().String(),
-						})
-					lifecycle := lifecycleLogger{st}
-					lifecycle.Start()
-					defer lifecycle.Stop()
+				// If the context is cancelled, immediately stop
+				if ctx.Err() != nil {
+					return
+				}
 
-					// Inject visibility interfaces into context
-					ctx, cancel := context.WithCancel(ctx)
-					defer cancel()
-					ctx = stats.InjectContext(ctx, st)
-					ctx = injectCtxLifecycle(ctx, lifecycle)
-
-					if err := s.Tunnel.Start(ctx, s.TunnelOptions); err != nil {
-						switch err.(type) {
-						case bootError:
-							lifecycle.BootError(err)
-						default:
-							lifecycle.Error(err)
-						}
-					}
-				}()
+				time.Sleep(s.Retry)
 			}
 		}
 	}()
-
-	initialRun <- true
-	<-s.stop
 }
 
 func (s *Supervisor) Stop() {
+	// Trigger the tunnel to shut down
 	close(s.stop)
+
+	// Wait for the tunnel to completely shut down
+	<-s.doneStopping
+}
+
+func loggerForTunnel(tunnel Tunnel, log *log.Logger) *log.Logger {
+	return log.Named("Tunnel").With(
+		zap.String("tunnel_id", tunnel.GetID().String()),
+	)
+}
+
+func statsForTunnel(tunnel Tunnel, st stats.Stats) stats.Stats {
+	return st.WithTags(stats.Tags{"tunnel_id": tunnel.GetID().String()})
 }

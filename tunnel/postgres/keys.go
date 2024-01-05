@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
@@ -59,24 +60,15 @@ func scanKey(scan scanner) (Key, error) {
 	return key, nil
 }
 
-const authorizeKeyForTunnel = `
+const authorizeKeyForTunnelSql = `
 INSERT INTO passage.key_authorizations (tunnel_type, tunnel_id, key_id) VALUES ($1, $2, $3);
 `
 
 func (c Client) AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error {
-	if _, err := c.db.ExecContext(ctx, authorizeKeyForTunnel, tunnelType, tunnelID, keyID); err != nil {
-		return err
-	}
-	return nil
+	return authorizeKeyForTunnel(ctx, c.db, tunnelType, tunnelID, keyID)
 }
 
-const updateErrorForNormalTunnel = `
-UPDATE passage.tunnels set error = $1 where id = $2
-`
-
-func (c Client) UpdateNormalTunnelError(ctx context.Context, tunnelID uuid.UUID, error string) error {
-	if _, err := c.db.ExecContext(ctx, updateErrorForNormalTunnel, error, tunnelID.String()); err != nil {
-		return err
-	}
-	return nil
+func authorizeKeyForTunnel(ctx context.Context, db sqlx.ExecerContext, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error {
+	_, err := db.ExecContext(ctx, authorizeKeyForTunnelSql, tunnelType, tunnelID, keyID)
+	return err
 }

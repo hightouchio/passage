@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: test
+  name: openssh-server
+  labels:
+    app: openssh-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openssh-server
+  template:
+    metadata:
+      name: openssh-server
+      labels:
+        app: openssh-server
+    spec:
+      containers:
+        - name: openssh-server
+          image: lscr.io/linuxserver/openssh-server:latest
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: PASSWORD_ACCESS
+              value: "false"
+            - name: SUDO_ACCESS
+              value: "false"
+            - name: USER_NAME
+              value: "passage"
+
+            - name: "PUBLIC_KEY_FILE"
+              value: "/config/keys/authorized_keys"
+
+            - name: "LOG_STDOUT"
+              value: "true"
+
+          volumeMounts:
+            - name: sshd
+              subPath: authorized_keys
+              mountPath: /config/keys/authorized_keys
+              readOnly: false
+
+            - name: sshd
+              subPath: init.d
+              mountPath: /custom-cont-init.d/agent-forwarding
+
+      restartPolicy: Always
+
+      volumes:
+        - name: sshd
+          configMap:
+            name: openssh-server
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: test
+  name: openssh-server
+spec:
+  selector:
+    app: openssh-server
+  type: ClusterIP
+  ports:
+    - name: "http"
+      protocol: TCP
+      port: 22
+      targetPort: 2222
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: test
+  name: openssh-server
+data:
+  init.d: |
+    #!/bin/bash
+    set -e
+    sed -i 's/#AllowAgentForwarding yes/AllowAgentForwarding yes/g' /etc/ssh/sshd_config
+    sed -i 's/AllowTcpForwarding no/AllowTcpForwarding yes/g' /etc/ssh/sshd_config
+    sed -i 's/GatewayPorts no/GatewayPorts yes/g' /etc/ssh/sshd_config
+    sed -i 's/X11Forwarding no/X11Forwarding yes/g' /etc/ssh/sshd_config
+
+  authorized_keys: |
+    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDASf1aCL1PGYQTHl81EwP0i3w/0ppwWu46B+KB51c6rS6OUltqZWaj2UMrbx2+FFdLIlR0Z4JVTn/3y0MOMesZTBHyKiZIdJB1nVVFqBQcbTI0M5fP308715rPGauRAj7qtApnZKUyaYkZ0WvRNO6bKNn3LtpGPaB7mm0lXNEIhJixJtB631S9RfHRvDxKXjIiNk4vDTHnqdQhac4uvRtbc4eUgDwxduNPmMbRURZe8KjsjxV538rz0mPJC+IqqcaIKqjy3zwCKRJrApEm/jMNFj0N6jQldtFllXTz/oWcTd1POy6l20p0xZK6UnK5/sj/S2aVi10H5494pM+JATuM+zUchIZgn7bkqP3uA6uOt4qmQFnAe/ETaww61StmFXuH0Gb9GQ4vERs1xuqVnwXjuU0JAXul822gHSUw6emWGxKLSUYvQR1WPjPEiFGnW4/DNexOaRtJOc0VRi/dVJXj8C/0DXK7pJ0S8UCyQjA9r2NOSdulZ8L8Ha/SG2I00wY2iF7roR3J2t4j8TpGGk9RkbSm1Oia5bY1Qy1s1LGqgai+gUuH3EATbzD9XpcFyH+1HGY8kWti6qeXXjHV7Qoi7q5lRaHGoA9X0/HxurgEnbbljS17XlModm9X8EeNRK/sahXCex88tyDuab3zagilQpk55cQf04SZ4EGgNFg8FQ==

@@ -5,17 +5,19 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 	"net"
 )
 
@@ -42,10 +44,22 @@ func runServer(cmd *cobra.Command, args []string) error {
 }
 
 // runTunnels is the entrypoint for tunnel servers
-func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.Viper, keystore keystore.Keystore, healthchecks *healthcheckManager, st stats.Stats, logger *logrus.Logger) error {
+func runTunnels(
+	lc fx.Lifecycle,
+	server tunnel.API,
+	sql *sqlx.DB,
+	config *viper.Viper,
+	discovery discovery.Service,
+	keystore keystore.Keystore,
+	healthchecks *healthcheckManager,
+	st stats.Stats,
+	logger *log.Logger,
+	serviceDiscovery discovery.Service,
+) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
+			logger.Named("Manager").With("tunnel_type", name),
 			st.WithTags(stats.Tags{"tunnel_type": name}),
 			listFunc,
 			tunnel.TunnelOptions{
@@ -53,16 +67,17 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			},
 			config.GetDuration(ConfigTunnelRefreshInterval),
 			config.GetDuration(ConfigTunnelRestartInterval),
+			serviceDiscovery,
 		)
 
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				go manager.Start(ctx)
+				manager.Start()
 				healthchecks.AddCheck(fmt.Sprintf("tunnel_%s", name), manager.Check)
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
-				go manager.Stop(ctx)
+				manager.Stop()
 				return nil
 			},
 		})
@@ -70,9 +85,9 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 
 	if config.GetBool(ConfigTunnelNormalEnabled) {
 		runTunnelManager(tunnel.Normal, tunnel.InjectNormalTunnelDependencies(server.GetNormalTunnels, tunnel.NormalTunnelServices{
-			SQL:      postgres.NewClient(sql),
-			Keystore: keystore,
-			Logger:   logger,
+			SQL:       postgres.NewClient(sql),
+			Keystore:  keystore,
+			Discovery: discovery,
 		}, tunnel.SSHClientOptions{
 			User:              config.GetString(ConfigTunnelNormalSshUser),
 			DialTimeout:       config.GetDuration(ConfigTunnelNormalDialTimeout),
@@ -87,6 +102,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		}
 
 		// Create SSH Server for Reverse Tunnels
+		logger := logger.Named("SSHD")
 		sshServer := tunnel.NewSSHServer(
 			net.JoinHostPort(
 				config.GetString(ConfigTunnelReverseBindHost),
@@ -94,16 +110,18 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 			),
 			hostKey,
 			logger,
+			st,
 		)
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				go func() {
 					// We want to pass context.Background() here, not the context.Context accepted from the hook,
 					//	because the hook's context.Context is cancelled after the application has booted completely
-					if err := sshServer.Start(context.Background()); err != nil {
-						logger.Fatal(errors.Wrap(err, "sshd"))
+					if err := sshServer.Start(); err != nil {
+						if !errors.Is(err, tunnel.ErrSshServerClosed) {
+							logger.Errorw("SSH", zap.Error(err))
+						}
 					}
-
 				}()
 				return nil
 			},
@@ -114,20 +132,10 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
-			SQL:      postgres.NewClient(sql),
-			Keystore: keystore,
-			Logger:   logger,
-
-			GlobalSSHServer: sshServer,
-
-			EnableIndividualSSHD: config.GetBool(ConfigTunnelReverseEnableIndividualSSHD),
-			GetIndividualSSHD: func(sshdPort int) *tunnel.SSHServer {
-				return tunnel.NewSSHServer(
-					net.JoinHostPort(config.GetString(ConfigTunnelReverseBindHost), fmt.Sprintf("%d", sshdPort)),
-					hostKey,
-					logger,
-				)
-			},
+			SQL:       postgres.NewClient(sql),
+			Keystore:  keystore,
+			Discovery: discovery,
+			SSHServer: sshServer,
 		}))
 	}
 
@@ -135,7 +143,7 @@ func runTunnels(lc fx.Lifecycle, server tunnel.API, sql *sqlx.DB, config *viper.
 }
 
 // registerAPIRoutes attaches the API routes to the router
-func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.Router, tunnelServer tunnel.API) error {
+func registerAPIRoutes(config *viper.Viper, router *mux.Router, tunnelServer tunnel.API) error {
 	if !config.GetBool(ConfigApiEnabled) {
 		return nil
 	}
@@ -144,17 +152,19 @@ func registerAPIRoutes(config *viper.Viper, logger *logrus.Logger, router *mux.R
 }
 
 // runMigrations executes database migrations
-func runMigrations(lc fx.Lifecycle, logger *logrus.Logger, db *sqlx.DB) error {
-	logger.Debug("checking database migrations")
+func runMigrations(lc fx.Lifecycle, log *log.Logger, db *sqlx.DB) error {
+	logger := log.Named("Migrations")
+	logger.Debug("Checking database migrations")
+
 	applied, err := postgres.ApplyMigrations(db.DB)
 	if err != nil {
 		return errors.Wrap(err, "error running migrations")
 	}
 
 	if applied {
-		logger.Info("database migrations applied")
+		logger.Info("Database migrations applied")
 	} else {
-		logger.Debug("no database migrations to apply")
+		logger.Debug("No database migrations to apply")
 	}
 
 	return nil

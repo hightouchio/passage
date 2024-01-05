@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: passage
+  name: passage-api
+
+  labels:
+    app: passage-api
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: passage-api
+  template:
+    metadata:
+      name: passage-api
+      labels:
+        app: passage-api
+    spec:
+      containers:
+        - name: passage-api
+          image: passage:latest
+          imagePullPolicy: IfNotPresent
+
+          command: ["passage", "server"]
+
+          envFrom:
+            - configMapRef:
+                name: passage-global-config
+
+          env:
+            - name: PASSAGE_API_ENABLED
+              value: "true"
+
+      restartPolicy: Always
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: passage
+  name: passage-api
+spec:
+  selector:
+     app: passage-api
+  type: ClusterIP
+
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 6000

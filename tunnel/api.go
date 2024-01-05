@@ -14,7 +14,7 @@ import (
 // API provides a source of truth for Tunnel configuration. It serves remote clients via HTTP APIs, as well as Manager instances via an exported ListFunc
 type API struct {
 	SQL              sqlClient
-	DiscoveryService discovery.DiscoveryService
+	DiscoveryService discovery.Service
 	Keystore         keystore.Keystore
 	Stats            stats.Stats
 }
@@ -58,9 +58,21 @@ type GetTunnelRequest struct {
 }
 
 type GetTunnelResponse struct {
-	TunnelType        `json:"type"`
-	Tunnel            `json:"tunnel"`
-	ConnectionDetails `json:"connection"`
+	TunnelType         `json:"type"`
+	Tunnel             `json:"tunnel"`
+	*ConnectionDetails `json:"connection"`
+	Healthchecks       []HealthcheckDetails `json:"healthchecks"`
+}
+
+type ConnectionDetails struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+type HealthcheckDetails struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Message string `json:"reason"`
 }
 
 // GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
@@ -72,16 +84,31 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 		return nil, errors.Wrap(err, "error fetching tunnel")
 	}
 
-	connectionDetails, err := tunnel.GetConnectionDetails(s.DiscoveryService)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get connection details")
+	response := GetTunnelResponse{
+		TunnelType: tunnelType,
+		Tunnel:     tunnel,
 	}
 
-	return &GetTunnelResponse{
-		TunnelType:        tunnelType,
-		Tunnel:            tunnel,
-		ConnectionDetails: connectionDetails,
-	}, nil
+	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
+	if err == nil {
+		// Populate connection details
+		response.ConnectionDetails = &ConnectionDetails{
+			Host: tunnelDetails.Host,
+			Port: tunnelDetails.Port,
+		}
+
+		// Populate healthchecks
+		response.Healthchecks = make([]HealthcheckDetails, len(tunnelDetails.Checks))
+		for i, check := range tunnelDetails.Checks {
+			response.Healthchecks[i] = HealthcheckDetails{
+				ID:      check.ID,
+				Status:  check.Status,
+				Message: check.Message,
+			}
+		}
+	}
+
+	return &response, nil
 }
 
 type UpdateTunnelRequest struct {
@@ -161,8 +188,37 @@ func (s API) DeleteTunnel(ctx context.Context, req DeleteTunnelRequest) (*Delete
 	return &DeleteTunnelResponse{}, nil
 }
 
+type CheckTunnelRequest struct {
+	ID uuid.UUID
+}
+
+type CheckTunnelResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// CheckTunnel identifies a currently running tunnel, gets connection details, and attempts a connection
+func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTunnelResponse, error) {
+	details, err := s.GetTunnel(ctx, GetTunnelRequest{ID: req.ID})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get connection details")
+	}
+
+	if len(details.Healthchecks) == 0 {
+		return &CheckTunnelResponse{Success: false, Error: "Tunnel is not online"}, nil
+	}
+
+	for _, check := range details.Healthchecks {
+		if discovery.HealthcheckStatus(check.Status) != discovery.HealthcheckPassing {
+			return &CheckTunnelResponse{Success: false, Error: check.Message}, nil
+		}
+	}
+
+	return &CheckTunnelResponse{Success: true}, nil
+}
+
 type sqlClient interface {
-	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel) (postgres.ReverseTunnel, error)
+	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel, authorizedKeys []uuid.UUID) (postgres.ReverseTunnel, error)
 	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
 	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
 	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)

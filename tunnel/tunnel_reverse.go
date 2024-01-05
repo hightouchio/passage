@@ -3,15 +3,19 @@ package tunnel
 import (
 	"context"
 	"github.com/gliderlabs/ssh"
+	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"go.uber.org/zap"
+	"net"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type ReverseTunnel struct {
@@ -19,59 +23,142 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort           int     `json:"sshdPort"`
-	TunnelPort         int     `json:"tunnelPort"`
-	HTTPProxy          bool    `json:"httpProxy"`
-	Error              *string `json:"error"`
-	AuthorizedKeysHash string
+	SSHDPort   int `json:"sshdPort"`
+	TunnelPort int `json:"tunnelPort"`
 
-	services ReverseTunnelServices
+	authorizedKeysHash string
+	services           ReverseTunnelServices
 }
 
-func (t ReverseTunnel) Start(ctx context.Context, tunnelOptions TunnelOptions) error {
+func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	lifecycle := getCtxLifecycle(ctx)
+	logger := log.FromContext(ctx)
 
+	logger.Debug("Get authorized keys")
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
-		return bootError{event: "get_authorized_keys", err: err}
+		return errors.Wrap(err, "get authorized keys")
 	}
 
-	errs := make(chan error)
-	defer close(errs)
+	// Create a channel to receive incoming SSH connections
+	//	for this tunnel
+	connectionChan := make(chan ReverseForwardingConnection)
+	defer close(connectionChan)
 
-	// Only run the individual SSHD server if Passage has been configured to do so.
-	if t.services.EnableIndividualSSHD {
-		// Create a dedicated SSH server for this tunnel
-		dedicatedServer := t.services.GetIndividualSSHD(t.SSHDPort)
-		defer dedicatedServer.Close()
-		go func() {
-			lifecycle.BootEvent("sshd_start", stats.Tags{"sshd_port": t.TunnelPort})
-			if err := dedicatedServer.Start(ctx); err != nil {
-				lifecycle.BootError(errors.Wrap(err, "dedicated server start"))
+	logger.Debug("Register tunnel with SSHD")
+	t.services.SSHServer.RegisterTunnel(SSHServerRegisteredTunnel{
+		ID:             t.ID,
+		AuthorizedKeys: authorizedKeys,
+
+		// This is not actually the port that the tunnel is listening on,
+		//	but the port that the tunnel is *registered* on, which is how we uniquely identify incoming requests
+		//	for tunnels.
+		RegisteredPort: t.TunnelPort,
+
+		// Pass the receiver channel, so we can receive SSH connections from the SSHD server
+		Connections: connectionChan,
+	})
+	defer t.services.SSHServer.DeregisterTunnel(t.ID)
+
+	// Keep track of the number of active connections on this tunnel
+	var connectionCount atomic.Int32
+
+	// Regularly report status based on the number of active connections
+	go intervalStatusReporter(ctx, statusUpdate, func() StatusUpdate {
+		if connectionCount.Load() > 0 {
+			return StatusUpdate{StatusReady, "Tunnel is online"}
+		} else {
+			return StatusUpdate{StatusBooting, "Tunnel is waiting for connections"}
+		}
+	})
+
+	// Handle incoming SSH port forwarding connections
+	logger.Info("Tunnel registered with SSH server. Waiting for connections")
+	connWg := sync.WaitGroup{}
+	func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+				// Wait for incoming connections
+			case conn, ok := <-connectionChan:
+				if !ok {
+					return
+				}
+
+				connectionCount.Add(1)
+				connWg.Add(1)
+				go func() {
+					defer connWg.Done()
+					defer connectionCount.Add(-1)
+
+					t.handleConnection(ctx, conn, logger, listener)
+				}()
 			}
-		}()
+		}
+	}()
 
-		// Register this tunnel with the dedicated reverse SSH server
-		dedicatedServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
-		defer dedicatedServer.DeregisterTunnel(t.ID)
+	// Wait for all connections to close
+	connWg.Wait()
+	return nil
+}
+
+// handleConnection handles an SSH protocol connection and sets up port forwarding
+func (t ReverseTunnel) handleConnection(
+	ctx context.Context,
+	conn ReverseForwardingConnection,
+	log *log.Logger,
+	listener *net.TCPListener,
+) {
+	// Create a new context to handle this connection's lifecycle
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	logger := sshSessionLogger(log, conn)
+	logger.Info("Start tunnel port forwarding")
+	defer logger.Info("Stop tunnel port forwarding")
+
+	// Wait for either server or client connection to close, and stop forwarding
+	go func() {
+		defer cancel()
+		select {
+		case <-ctx.Done(): // Wait for server connection to close
+		case <-conn.Done(): // Wait for client connection to close
+		}
+	}()
+
+	// Start upstream reachability test
+	// TODO: If we have multiple forwarders, the healthchecks can conflict.
+	//	We should probably have a single healthcheck for the tunnel
+	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+
+	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
+	//	tunnel listener and a remote SSH connection.
+	forwarder := &TCPForwarder{
+		Listener:          listener,
+		GetUpstreamConn:   conn.Dial,
+		KeepaliveInterval: 5 * time.Second,
+		Stats:             stats.GetStats(ctx),
+		logger:            logger.Named("Forwarder"),
 	}
+	defer forwarder.Close()
 
-	if t.services.GlobalSSHServer != nil {
-		// Register this tunnel with the global reverse SSH server
-		t.services.GlobalSSHServer.RegisterTunnel(t.ID, t.TunnelPort, authorizedKeys, getCtxLifecycle(ctx), stats.GetStats(ctx))
-		defer t.services.GlobalSSHServer.DeregisterTunnel(t.ID)
-	}
+	// Start port forwarding
+	go func() {
+		defer cancel()
+		if err := forwarder.Serve(); err != nil {
+			// If it's simply a closed error, we can return without logging an error.
+			if !errors.Is(err, net.ErrClosed) {
+				logger.Errorw("Forwarder serve", zap.Error(err))
+			}
+		}
+	}()
 
-	select {
-	case <-ctx.Done():
-		return nil
-
-	case err := <-errs:
-		return err
-	}
+	// Wait for connection to end
+	<-conn.Done()
 }
 
 func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, error) {
@@ -98,30 +185,14 @@ func (t ReverseTunnel) getAuthorizedKeys(ctx context.Context) ([]ssh.PublicKey, 
 	return authorizedKeys, nil
 }
 
-func (t ReverseTunnel) GetConnectionDetails(discovery discovery.DiscoveryService) (ConnectionDetails, error) {
-	tunnelHost, err := discovery.ResolveTunnelHost(Reverse, t.ID)
-	if err != nil {
-		return ConnectionDetails{}, errors.Wrap(err, "could not resolve tunnel host")
-	}
-
-	return ConnectionDetails{
-		Host: tunnelHost,
-		Port: t.TunnelPort,
-	}, nil
-}
-
 // ReverseTunnelServices are the external dependencies that ReverseTunnel needs to do its job
 type ReverseTunnelServices struct {
 	SQL interface {
 		GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
 	}
-	Keystore keystore.Keystore
-	Logger   *logrus.Logger
-
-	GlobalSSHServer *SSHServer
-
-	EnableIndividualSSHD bool
-	GetIndividualSSHD    func(sshdPort int) *SSHServer
+	SSHServer *SSHServer
+	Keystore  keystore.Keystore
+	Discovery discovery.Service
 }
 
 func InjectReverseTunnelDependencies(f func(ctx context.Context) ([]ReverseTunnel, error), services ReverseTunnelServices) ListFunc {
@@ -146,7 +217,7 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.TunnelPort == t2.TunnelPort && t.SSHDPort == t2.SSHDPort && t.HTTPProxy == t2.HTTPProxy && t.AuthorizedKeysHash == t2.AuthorizedKeysHash
+	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.TunnelPort == t2.TunnelPort && t.authorizedKeysHash == t2.authorizedKeysHash
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -157,15 +228,10 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		Enabled:            record.Enabled,
 		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
-		HTTPProxy:          record.HTTPProxy,
-		AuthorizedKeysHash: record.AuthorizedKeysHash,
+		authorizedKeysHash: record.AuthorizedKeysHash,
 	}
 }
 
 func (t ReverseTunnel) GetID() uuid.UUID {
 	return t.ID
-}
-
-func (t ReverseTunnel) GetError() *string {
-	return t.Error
 }

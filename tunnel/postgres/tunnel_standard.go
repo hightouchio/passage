@@ -15,14 +15,16 @@ type NormalTunnel struct {
 	CreatedAt time.Time `db:"created_at"`
 	Enabled   bool      `db:"enabled"`
 
-	TunnelPort  int            `db:"tunnel_port"`
 	SSHUser     sql.NullString `db:"ssh_user"`
 	SSHHost     string         `db:"ssh_host"`
 	SSHPort     int            `db:"ssh_port"`
 	ServiceHost string         `db:"service_host"`
 	ServicePort int            `db:"service_port"`
-	HTTPProxy   bool           `db:"http_proxy"`
-	Error       sql.NullString `db:"error"`
+
+	// Deprecated
+	TunnelPort int            `db:"tunnel_port"`
+	HttpProxy  bool           `db:"http_proxy"`
+	Error      sql.NullString `db:"error"`
 }
 
 func (c Client) CreateNormalTunnel(ctx context.Context, input NormalTunnel) (NormalTunnel, error) {
