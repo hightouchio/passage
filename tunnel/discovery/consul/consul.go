@@ -103,8 +103,8 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 		return formatTunnelDetails(id, service), nil
 	}
 
-	// If there are no healthy tunnel service instances, return an empty response
-	return discovery.TunnelDetails{}, nil
+	// If there are no healthy tunnel service instances, return the first
+	return formatTunnelDetails(id, services[0]), nil
 }
 
 func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) discovery.TunnelDetails {
