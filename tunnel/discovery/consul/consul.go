@@ -91,11 +91,23 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 		return discovery.TunnelDetails{}, errors.Wrap(err, "could not get tunnel details")
 	}
 
-	if len(services) != 1 {
-		return discovery.TunnelDetails{}, fmt.Errorf("expected 1 service, got %d", len(services))
+	if len(services) == 0 {
+		return discovery.TunnelDetails{}, fmt.Errorf("tunnel %s not found", id.String())
 	}
-	service := services[0]
 
+	// Search for a healthy tunnel service instance and return it
+	for _, service := range services {
+		if service.Checks.AggregatedStatus() != consul.HealthPassing {
+			continue
+		}
+		return formatTunnelDetails(id, service), nil
+	}
+
+	// If there are no healthy tunnel service instances, return the first
+	return formatTunnelDetails(id, services[0]), nil
+}
+
+func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) discovery.TunnelDetails {
 	response := discovery.TunnelDetails{
 		Host:   service.Service.Address,
 		Port:   service.Service.Port,
@@ -103,7 +115,7 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 	}
 
 	// All relevant custom checks must start with this prefix
-	checkPrefix := getTunnelServiceId(id)
+	checkPrefix := getTunnelServiceId(tunnelId)
 	for _, c := range service.Checks {
 		// Only consider checks that have this prefix (this means that Passage manages them)
 		if strings.HasPrefix(c.CheckID, checkPrefix) {
@@ -115,7 +127,7 @@ func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
 		}
 	}
 
-	return response, nil
+	return response
 }
 
 func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
