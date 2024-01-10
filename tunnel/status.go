@@ -233,7 +233,13 @@ func waitForReadError(ctx context.Context, reader io.ReadCloser, waitDuration ti
 
 	// read in a context-aware fashion
 	go func() {
-		_, err := ioutil.ReadAll(io.LimitReader(reader, healthcheckReadMaxBytes))
+		_, err := io.ReadAll(io.LimitReader(reader, healthcheckReadMaxBytes))
+
+		// If the outer context has already been cancelled, ignore the error
+		if ctx.Err() != nil {
+			return
+		}
+
 		if err != nil {
 			done <- errors.Wrap(err, "read error")
 			return
@@ -244,10 +250,10 @@ func waitForReadError(ctx context.Context, reader io.ReadCloser, waitDuration ti
 	select {
 	case <-time.After(waitDuration):
 		return nil // success
-	case err := <-done:
-		return err
 	case <-ctx.Done(): // if an error does not occur before the context times out, we're OK
 		return ctx.Err()
+	case err := <-done:
+		return err
 	}
 }
 
