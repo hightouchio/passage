@@ -100,7 +100,7 @@ func retryTunnel(ctx context.Context, runTunnel func() error) error {
 
 func newTunnelBackoff() backoff.BackOff {
 	return &backoff.ExponentialBackOff{
-		InitialInterval: 10 * time.Second,
+		InitialInterval: 5 * time.Second,
 		MaxInterval:     120 * time.Second,
 
 		RandomizationFactor: backoff.DefaultRandomizationFactor,
