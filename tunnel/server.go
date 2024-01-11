@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
@@ -65,7 +66,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.Service, retry
 		}()
 
 		// Run the tunnel, and restart it if it crashes
-		err = retry(ctx, retryInterval, func() error {
+		err = retryTunnel(ctx, func() error {
 			logger.Info("Starting tunnel")
 			if err := tunnel.Start(ctx, tunnelListener, statusUpdates); err != nil {
 				logger.Errorw("Error", zap.Error(err))
@@ -90,5 +91,28 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.Service, retry
 
 		// Wait for tunnel to completely shut down
 		return err
+	}
+}
+
+func retryTunnel(ctx context.Context, runTunnel func() error) error {
+	return backoff.Retry(runTunnel, backoff.WithContext(newTunnelBackoff(), ctx))
+}
+
+func newTunnelBackoff() backoff.BackOff {
+	return &backoff.ExponentialBackOff{
+		InitialInterval: 10 * time.Second,
+		MaxInterval:     120 * time.Second,
+
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+
+		// If MaxElapsedTime is 0, the exponential backoff will never stop.
+		MaxElapsedTime: 0,
+
+		// This is basically just a wrapper around time.Now
+		Clock: backoff.SystemClock,
+
+		// Stop signal
+		Stop: backoff.Stop,
 	}
 }

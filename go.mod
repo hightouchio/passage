@@ -7,6 +7,7 @@ require (
 	github.com/DataDog/datadog-go v4.7.0+incompatible
 	github.com/Masterminds/squirrel v1.5.0
 	github.com/aws/aws-sdk-go v1.42.4
+	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/gliderlabs/ssh v0.3.5
 	github.com/golang-migrate/migrate/v4 v4.15.1
 	github.com/google/uuid v1.3.0
