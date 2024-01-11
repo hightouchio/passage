@@ -100,11 +100,10 @@ func retryTunnel(ctx context.Context, runTunnel func() error) error {
 
 func newTunnelBackoff() backoff.BackOff {
 	return &backoff.ExponentialBackOff{
-		InitialInterval: 5 * time.Second,
-		MaxInterval:     120 * time.Second,
-
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
+		InitialInterval:     5 * time.Second,
+		MaxInterval:         120 * time.Second,
+		RandomizationFactor: 0.6,
+		Multiplier:          1.5,
 
 		// If MaxElapsedTime is 0, the exponential backoff will never stop.
 		MaxElapsedTime: 0,
