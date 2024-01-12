@@ -1,0 +1,15 @@
+{
+  "name": "passage",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/tunnel_pb.js",
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "grpc_tools_node_protoc_ts": "^5.3.3",
+    "grpc-tools": "^1.12.4"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.9.13"
+  }
+}
