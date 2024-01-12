@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option go_package = "github.com/hightouchio/passage/tunnel/grpc";
+
+service Passage {
+  rpc GetTunnel(GetTunnelRequest) returns (Tunnel);
+}
+
+message GetTunnelRequest {
+  string id = 1;
+}
+
+message Tunnel {
+  enum Type {
+    STANDARD = 0;
+    REVERSE = 1;
+  }
+
+  message StandardTunnel {
+    string SshHost = 1;
+    uint32 SshPort = 2;
+    string ServiceHost = 3;
+    string ServicePort = 4;
+  }
+
+  message ReverseTunnel {
+    // No fields
+  }
+
+  string id = 1;
+  Type type = 2;
+  bool enabled = 3;
+  uint32 BindPort = 4;
+
+  oneof tunnel {
+    StandardTunnel standard_tunnel = 6;
+    ReverseTunnel reverse_tunnel = 5;
+  }
+}
