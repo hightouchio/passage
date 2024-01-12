@@ -11,6 +11,7 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/hightouchio/passage/tunnel/proto"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -18,6 +19,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"net"
 )
 
@@ -40,6 +42,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 		// Register control plane HTTP routes.
 		registerAPIRoutes,
+
+		// Register tunnel gRPC
+		runGrpcServer,
 	)
 }
 
@@ -165,6 +170,24 @@ func runMigrations(lc fx.Lifecycle, log *log.Logger, db *sqlx.DB) error {
 		logger.Info("Database migrations applied")
 	} else {
 		logger.Debug("No database migrations to apply")
+	}
+
+	return nil
+}
+
+func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.GrpcServer) error {
+	listener, err := net.Listen("tcp", config.GetString(ConfigGrpcAddr))
+	if err != nil {
+		return errors.Wrap(err, "could not open grpc listener")
+	}
+
+	srv := grpc.NewServer()
+
+	proto.RegisterPassageServer(srv, tunnelServer)
+
+	log.Named("gRPC").Info("Ready")
+	if err := srv.Serve(listener); err != nil {
+		return errors.Wrap(err, "could not serve grpc server")
 	}
 
 	return nil

@@ -41,6 +41,8 @@ const (
 	ConfigApiEnabled   = "api.enabled"
 	ConfigPprofEnabled = "pprof.enabled"
 
+	ConfigGrpcAddr = "grpc.addr"
+
 	ConfigTunnelBindHost        = "tunnel.bind_host"
 	ConfigTunnelRefreshInterval = "tunnel.refresh_interval"
 	ConfigTunnelRestartInterval = "tunnel.restart_interval"
@@ -96,6 +98,7 @@ func initDefaults(config *viper.Viper) {
 
 	// Set defaults
 	config.SetDefault(ConfigHTTPAddr, ":8080")
+	config.SetDefault(ConfigGrpcAddr, ":8081")
 	config.SetDefault(ConfigTunnelRefreshInterval, 1*time.Second)
 	config.SetDefault(ConfigTunnelRestartInterval, 5*time.Second)
 	config.SetDefault(ConfigTunnelNormalSshUser, "passage")
@@ -133,6 +136,8 @@ func startApplication(bootFuncs ...interface{}) error {
 			newConfig,
 			// Logger.
 			newLogger,
+			// gRPC server
+			newTunnelGrpcServer,
 		),
 
 		// Execute entrypoint functions.
@@ -430,4 +435,8 @@ func newStats(config *viper.Viper) (stats.Stats, error) {
 		st = st.WithTags(stats.Tags{"version": version})
 	}
 	return st, nil
+}
+
+func newTunnelGrpcServer() (tunnel.GrpcServer, error) {
+	return tunnel.GrpcServer{}, nil
 }

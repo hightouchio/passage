@@ -4,7 +4,7 @@
 // 	protoc        v4.25.1
 // source: tunnel/grpc/tunnel.proto
 
-package grpc
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
