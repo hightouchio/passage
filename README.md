@@ -63,3 +63,6 @@ An appropriate network configuration begins with Passage instances completely lo
 Go unit tests can be run with `make test`.
 
 There is an end-to-end test of both Normal and Reverse tunnels, using Docker networks to simulate network isolation, and docker compose for orchestration, that can be run with `make test-e2e`.
+
+
+protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative tunnel/grpc/tunnel.proto
