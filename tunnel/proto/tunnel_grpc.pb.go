@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v4.25.1
-// source: tunnel/grpc/tunnel.proto
+// source: proto/tunnel.proto
 
 package proto
 
@@ -101,5 +101,5 @@ var Passage_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "tunnel/grpc/tunnel.proto",
+	Metadata: "proto/tunnel.proto",
 }

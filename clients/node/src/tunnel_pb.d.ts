@@ -6,26 +6,6 @@
 
 import * as jspb from "google-protobuf";
 
-export class GetTunnelRequest extends jspb.Message { 
-    getId(): string;
-    setId(value: string): GetTunnelRequest;
-
-    serializeBinary(): Uint8Array;
-    toObject(includeInstance?: boolean): GetTunnelRequest.AsObject;
-    static toObject(includeInstance: boolean, msg: GetTunnelRequest): GetTunnelRequest.AsObject;
-    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
-    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
-    static serializeBinaryToWriter(message: GetTunnelRequest, writer: jspb.BinaryWriter): void;
-    static deserializeBinary(bytes: Uint8Array): GetTunnelRequest;
-    static deserializeBinaryFromReader(message: GetTunnelRequest, reader: jspb.BinaryReader): GetTunnelRequest;
-}
-
-export namespace GetTunnelRequest {
-    export type AsObject = {
-        id: string,
-    }
-}
-
 export class Tunnel extends jspb.Message { 
     getId(): string;
     setId(value: string): Tunnel;
@@ -128,4 +108,24 @@ export namespace Tunnel {
         REVERSE_TUNNEL = 5,
     }
 
+}
+
+export class GetTunnelRequest extends jspb.Message { 
+    getId(): string;
+    setId(value: string): GetTunnelRequest;
+
+    serializeBinary(): Uint8Array;
+    toObject(includeInstance?: boolean): GetTunnelRequest.AsObject;
+    static toObject(includeInstance: boolean, msg: GetTunnelRequest): GetTunnelRequest.AsObject;
+    static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+    static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+    static serializeBinaryToWriter(message: GetTunnelRequest, writer: jspb.BinaryWriter): void;
+    static deserializeBinary(bytes: Uint8Array): GetTunnelRequest;
+    static deserializeBinaryFromReader(message: GetTunnelRequest, reader: jspb.BinaryReader): GetTunnelRequest;
+}
+
+export namespace GetTunnelRequest {
+    export type AsObject = {
+        id: string,
+    }
 }

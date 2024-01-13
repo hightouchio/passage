@@ -1,13 +1,9 @@
 syntax = "proto3";
 
-option go_package = "github.com/hightouchio/passage/tunnel/grpc";
+option go_package = "github.com/hightouchio/passage/tunnel/proto";
 
 service Passage {
   rpc GetTunnel(GetTunnelRequest) returns (Tunnel);
-}
-
-message GetTunnelRequest {
-  string id = 1;
 }
 
 message Tunnel {
@@ -36,4 +32,8 @@ message Tunnel {
     StandardTunnel standard_tunnel = 6;
     ReverseTunnel reverse_tunnel = 5;
   }
+}
+
+message GetTunnelRequest {
+  string id = 1;
 }
