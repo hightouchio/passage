@@ -7,6 +7,7 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"github.com/hightouchio/passage/tunnel/proto"
 	"go.uber.org/zap"
 	"net"
 	"sync"
@@ -218,6 +219,18 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 	}
 
 	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.TunnelPort == t2.TunnelPort && t.authorizedKeysHash == t2.authorizedKeysHash
+}
+
+func (t ReverseTunnel) ToProtoTunnel() *proto.Tunnel {
+	return &proto.Tunnel{
+		Id:       t.ID.String(),
+		Type:     proto.Tunnel_REVERSE,
+		Enabled:  t.Enabled,
+		BindPort: uint32(t.TunnelPort),
+		Tunnel: &proto.Tunnel_ReverseTunnel_{
+			ReverseTunnel: &proto.Tunnel_ReverseTunnel{},
+		},
+	}
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct

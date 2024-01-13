@@ -56,8 +56,8 @@ export namespace Tunnel {
         setSshport(value: number): StandardTunnel;
         getServicehost(): string;
         setServicehost(value: string): StandardTunnel;
-        getServiceport(): string;
-        setServiceport(value: string): StandardTunnel;
+        getServiceport(): number;
+        setServiceport(value: number): StandardTunnel;
 
         serializeBinary(): Uint8Array;
         toObject(includeInstance?: boolean): StandardTunnel.AsObject;
@@ -74,7 +74,7 @@ export namespace Tunnel {
             sshhost: string,
             sshport: number,
             servicehost: string,
-            serviceport: string,
+            serviceport: number,
         }
     }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/hightouchio/passage/tunnel/proto"
 	"github.com/pkg/errors"
 	"net"
 )
@@ -12,6 +13,8 @@ type Tunnel interface {
 	Start(context.Context, *net.TCPListener, chan<- StatusUpdate) error
 	GetID() uuid.UUID
 	Equal(interface{}) bool
+
+	ToProtoTunnel() *proto.Tunnel
 }
 
 type TunnelOptions struct {

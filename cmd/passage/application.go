@@ -437,6 +437,10 @@ func newStats(config *viper.Viper) (stats.Stats, error) {
 	return st, nil
 }
 
-func newTunnelGrpcServer() (tunnel.GrpcServer, error) {
-	return tunnel.GrpcServer{}, nil
+// newTunnelGrpcServer initializes a gRPC server for the tunnel service
+func newTunnelGrpcServer(log *log.Logger, api *tunnel.API) (tunnel.GrpcServer, error) {
+	return tunnel.GrpcServer{
+		API:    api,
+		Logger: log.Named("gRPC"),
+	}, nil
 }

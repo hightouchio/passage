@@ -356,7 +356,7 @@ proto.Tunnel.StandardTunnel.toObject = function(includeInstance, msg) {
     sshhost: jspb.Message.getFieldWithDefault(msg, 1, ""),
     sshport: jspb.Message.getFieldWithDefault(msg, 2, 0),
     servicehost: jspb.Message.getFieldWithDefault(msg, 3, ""),
-    serviceport: jspb.Message.getFieldWithDefault(msg, 4, "")
+    serviceport: jspb.Message.getFieldWithDefault(msg, 4, 0)
   };
 
   if (includeInstance) {
@@ -406,7 +406,7 @@ proto.Tunnel.StandardTunnel.deserializeBinaryFromReader = function(msg, reader) 
       msg.setServicehost(value);
       break;
     case 4:
-      var value = /** @type {string} */ (reader.readString());
+      var value = /** @type {number} */ (reader.readUint32());
       msg.setServiceport(value);
       break;
     default:
@@ -460,8 +460,8 @@ proto.Tunnel.StandardTunnel.serializeBinaryToWriter = function(message, writer) 
     );
   }
   f = message.getServiceport();
-  if (f.length > 0) {
-    writer.writeString(
+  if (f !== 0) {
+    writer.writeUint32(
       4,
       f
     );
@@ -524,20 +524,20 @@ proto.Tunnel.StandardTunnel.prototype.setServicehost = function(value) {
 
 
 /**
- * optional string ServicePort = 4;
- * @return {string}
+ * optional uint32 ServicePort = 4;
+ * @return {number}
  */
 proto.Tunnel.StandardTunnel.prototype.getServiceport = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 4, 0));
 };
 
 
 /**
- * @param {string} value
+ * @param {number} value
  * @return {!proto.Tunnel.StandardTunnel} returns this
  */
 proto.Tunnel.StandardTunnel.prototype.setServiceport = function(value) {
-  return jspb.Message.setProto3StringField(this, 4, value);
+  return jspb.Message.setProto3IntField(this, 4, value);
 };
 
 

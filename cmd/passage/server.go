@@ -175,6 +175,7 @@ func runMigrations(lc fx.Lifecycle, log *log.Logger, db *sqlx.DB) error {
 	return nil
 }
 
+// runGrpcServer opens a gRPC listener and attaches the tunnel server
 func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.GrpcServer) error {
 	listener, err := net.Listen("tcp", config.GetString(ConfigGrpcAddr))
 	if err != nil {
@@ -182,9 +183,7 @@ func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.Grp
 	}
 
 	srv := grpc.NewServer()
-
 	proto.RegisterPassageServer(srv, tunnelServer)
-
 	log.Named("gRPC").Info("Ready")
 	if err := srv.Serve(listener); err != nil {
 		return errors.Wrap(err, "could not serve grpc server")

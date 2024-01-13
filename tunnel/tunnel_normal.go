@@ -8,6 +8,7 @@ import (
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
+	"github.com/hightouchio/passage/tunnel/proto"
 	"io"
 	"net"
 	"strconv"
@@ -223,6 +224,23 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHPort == t2.SSHPort &&
 		t.ServiceHost == t2.ServiceHost &&
 		t.ServicePort == t2.ServicePort
+}
+
+func (t NormalTunnel) ToProtoTunnel() *proto.Tunnel {
+	return &proto.Tunnel{
+		Id:       t.ID.String(),
+		Type:     proto.Tunnel_STANDARD,
+		Enabled:  t.Enabled,
+		BindPort: uint32(t.TunnelPort),
+		Tunnel: &proto.Tunnel_StandardTunnel_{
+			StandardTunnel: &proto.Tunnel_StandardTunnel{
+				SshHost:     t.SSHHost,
+				SshPort:     uint32(t.SSHPort),
+				ServiceHost: t.ServiceHost,
+				ServicePort: uint32(t.ServicePort),
+			},
+		},
+	}
 }
 
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB

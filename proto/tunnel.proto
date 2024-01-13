@@ -16,7 +16,7 @@ message Tunnel {
     string SshHost = 1;
     uint32 SshPort = 2;
     string ServiceHost = 3;
-    string ServicePort = 4;
+    uint32 ServicePort = 4;
   }
 
   message ReverseTunnel {
