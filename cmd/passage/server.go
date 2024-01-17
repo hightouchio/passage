@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	otelsdk "go.opentelemetry.io/otel"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"net"
@@ -61,6 +62,8 @@ func runTunnels(
 	logger *log.Logger,
 	serviceDiscovery discovery.Service,
 ) error {
+	sqlClient := postgres.WithTracing(postgres.NewClient(sql), otelsdk.Tracer("postgres"))
+
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
 		manager := tunnel.NewManager(
@@ -90,7 +93,7 @@ func runTunnels(
 
 	if config.GetBool(ConfigTunnelNormalEnabled) {
 		runTunnelManager(tunnel.Normal, tunnel.InjectNormalTunnelDependencies(server.GetNormalTunnels, tunnel.NormalTunnelServices{
-			SQL:       postgres.NewClient(sql),
+			SQL:       sqlClient,
 			Keystore:  keystore,
 			Discovery: discovery,
 		}, tunnel.SSHClientOptions{
@@ -137,7 +140,7 @@ func runTunnels(
 		})
 
 		runTunnelManager(tunnel.Reverse, tunnel.InjectReverseTunnelDependencies(server.GetReverseTunnels, tunnel.ReverseTunnelServices{
-			SQL:       postgres.NewClient(sql),
+			SQL:       sqlClient,
 			Keystore:  keystore,
 			Discovery: discovery,
 			SSHServer: sshServer,

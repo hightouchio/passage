@@ -188,7 +188,7 @@ func startApplication(bootFuncs ...interface{}) error {
 
 func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.Service) (tunnel.API, error) {
 	return tunnel.API{
-		SQL:              postgres.NewClient(sql),
+		SQL:              postgres.WithTracing(postgres.NewClient(sql), otelsdk.Tracer("postgres")),
 		DiscoveryService: discovery,
 		Keystore:         keystore,
 		Stats:            stats,
