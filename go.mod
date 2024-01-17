@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/DataDog/datadog-go v4.7.0+incompatible
 	github.com/Masterminds/squirrel v1.5.0
+	github.com/XSAM/otelsql v0.27.0
 	github.com/aws/aws-sdk-go v1.42.4
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/gliderlabs/ssh v0.3.5
@@ -26,7 +27,6 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.1
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.21.0
-	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.21.0
 	go.opentelemetry.io/otel/sdk v1.21.0
 	go.opentelemetry.io/otel/trace v1.21.0
 	go.uber.org/dig v1.12.0

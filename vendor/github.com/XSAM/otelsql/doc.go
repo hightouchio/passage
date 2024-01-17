@@ -1,4 +1,4 @@
-// Copyright The OpenTelemetry Authors
+// Copyright Sam Xie
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package stdouttrace contains an OpenTelemetry exporter for tracing
-// telemetry to be written to an output destination as JSON.
-package stdouttrace // import "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+// Package otelsql instruments the database/sql package.
+//
+// otelsql will trace every interface from database/sql/driver package
+// which has context except driver.Pinger.
+package otelsql // import "github.com/XSAM/otelsql"

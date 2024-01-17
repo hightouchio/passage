@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/DataDog/datadog-go/statsd"
+	"github.com/XSAM/otelsql"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/otel"
 	"github.com/hightouchio/passage/stats"
@@ -20,10 +22,9 @@ import (
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.uber.org/zap"
 	"net/http/pprof"
-
-	consul "github.com/hashicorp/consul/api"
 
 	"github.com/hashicorp/go-sockaddr"
 	"github.com/hightouchio/passage/tunnel/postgres"
@@ -373,7 +374,13 @@ func newLogger(config *viper.Viper) *log.Logger {
 
 // newPostgres initializes a connection to the Postgres database
 func newPostgres(lc fx.Lifecycle, config *viper.Viper) (*sqlx.DB, error) {
-	db, err := sqlx.Connect("postgres", getPostgresConnString(config))
+	// Wrap Postgres in telemetry
+	driverName, err := otelsql.Register("postgres", otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not wrap postgres driver")
+	}
+
+	db, err := sqlx.Connect(driverName, getPostgresConnString(config))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not connect to postgres")
 	}
