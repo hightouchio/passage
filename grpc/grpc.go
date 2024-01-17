@@ -26,7 +26,7 @@ func NewServer(logger *log.Logger) *grpc.Server {
 				// Extract trace ID from context
 				logging.WithFieldsFromContext(func(ctx context.Context) logging.Fields {
 					if span := trace.SpanContextFromContext(ctx); span.IsSampled() {
-						return logging.Fields{"traceID", span.TraceID().String()}
+						return logging.Fields{"trace_id", span.TraceID().String()}
 					}
 					return nil
 				}),
