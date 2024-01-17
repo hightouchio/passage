@@ -140,10 +140,17 @@ func testUpstream(ctx context.Context, fn GetUpstreamFn) error {
 	errchan := make(chan error)
 	go func() {
 		upstream, err := fn()
-		errchan <- err
+
 		if upstream != nil {
-			defer upstream.Close()
+			upstream.Close()
 		}
+
+		// If the context has closed before we receive an error, short circuit
+		if ctx.Err() != nil {
+			return
+		}
+
+		errchan <- err
 	}()
 
 	select {
