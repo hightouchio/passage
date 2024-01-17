@@ -3,19 +3,34 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/hightouchio/passage/log"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
-import "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 
 func NewServer(logger *log.Logger) *grpc.Server {
 	logger = logger.Named("gRPC")
 
 	srv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
+			// Set up OpenTelemetry tracing
+			otelgrpc.UnaryServerInterceptor(),
+
+			// Set up logging
 			logging.UnaryServerInterceptor(newZapGrpcLogger(logger),
-				logging.WithLogOnEvents(logging.StartCall, logging.FinishCall)),
+				logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
+
+				// Extract trace ID from context
+				logging.WithFieldsFromContext(func(ctx context.Context) logging.Fields {
+					if span := trace.SpanContextFromContext(ctx); span.IsSampled() {
+						return logging.Fields{"traceID", span.TraceID().String()}
+					}
+					return nil
+				}),
+			),
 		),
 	)
 

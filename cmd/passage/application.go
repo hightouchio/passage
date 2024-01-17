@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/log"
+	"github.com/hightouchio/passage/otel"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/discovery"
@@ -114,6 +115,17 @@ func initDefaults(config *viper.Viper) {
 
 // startApplication boots the application dependency injection framework and executes the bootFuncs
 func startApplication(bootFuncs ...interface{}) error {
+	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Set up OpenTelemetry SDK
+	otelShutdown, err := otel.SetupOtelSDK(startCtx, "passage", version)
+	if err != nil {
+		return errors.Wrap(err, "could not initialize OpenTelemetry SDK")
+	}
+	// TODO: Do error handling
+	defer otelShutdown(context.Background())
+
 	app := fx.New(
 		// Define dependencies.
 		fx.Provide(
@@ -145,9 +157,6 @@ func startApplication(bootFuncs ...interface{}) error {
 
 		fx.NopLogger,
 	)
-
-	startCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	go func() {
 		log.Get().Named("Passage").Infow("Starting", zap.String("version", version))
