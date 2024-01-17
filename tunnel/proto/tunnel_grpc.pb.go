@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -22,7 +23,10 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PassageClient interface {
+	CreateStandardTunnel(ctx context.Context, in *CreateStandardTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
+	CreateReverseTunnel(ctx context.Context, in *CreateReverseTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
 	GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
+	DeleteTunnel(ctx context.Context, in *DeleteTunnelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type passageClient struct {
@@ -31,6 +35,24 @@ type passageClient struct {
 
 func NewPassageClient(cc grpc.ClientConnInterface) PassageClient {
 	return &passageClient{cc}
+}
+
+func (c *passageClient) CreateStandardTunnel(ctx context.Context, in *CreateStandardTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error) {
+	out := new(Tunnel)
+	err := c.cc.Invoke(ctx, "/Passage/CreateStandardTunnel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *passageClient) CreateReverseTunnel(ctx context.Context, in *CreateReverseTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error) {
+	out := new(Tunnel)
+	err := c.cc.Invoke(ctx, "/Passage/CreateReverseTunnel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *passageClient) GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error) {
@@ -42,11 +64,23 @@ func (c *passageClient) GetTunnel(ctx context.Context, in *GetTunnelRequest, opt
 	return out, nil
 }
 
+func (c *passageClient) DeleteTunnel(ctx context.Context, in *DeleteTunnelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/Passage/DeleteTunnel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PassageServer is the server API for Passage service.
 // All implementations must embed UnimplementedPassageServer
 // for forward compatibility
 type PassageServer interface {
+	CreateStandardTunnel(context.Context, *CreateStandardTunnelRequest) (*Tunnel, error)
+	CreateReverseTunnel(context.Context, *CreateReverseTunnelRequest) (*Tunnel, error)
 	GetTunnel(context.Context, *GetTunnelRequest) (*Tunnel, error)
+	DeleteTunnel(context.Context, *DeleteTunnelRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedPassageServer()
 }
 
@@ -54,8 +88,17 @@ type PassageServer interface {
 type UnimplementedPassageServer struct {
 }
 
+func (UnimplementedPassageServer) CreateStandardTunnel(context.Context, *CreateStandardTunnelRequest) (*Tunnel, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateStandardTunnel not implemented")
+}
+func (UnimplementedPassageServer) CreateReverseTunnel(context.Context, *CreateReverseTunnelRequest) (*Tunnel, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateReverseTunnel not implemented")
+}
 func (UnimplementedPassageServer) GetTunnel(context.Context, *GetTunnelRequest) (*Tunnel, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTunnel not implemented")
+}
+func (UnimplementedPassageServer) DeleteTunnel(context.Context, *DeleteTunnelRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTunnel not implemented")
 }
 func (UnimplementedPassageServer) mustEmbedUnimplementedPassageServer() {}
 
@@ -68,6 +111,42 @@ type UnsafePassageServer interface {
 
 func RegisterPassageServer(s grpc.ServiceRegistrar, srv PassageServer) {
 	s.RegisterService(&Passage_ServiceDesc, srv)
+}
+
+func _Passage_CreateStandardTunnel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateStandardTunnelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PassageServer).CreateStandardTunnel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Passage/CreateStandardTunnel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PassageServer).CreateStandardTunnel(ctx, req.(*CreateStandardTunnelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Passage_CreateReverseTunnel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateReverseTunnelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PassageServer).CreateReverseTunnel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Passage/CreateReverseTunnel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PassageServer).CreateReverseTunnel(ctx, req.(*CreateReverseTunnelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Passage_GetTunnel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -88,6 +167,24 @@ func _Passage_GetTunnel_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Passage_DeleteTunnel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTunnelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PassageServer).DeleteTunnel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Passage/DeleteTunnel",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PassageServer).DeleteTunnel(ctx, req.(*DeleteTunnelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Passage_ServiceDesc is the grpc.ServiceDesc for Passage service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -96,8 +193,20 @@ var Passage_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*PassageServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "CreateStandardTunnel",
+			Handler:    _Passage_CreateStandardTunnel_Handler,
+		},
+		{
+			MethodName: "CreateReverseTunnel",
+			Handler:    _Passage_CreateReverseTunnel_Handler,
+		},
+		{
 			MethodName: "GetTunnel",
 			Handler:    _Passage_GetTunnel_Handler,
+		},
+		{
+			MethodName: "DeleteTunnel",
+			Handler:    _Passage_DeleteTunnel_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

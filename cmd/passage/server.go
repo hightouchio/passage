@@ -184,7 +184,7 @@ func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.Grp
 
 	srv := grpc.NewServer()
 	proto.RegisterPassageServer(srv, tunnelServer)
-	log.Named("gRPC").Info("Ready")
+	log.Named("gRPC").Infow("Ready", zap.String("addr", config.GetString(ConfigGrpcAddr)))
 	if err := srv.Serve(listener); err != nil {
 		return errors.Wrap(err, "could not serve grpc server")
 	}
