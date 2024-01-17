@@ -6,6 +6,8 @@ import (
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/proto"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -18,6 +20,8 @@ type GrpcServer struct {
 }
 
 func (g GrpcServer) GetTunnel(ctx context.Context, req *proto.GetTunnelRequest) (*proto.Tunnel, error) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("tunnel.id", req.Id))
+
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse tunnel ID")
@@ -79,6 +83,8 @@ func (g GrpcServer) CreateReverseTunnel(ctx context.Context, req *proto.CreateRe
 }
 
 func (g GrpcServer) DeleteTunnel(ctx context.Context, req *proto.DeleteTunnelRequest) (*emptypb.Empty, error) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("tunnel.id", req.Id))
+
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse tunnel ID")

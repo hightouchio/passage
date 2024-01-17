@@ -9,6 +9,7 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"strings"
@@ -62,7 +63,7 @@ func (d Discovery) Wait(ctx context.Context) error {
 
 func (d Discovery) RegisterTunnel(ctx context.Context, id uuid.UUID, port int) error {
 	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Register tunnel %s", id.String())
-	_, span := d.tracer.Start(ctx, spanName("RegisterTunnel"))
+	_, span := d.startSpan(ctx, "RegisterTunnel", id.String())
 	defer span.End()
 
 	serviceId := getTunnelServiceId(id)
@@ -83,9 +84,10 @@ func (d Discovery) RegisterTunnel(ctx context.Context, id uuid.UUID, port int) e
 }
 
 func (d Discovery) DeregisterTunnel(ctx context.Context, id uuid.UUID) error {
-	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Deregister tunnel %s", id.String())
-	_, span := d.tracer.Start(ctx, spanName("DeregisterTunnel"))
+	_, span := d.startSpan(ctx, "DeregisterTunnel", id.String())
 	defer span.End()
+
+	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Deregister tunnel %s", id.String())
 
 	if err := d.Consul.Agent().ServiceDeregister(getTunnelServiceId(id)); err != nil {
 		return errors.Wrapf(err, "could not deregister tunnel %s", id.String())
@@ -94,7 +96,7 @@ func (d Discovery) DeregisterTunnel(ctx context.Context, id uuid.UUID) error {
 }
 
 func (d Discovery) GetTunnel(ctx context.Context, id uuid.UUID) (discovery.TunnelDetails, error) {
-	_, span := d.tracer.Start(ctx, spanName("GetTunnel"))
+	_, span := d.startSpan(ctx, "GetTunnel", id.String())
 	defer span.End()
 
 	services, _, err := d.Consul.Health().Service(getTunnelServiceId(id), "", false, nil)
@@ -142,7 +144,7 @@ func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) disco
 }
 
 func (d Discovery) RegisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
-	_, span := d.tracer.Start(ctx, spanName("RegisterHealthcheck"))
+	_, span := d.startSpan(ctx, "RegisterHealthcheck", tunnelId.String(), options.ID)
 	defer span.End()
 
 	consulCheckId := getTunnelHealthcheckId(tunnelId, options.ID)
@@ -172,7 +174,7 @@ func (d Discovery) RegisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, 
 }
 
 func (d Discovery) DeregisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string) error {
-	_, span := d.tracer.Start(context.Background(), spanName("DeregisterHealthcheck"))
+	_, span := d.startSpan(ctx, "DeregisterHealthcheck", tunnelId.String(), id)
 	defer span.End()
 
 	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
@@ -190,7 +192,7 @@ func (d Discovery) DeregisterHealthcheck(ctx context.Context, tunnelId uuid.UUID
 }
 
 func (d Discovery) UpdateHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string, status discovery.HealthcheckStatus, message string) error {
-	_, span := d.tracer.Start(context.Background(), spanName("UpdateHealthcheck"))
+	_, span := d.startSpan(ctx, "UpdateHealthcheck", tunnelId.String(), id)
 	defer span.End()
 
 	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
@@ -207,6 +209,23 @@ func (d Discovery) UpdateHealthcheck(ctx context.Context, tunnelId uuid.UUID, id
 		return errors.Wrap(err, "could not mark tunnel unhealthy")
 	}
 	return nil
+}
+
+func (d Discovery) startSpan(ctx context.Context, name string, opts ...string) (context.Context, trace.Span) {
+	var attributes []attribute.KeyValue
+	switch len(opts) {
+	case 1:
+		attributes = append(attributes, attribute.String("tunnel.id", opts[0]))
+	case 2:
+		attributes = append(attributes,
+			attribute.String("tunnel.id", opts[0]),
+			attribute.String("tunnel.healthcheck_id", opts[1]),
+		)
+	}
+
+	return d.tracer.Start(ctx, fmt.Sprintf("Consul/%s", name),
+		trace.WithAttributes(attributes...),
+	)
 }
 
 func getTunnelServiceId(id uuid.UUID) string {
