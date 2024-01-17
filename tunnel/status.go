@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/discovery"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
 	"net"
@@ -195,65 +194,21 @@ func listenerHealthcheck(
 }
 
 const (
-	healthcheckDialTimeout      = 5 * time.Second
-	healthcheckErrorWaitTimeout = 1 * time.Second
-	healthcheckReadMaxBytes     = 256
+	healthcheckDialTimeout = 5 * time.Second
 )
 
-// testListener dials the listener and reads some bytes to make sure its listening
+// testListener dials the listener to confirm that its open
 func testListener(ctx context.Context, addr net.Addr) error {
-	dialer := &net.Dialer{Timeout: healthcheckDialTimeout}
+	dialer := &net.Dialer{
+		Timeout: healthcheckDialTimeout,
+	}
 	conn, err := dialer.DialContext(ctx, "tcp", addr.String())
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	c := make(chan error)
-	go func() { c <- waitForReadError(ctx, conn, healthcheckErrorWaitTimeout) }()
-
-	// wait for waitForReadError to complete
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-
-	case err := <-c:
-		if err != nil {
-			return err
-		} else {
-			return nil
-		}
-	}
-}
-
-// waitForReadError
-func waitForReadError(ctx context.Context, reader io.ReadCloser, waitDuration time.Duration) error {
-	done := make(chan error)
-
-	// read in a context-aware fashion
-	go func() {
-		_, err := io.ReadAll(io.LimitReader(reader, healthcheckReadMaxBytes))
-
-		// If the outer context has already been cancelled, ignore the error
-		if ctx.Err() != nil {
-			return
-		}
-
-		if err != nil {
-			done <- errors.Wrap(err, "read error")
-			return
-		}
-		done <- nil
-	}()
-
-	select {
-	case <-time.After(waitDuration):
-		return nil // success
-	case <-ctx.Done(): // if an error does not occur before the context times out, we're OK
-		return ctx.Err()
-	case err := <-done:
-		return err
-	}
+	return nil
 }
 
 // withTunnelHealthcheck registers a healthcheck with service discovery, calls the given function, and deregisters the healthcheck when the function exits
