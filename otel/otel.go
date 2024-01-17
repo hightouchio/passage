@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -74,8 +74,10 @@ func newPropagator() propagation.TextMapPropagator {
 }
 
 func newTraceProvider(res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint())
+	traceExporter, err := otlptracegrpc.New(context.Background(),
+		otlptracegrpc.WithInsecure(), // TODO: Make secure
+		otlptracegrpc.WithEndpoint("jaeger.stats.svc.cluster.local:4317"),
+	)
 	if err != nil {
 		return nil, err
 	}
