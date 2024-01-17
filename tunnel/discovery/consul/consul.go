@@ -8,6 +8,8 @@ import (
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"strings"
 	"time"
@@ -18,6 +20,7 @@ type Discovery struct {
 	Consul         *consul.Client
 	HealthcheckTTL time.Duration
 	Log            *log.Logger
+	tracer         trace.Tracer
 }
 
 func NewConsulDiscovery(consul *consul.Client, hostAddress string, healthcheckTTL time.Duration) *Discovery {
@@ -26,6 +29,7 @@ func NewConsulDiscovery(consul *consul.Client, hostAddress string, healthcheckTT
 		Consul:         consul,
 		HealthcheckTTL: healthcheckTTL,
 		Log:            log.Get().Named("Consul"),
+		tracer:         otel.Tracer("Consul"),
 	}
 }
 
@@ -56,8 +60,10 @@ func (d Discovery) Wait(ctx context.Context) error {
 	return nil
 }
 
-func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
+func (d Discovery) RegisterTunnel(ctx context.Context, id uuid.UUID, port int) error {
 	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Register tunnel %s", id.String())
+	_, span := d.tracer.Start(ctx, spanName("RegisterTunnel"))
+	defer span.End()
 
 	serviceId := getTunnelServiceId(id)
 	err := d.Consul.Agent().ServiceRegister(&consul.AgentServiceRegistration{
@@ -76,8 +82,10 @@ func (d Discovery) RegisterTunnel(id uuid.UUID, port int) error {
 	return nil
 }
 
-func (d Discovery) DeregisterTunnel(id uuid.UUID) error {
+func (d Discovery) DeregisterTunnel(ctx context.Context, id uuid.UUID) error {
 	d.Log.With(zap.String("tunnel_id", id.String())).Debugf("Deregister tunnel %s", id.String())
+	_, span := d.tracer.Start(ctx, spanName("DeregisterTunnel"))
+	defer span.End()
 
 	if err := d.Consul.Agent().ServiceDeregister(getTunnelServiceId(id)); err != nil {
 		return errors.Wrapf(err, "could not deregister tunnel %s", id.String())
@@ -85,7 +93,10 @@ func (d Discovery) DeregisterTunnel(id uuid.UUID) error {
 	return nil
 }
 
-func (d Discovery) GetTunnel(id uuid.UUID) (discovery.TunnelDetails, error) {
+func (d Discovery) GetTunnel(ctx context.Context, id uuid.UUID) (discovery.TunnelDetails, error) {
+	_, span := d.tracer.Start(ctx, spanName("GetTunnel"))
+	defer span.End()
+
 	services, _, err := d.Consul.Health().Service(getTunnelServiceId(id), "", false, nil)
 	if err != nil {
 		return discovery.TunnelDetails{}, errors.Wrap(err, "could not get tunnel details")
@@ -130,7 +141,10 @@ func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) disco
 	return response
 }
 
-func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
+func (d Discovery) RegisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, options discovery.HealthcheckOptions) error {
+	_, span := d.tracer.Start(ctx, spanName("RegisterHealthcheck"))
+	defer span.End()
+
 	consulCheckId := getTunnelHealthcheckId(tunnelId, options.ID)
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
@@ -157,7 +171,10 @@ func (d Discovery) RegisterHealthcheck(tunnelId uuid.UUID, options discovery.Hea
 	return nil
 }
 
-func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
+func (d Discovery) DeregisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string) error {
+	_, span := d.tracer.Start(context.Background(), spanName("DeregisterHealthcheck"))
+	defer span.End()
+
 	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
@@ -172,9 +189,11 @@ func (d Discovery) DeregisterHealthcheck(tunnelId uuid.UUID, id string) error {
 	return nil
 }
 
-func (d Discovery) UpdateHealthcheck(tunnelId uuid.UUID, id string, status discovery.HealthcheckStatus, message string) error {
-	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
+func (d Discovery) UpdateHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string, status discovery.HealthcheckStatus, message string) error {
+	_, span := d.tracer.Start(context.Background(), spanName("UpdateHealthcheck"))
+	defer span.End()
 
+	consulCheckId := getTunnelHealthcheckId(tunnelId, id)
 	d.Log.With(
 		zap.String("tunnel_id", tunnelId.String()),
 		zap.Dict("check",
@@ -200,4 +219,8 @@ func getTunnelHealthcheckId(id uuid.UUID, checkId string) string {
 
 func formatConsulDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", int(d.Seconds()))
+}
+
+func spanName(name string) string {
+	return fmt.Sprintf("Consul/%s", name)
 }

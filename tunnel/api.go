@@ -89,7 +89,7 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 		Tunnel:     tunnel,
 	}
 
-	tunnelDetails, err := s.DiscoveryService.GetTunnel(req.ID)
+	tunnelDetails, err := s.DiscoveryService.GetTunnel(ctx, req.ID)
 	if err == nil {
 		// Populate connection details
 		response.ConnectionDetails = &ConnectionDetails{

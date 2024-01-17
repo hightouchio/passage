@@ -10,13 +10,13 @@ import (
 type Service interface {
 	Wait(ctx context.Context) error
 
-	RegisterTunnel(id uuid.UUID, port int) error
-	DeregisterTunnel(id uuid.UUID) error
-	GetTunnel(id uuid.UUID) (TunnelDetails, error)
+	RegisterTunnel(ctx context.Context, id uuid.UUID, port int) error
+	DeregisterTunnel(ctx context.Context, id uuid.UUID) error
+	GetTunnel(ctx context.Context, id uuid.UUID) (TunnelDetails, error)
 
-	RegisterHealthcheck(tunnelId uuid.UUID, options HealthcheckOptions) error
-	DeregisterHealthcheck(tunnelId uuid.UUID, id string) error
-	UpdateHealthcheck(tunnelId uuid.UUID, id string, status HealthcheckStatus, message string) error
+	RegisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, options HealthcheckOptions) error
+	DeregisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string) error
+	UpdateHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string, status HealthcheckStatus, message string) error
 }
 
 type HealthcheckDetails struct {

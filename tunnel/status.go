@@ -60,6 +60,7 @@ func statusHealthcheck(ctx context.Context, tunnel Tunnel, log *log.Logger, serv
 		TTL:  statusHealthcheckTTL,
 	}
 	withTunnelHealthcheck(
+		ctx,
 		tunnel.GetID(),
 		log,
 		serviceDiscovery,
@@ -115,6 +116,7 @@ func upstreamHealthcheck(
 
 	// Register the healthcheck
 	withTunnelHealthcheck(
+		ctx,
 		tunnel.GetID(),
 		log,
 		serviceDiscovery,
@@ -178,6 +180,7 @@ func listenerHealthcheck(
 
 	// Register the healthcheck
 	withTunnelHealthcheck(
+		ctx,
 		tunnel.GetID(),
 		log,
 		serviceDiscovery,
@@ -258,20 +261,21 @@ func waitForReadError(ctx context.Context, reader io.ReadCloser, waitDuration ti
 
 // withTunnelHealthcheck registers a healthcheck with service discovery, calls the given function, and deregisters the healthcheck when the function exits
 func withTunnelHealthcheck(
+	ctx context.Context,
 	tunnelId uuid.UUID,
 	log *log.Logger,
 	serviceDiscovery discovery.Service,
 	options discovery.HealthcheckOptions,
 	fn func(update func(status discovery.HealthcheckStatus, message string)),
 ) {
-	if err := serviceDiscovery.RegisterHealthcheck(tunnelId, options); err != nil {
+	if err := serviceDiscovery.RegisterHealthcheck(ctx, tunnelId, options); err != nil {
 		log.Errorw("Failed to register healthcheck", zap.Error(err))
 		return
 	}
 
 	// Deregister the healthcheck when the function exits
 	defer func() {
-		if err := serviceDiscovery.DeregisterHealthcheck(tunnelId, options.ID); err != nil {
+		if err := serviceDiscovery.DeregisterHealthcheck(ctx, tunnelId, options.ID); err != nil {
 			// It's OK if we fail to deregister the healthcheck
 			log.Errorw("Failed to deregister healthcheck", zap.Error(err))
 		}
@@ -279,7 +283,7 @@ func withTunnelHealthcheck(
 
 	// Call the function add pass it a function which it can use to update the healthcheck status
 	fn(func(status discovery.HealthcheckStatus, message string) {
-		if err := serviceDiscovery.UpdateHealthcheck(tunnelId, options.ID, status, message); err != nil {
+		if err := serviceDiscovery.UpdateHealthcheck(ctx, tunnelId, options.ID, status, message); err != nil {
 			log.Errorw("Failed to update healthcheck", zap.Error(err))
 		}
 	})

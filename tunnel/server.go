@@ -32,11 +32,11 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.Service, retry
 		defer tunnelListener.Close()
 
 		// Register tunnel with service discovery.
-		if err := serviceDiscovery.RegisterTunnel(tunnel.GetID(), portFromNetAddr(tunnelListener.Addr())); err != nil {
+		if err := serviceDiscovery.RegisterTunnel(ctx, tunnel.GetID(), portFromNetAddr(tunnelListener.Addr())); err != nil {
 			return errors.Wrap(err, "register with service discovery")
 		}
 		defer func() {
-			if err := serviceDiscovery.DeregisterTunnel(tunnel.GetID()); err != nil {
+			if err := serviceDiscovery.DeregisterTunnel(ctx, tunnel.GetID()); err != nil {
 				logger.Errorw("deregister tunnel from service discovery", zap.Error(err))
 			}
 		}()
