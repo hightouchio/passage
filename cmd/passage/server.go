@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/hightouchio/passage/grpc"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
 	"github.com/hightouchio/passage/tunnel"
@@ -19,7 +20,6 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"net"
 )
 
@@ -182,7 +182,7 @@ func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.Grp
 		return errors.Wrap(err, "could not open grpc listener")
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(log)
 	proto.RegisterPassageServer(srv, tunnelServer)
 	log.Named("gRPC").Infow("Ready", zap.String("addr", config.GetString(ConfigGrpcAddr)))
 	if err := srv.Serve(listener); err != nil {
