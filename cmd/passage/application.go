@@ -22,6 +22,7 @@ import (
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+	otelsdk "go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.uber.org/zap"
 	"net/http/pprof"
@@ -219,6 +220,9 @@ func newTunnelDiscoveryService(config *viper.Viper, log *log.Logger) (discovery.
 	default:
 		return nil, configError{"unknown discovery type"}
 	}
+
+	// Wrap discovery service in tracing
+	discoveryService = discovery.WithTracing(discoveryService, otelsdk.Tracer("discovery"))
 
 	// Wait for Service Discovery to come online before allowing the boot to proceed
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
