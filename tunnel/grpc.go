@@ -19,23 +19,6 @@ type GrpcServer struct {
 	proto.UnimplementedPassageServer
 }
 
-func (g GrpcServer) GetTunnel(ctx context.Context, req *proto.GetTunnelRequest) (*proto.Tunnel, error) {
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("tunnel.id", req.Id))
-
-	id, err := uuid.Parse(req.Id)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not parse tunnel ID")
-	}
-
-	response, err := g.API.GetTunnel(ctx, GetTunnelRequest{ID: id})
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get tunnel")
-	}
-
-	// Render the response as a protobuf tunnel
-	return response.ToProtoTunnel(), nil
-}
-
 func (g GrpcServer) CreateStandardTunnel(ctx context.Context, req *proto.CreateStandardTunnelRequest) (*proto.Tunnel, error) {
 	var sshUser string
 	if req.SshUser != nil {
@@ -80,6 +63,38 @@ func (g GrpcServer) CreateReverseTunnel(ctx context.Context, req *proto.CreateRe
 	}
 
 	return response.ToProtoTunnel(), nil
+}
+
+func (g GrpcServer) GetTunnel(ctx context.Context, req *proto.GetTunnelRequest) (*proto.GetTunnelResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("tunnel.id", req.Id))
+
+	id, err := uuid.Parse(req.Id)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not parse tunnel ID")
+	}
+
+	response, err := g.API.GetTunnel(ctx, GetTunnelRequest{ID: id})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get tunnel")
+	}
+
+	return &proto.GetTunnelResponse{
+		Tunnel: response.ToProtoTunnel(),
+		Instances: []*proto.TunnelInstance{
+			{
+				Host:   "localhost",
+				Port:   5432,
+				Status: proto.TunnelHealthcheck_WARNING,
+				Healthchecks: []*proto.TunnelHealthcheck{
+					{
+						Id:      "test",
+						Status:  proto.TunnelHealthcheck_CRITICAL,
+						Message: "Hello world",
+					},
+				},
+			},
+		},
+	}, nil
 }
 
 func (g GrpcServer) DeleteTunnel(ctx context.Context, req *proto.DeleteTunnelRequest) (*emptypb.Empty, error) {

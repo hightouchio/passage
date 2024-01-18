@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v4.25.1
-// source: proto/tunnel.proto
+// source: service.proto
 
 package proto
 
@@ -25,7 +25,7 @@ const _ = grpc.SupportPackageIsVersion7
 type PassageClient interface {
 	CreateStandardTunnel(ctx context.Context, in *CreateStandardTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
 	CreateReverseTunnel(ctx context.Context, in *CreateReverseTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
-	GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error)
+	GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*GetTunnelResponse, error)
 	DeleteTunnel(ctx context.Context, in *DeleteTunnelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
@@ -55,8 +55,8 @@ func (c *passageClient) CreateReverseTunnel(ctx context.Context, in *CreateRever
 	return out, nil
 }
 
-func (c *passageClient) GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*Tunnel, error) {
-	out := new(Tunnel)
+func (c *passageClient) GetTunnel(ctx context.Context, in *GetTunnelRequest, opts ...grpc.CallOption) (*GetTunnelResponse, error) {
+	out := new(GetTunnelResponse)
 	err := c.cc.Invoke(ctx, "/Passage/GetTunnel", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (c *passageClient) DeleteTunnel(ctx context.Context, in *DeleteTunnelReques
 type PassageServer interface {
 	CreateStandardTunnel(context.Context, *CreateStandardTunnelRequest) (*Tunnel, error)
 	CreateReverseTunnel(context.Context, *CreateReverseTunnelRequest) (*Tunnel, error)
-	GetTunnel(context.Context, *GetTunnelRequest) (*Tunnel, error)
+	GetTunnel(context.Context, *GetTunnelRequest) (*GetTunnelResponse, error)
 	DeleteTunnel(context.Context, *DeleteTunnelRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedPassageServer()
 }
@@ -94,7 +94,7 @@ func (UnimplementedPassageServer) CreateStandardTunnel(context.Context, *CreateS
 func (UnimplementedPassageServer) CreateReverseTunnel(context.Context, *CreateReverseTunnelRequest) (*Tunnel, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateReverseTunnel not implemented")
 }
-func (UnimplementedPassageServer) GetTunnel(context.Context, *GetTunnelRequest) (*Tunnel, error) {
+func (UnimplementedPassageServer) GetTunnel(context.Context, *GetTunnelRequest) (*GetTunnelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTunnel not implemented")
 }
 func (UnimplementedPassageServer) DeleteTunnel(context.Context, *DeleteTunnelRequest) (*emptypb.Empty, error) {
@@ -210,5 +210,5 @@ var Passage_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/tunnel.proto",
+	Metadata: "service.proto",
 }

@@ -1,16 +1,9 @@
 syntax = "proto3";
-
-import "google/protobuf/empty.proto";
 option go_package = "github.com/hightouchio/passage/tunnel/proto";
 
-service Passage {
-  rpc CreateStandardTunnel(CreateStandardTunnelRequest) returns (Tunnel);
-  rpc CreateReverseTunnel(CreateReverseTunnelRequest) returns (Tunnel);
-
-  rpc GetTunnel(GetTunnelRequest) returns (Tunnel);
-  rpc DeleteTunnel(DeleteTunnelRequest) returns (google.protobuf.Empty);
-}
-
+/**
+ * Tunnel represents a configured tunnel.
+ */
 message Tunnel {
   enum Type {
     STANDARD = 0;
@@ -40,25 +33,35 @@ message Tunnel {
   }
 }
 
-message GetTunnelRequest {
+/**
+ * TunnelInstance represents a single instance of a running Tunnel
+ */
+message TunnelInstance {
+  string host = 1;
+  uint32 port = 2;
+
+  /**
+   * status represents the aggregate status of all the healthchecks on this tunnel
+   */
+  TunnelHealthcheck.Status status = 3;
+
+  /**
+   * healthchecks represent the health of each individual healthcheck on this tunnel instance
+   */
+  repeated TunnelHealthcheck healthchecks = 4;
+}
+
+/**
+ * TunnelHealthcheck represents the health of a tunnel instance
+ */
+message TunnelHealthcheck {
+  enum Status {
+    WARNING = 0;
+    PASSING = 1;
+    CRITICAL = 2;
+  }
+
   string id = 1;
-}
-
-message DeleteTunnelRequest {
-  string id = 1;
-}
-
-message CreateStandardTunnelRequest {
-  string ssh_host = 1;
-  uint32 ssh_port = 2;
-  optional string ssh_user = 3;
-  string service_host = 4;
-  uint32 service_port = 5;
-
-  bool create_key_pair = 6;
-}
-
-message CreateReverseTunnelRequest {
-  repeated string public_keys = 1;
-  bool create_key_pair = 2;
+  Status status = 2;
+  string message = 3;
 }

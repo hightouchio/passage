@@ -4,11 +4,12 @@
 PROTO_DIR="./proto"
 
 # Generate Go code
-GO_OUTPUT_DIR="./tunnel"
+GO_OUTPUT_DIR="./tunnel/proto"
 protoc --go_out=$GO_OUTPUT_DIR \
        --go_opt=paths=source_relative \
        --go-grpc_out=$GO_OUTPUT_DIR \
        --go-grpc_opt=paths=source_relative \
+       -I $PROTO_DIR \
        proto/*.proto
 
 # Generate Node code
