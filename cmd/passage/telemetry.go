@@ -70,4 +70,6 @@ func runTelemetry(lc fx.Lifecycle, log *log.Logger, config *viper.Viper) error {
 			},
 		})
 	}
+
+	return nil
 }
