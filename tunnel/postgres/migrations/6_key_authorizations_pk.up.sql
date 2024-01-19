@@ -15,4 +15,4 @@ END $$;
 
 ALTER TABLE passage.key_authorizations DROP CONSTRAINT IF EXISTS key_authorizations_key_id_tunnel_type_tunnel_id_key;
 
-COMMIT:
+COMMIT;
