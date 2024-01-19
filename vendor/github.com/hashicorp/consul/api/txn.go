@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package api
 
 import (
@@ -67,6 +70,7 @@ const (
 	KVLock           KVOp = "lock"
 	KVUnlock         KVOp = "unlock"
 	KVGet            KVOp = "get"
+	KVGetOrEmpty     KVOp = "get-or-empty"
 	KVGetTree        KVOp = "get-tree"
 	KVCheckSession   KVOp = "check-session"
 	KVCheckIndex     KVOp = "check-index"
@@ -75,12 +79,14 @@ const (
 
 // KVTxnOp defines a single operation inside a transaction.
 type KVTxnOp struct {
-	Verb    KVOp
-	Key     string
-	Value   []byte
-	Flags   uint64
-	Index   uint64
-	Session string
+	Verb      KVOp
+	Key       string
+	Value     []byte
+	Flags     uint64
+	Index     uint64
+	Session   string
+	Namespace string `json:",omitempty"`
+	Partition string `json:",omitempty"`
 }
 
 // KVTxnOps defines a set of operations to be performed inside a single
@@ -91,6 +97,19 @@ type KVTxnOps []*KVTxnOp
 type KVTxnResponse struct {
 	Results []*KVPair
 	Errors  TxnErrors
+}
+
+// SessionOp constants give possible operations available in a transaction.
+type SessionOp string
+
+const (
+	SessionDelete SessionOp = "delete"
+)
+
+// SessionTxnOp defines a single operation inside a transaction.
+type SessionTxnOp struct {
+	Verb    SessionOp
+	Session Session
 }
 
 // NodeOp constants give possible operations available in a transaction.
@@ -207,7 +226,7 @@ func (c *Client) txn(txn TxnOps, q *QueryOptions) (bool, *TxnResponse, *QueryMet
 	if err != nil {
 		return false, nil, nil, err
 	}
-	defer resp.Body.Close()
+	defer closeResponseBody(resp)
 
 	qm := &QueryMeta{}
 	parseQueryMeta(resp, qm)
