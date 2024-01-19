@@ -34,7 +34,7 @@ func Profiler(settings ProfilerSettings) (stop func(), err error) {
 		profileTypes = append(profileTypes, profiler.GoroutineProfile)
 	}
 
-	if err := profiler.Start(profiler.WithProfileTypes()); err != nil {
+	if err := profiler.Start(profiler.WithProfileTypes(profileTypes...)); err != nil {
 		return nil, errors.Wrap(err, "could not start profiler")
 	}
 
