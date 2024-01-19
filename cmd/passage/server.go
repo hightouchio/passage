@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -58,6 +59,12 @@ func runTunnels(
 ) error {
 	// Helper function for initializing a tunnel.Manager
 	runTunnelManager := func(name string, listFunc tunnel.ListFunc) {
+		// Filter the list function if configured
+		listFunc, err := getFilteredListFunc(config, listFunc)
+		if err != nil {
+			logger.Fatalw("Error initializing filtered list func", zap.Error(err))
+		}
+
 		manager := tunnel.NewManager(
 			logger.Named("Manager").With("tunnel_type", name),
 			st.WithTags(stats.Tags{"tunnel_type": name}),
@@ -168,4 +175,30 @@ func runMigrations(lc fx.Lifecycle, log *log.Logger, db *sqlx.DB) error {
 	}
 
 	return nil
+}
+
+func getFilteredListFunc(config *viper.Viper, fn tunnel.ListFunc) (tunnel.ListFunc, error) {
+	// If tunnel filtering is not enabled, return the original ListFunc
+	if !config.IsSet(ConfigTunnelFilterMode) {
+		return fn, nil
+	}
+
+	switch mode := config.GetString(ConfigTunnelFilterMode); mode {
+	case "whitelist", "blacklist":
+		// Get the uuid.UUIDs from config
+		ids := config.GetStringSlice(ConfigTunnelFilterIds)
+		uuids := make([]uuid.UUID, len(ids))
+		for i, tunnelId := range ids {
+			parsed, err := uuid.Parse(tunnelId)
+			if err != nil {
+				return nil, fmt.Errorf("enabled tunnel filter: Could not parse tunnel ID %s", tunnelId)
+			}
+			uuids[i] = parsed
+		}
+
+		return tunnel.FilterTunnelsByIds(fn, mode, uuids)
+
+	default:
+		return nil, fmt.Errorf("invalid filter mode: %s", mode)
+	}
 }

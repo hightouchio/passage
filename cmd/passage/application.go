@@ -45,6 +45,9 @@ const (
 	ConfigTunnelRefreshInterval = "tunnel.refresh_interval"
 	ConfigTunnelRestartInterval = "tunnel.restart_interval"
 
+	ConfigTunnelFilterMode = "tunnel.filter.mode"
+	ConfigTunnelFilterIds  = "tunnel.filter.ids"
+
 	ConfigTunnelNormalEnabled           = "tunnel.normal.enabled"
 	ConfigTunnelNormalSshUser           = "tunnel.normal.ssh_user"
 	ConfigTunnelNormalDialTimeout       = "tunnel.normal.dial.timeout"
