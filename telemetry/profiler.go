@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"github.com/pkg/errors"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
@@ -40,4 +41,21 @@ func Profiler(settings ProfilerSettings) (stop func(), err error) {
 	return func() {
 		profiler.Stop()
 	}, nil
+}
+
+type TracerSettings struct {
+	RuntimeMetrics bool
+}
+
+func Tracer(settings TracerSettings) (stop func()) {
+	var options []tracer.StartOption
+
+	if settings.RuntimeMetrics {
+		options = append(options, tracer.WithRuntimeMetrics())
+	}
+
+	tracer.Start()
+	return func() {
+		tracer.Stop()
+	}
 }

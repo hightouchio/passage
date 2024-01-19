@@ -10,14 +10,30 @@ import (
 )
 
 const (
-	ConfigTelemetryProfilerEnabled = "telemetry.profiler.enabled"
-	ConfigTelemetryProfileTypes    = "telemetry.profiler.profile_types"
+	ConfigTelemetryRuntimeMetricsEnabled = "telemetry.runtime_metrics.enabled"
+	ConfigTelemetryProfilerEnabled       = "telemetry.profiler.enabled"
+	ConfigTelemetryProfileTypes          = "telemetry.profiler.profile_types"
 )
 
 // runTelemetry sets up telemetry for the application
 func runTelemetry(lc fx.Lifecycle, log *log.Logger, config *viper.Viper) error {
+	config.SetDefault(ConfigTelemetryRuntimeMetricsEnabled, false)
+	if config.GetBool(ConfigTelemetryRuntimeMetricsEnabled) {
+		stopTracer := telemetry.Tracer(telemetry.TracerSettings{
+			RuntimeMetrics: true,
+		})
+
+		// Stop the profiler on application shutdown
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				stopTracer()
+				return nil
+			},
+		})
+	}
+
 	config.SetDefault(ConfigTelemetryProfilerEnabled, false)
-	config.SetDefault(ConfigTelemetryProfileTypes, []string{"cpu", "heap", "block", "mutex", "goroutine"})
+	config.SetDefault(ConfigTelemetryProfileTypes, []string{"cpu", "heap"})
 
 	// Enable profiling
 	if config.GetBool(ConfigTelemetryProfilerEnabled) {
