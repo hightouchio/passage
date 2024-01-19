@@ -12,8 +12,8 @@ import (
 	"github.com/gorilla/mux"
 	consul "github.com/hashicorp/consul/api"
 	"github.com/hightouchio/passage/log"
-	"github.com/hightouchio/passage/otel"
 	"github.com/hightouchio/passage/stats"
+	"github.com/hightouchio/passage/telemetry"
 	"github.com/hightouchio/passage/tunnel"
 	"github.com/hightouchio/passage/tunnel/discovery"
 	discoveryConsul "github.com/hightouchio/passage/tunnel/discovery/consul"
@@ -121,7 +121,7 @@ func startApplication(bootFuncs ...interface{}) error {
 	defer cancel()
 
 	// Set up OpenTelemetry SDK
-	otelShutdown, err := otel.SetupOtelSDK(startCtx, "passage", version)
+	otelShutdown, err := telemetry.SetupOpenTelemetrySDK(startCtx, "passage", version)
 	if err != nil {
 		return errors.Wrap(err, "could not initialize OpenTelemetry SDK")
 	}

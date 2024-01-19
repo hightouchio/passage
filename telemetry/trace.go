@@ -1,4 +1,4 @@
-package otel
+package telemetry
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
-// SetupOtelSDK bootstraps the OpenTelemetry pipeline.
+// SetupOpenTelemetrySDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func SetupOtelSDK(ctx context.Context, serviceName, serviceVersion string) (shutdown func(context.Context) error, err error) {
+func SetupOpenTelemetrySDK(ctx context.Context, serviceName, serviceVersion string) (shutdown func(context.Context) error, err error) {
 	var shutdownFuncs []func(context.Context) error
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
