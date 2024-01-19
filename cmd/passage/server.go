@@ -35,6 +35,9 @@ var (
 // runServer boots the API and Tunnel servers
 func runServer(cmd *cobra.Command, args []string) error {
 	return startApplication(
+		// Run telemetry systems
+		runTelemetry,
+
 		// Run migrations on application boot.
 		runMigrations,
 
