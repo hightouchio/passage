@@ -83,7 +83,7 @@ type HealthcheckDetails struct {
 // GetTunnel returns the connection details for the tunnel, so Hightouch can connect using it
 func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelResponse, error) {
 	tunnel, tunnelType, err := findTunnel(ctx, s.SQL, req.ID)
-	if err == postgres.ErrTunnelNotFound {
+	if errors.Is(err, postgres.ErrTunnelNotFound) {
 		return nil, postgres.ErrTunnelNotFound
 	} else if err != nil {
 		return nil, errors.Wrap(err, "error fetching tunnel")
