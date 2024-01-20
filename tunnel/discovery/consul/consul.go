@@ -85,32 +85,31 @@ func (d Discovery) DeregisterTunnel(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (d Discovery) GetTunnel(ctx context.Context, id uuid.UUID) (discovery.TunnelDetails, error) {
+func (d Discovery) GetTunnel(ctx context.Context, id uuid.UUID) (discovery.Tunnel, error) {
 	services, _, err := d.Consul.Health().Service(getTunnelServiceId(id), "", false, nil)
 	if err != nil {
-		return discovery.TunnelDetails{}, errors.Wrap(err, "could not get tunnel details")
+		return discovery.Tunnel{}, errors.Wrap(err, "could not get tunnel details")
 	}
 
 	if len(services) == 0 {
-		return discovery.TunnelDetails{}, fmt.Errorf("tunnel %s not found", id.String())
+		return discovery.Tunnel{}, fmt.Errorf("tunnel %s not found", id.String())
 	}
+
+	instances := make([]discovery.TunnelInstance, len(services))
 
 	// Search for a healthy tunnel service instance and return it
-	for _, service := range services {
-		if service.Checks.AggregatedStatus() != consul.HealthPassing {
-			continue
-		}
-		return formatTunnelDetails(id, service), nil
+	for i, service := range services {
+		instances[i] = formatTunnelInstance(id, service)
 	}
 
-	// If there are no healthy tunnel service instances, return the first
-	return formatTunnelDetails(id, services[0]), nil
+	return discovery.Tunnel{Instances: instances}, nil
 }
 
-func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) discovery.TunnelDetails {
-	response := discovery.TunnelDetails{
+func formatTunnelInstance(tunnelId uuid.UUID, service *consul.ServiceEntry) discovery.TunnelInstance {
+	response := discovery.TunnelInstance{
 		Host:   service.Service.Address,
-		Port:   service.Service.Port,
+		Port:   uint32(service.Service.Port),
+		Status: discovery.HealthcheckStatus(service.Checks.AggregatedStatus()),
 		Checks: make([]discovery.HealthcheckDetails, 0),
 	}
 
@@ -121,7 +120,7 @@ func formatTunnelDetails(tunnelId uuid.UUID, service *consul.ServiceEntry) disco
 		if strings.HasPrefix(c.CheckID, checkPrefix) {
 			response.Checks = append(response.Checks, discovery.HealthcheckDetails{
 				ID:      strings.Replace(c.CheckID, checkPrefix, "", 1)[1:],
-				Status:  c.Status,
+				Status:  discovery.HealthcheckStatus(c.Status),
 				Message: c.Output,
 			})
 		}

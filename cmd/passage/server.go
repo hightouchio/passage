@@ -182,7 +182,9 @@ func runMigrations(lc fx.Lifecycle, log *log.Logger, db *sqlx.DB) error {
 }
 
 // runGrpcServer opens a gRPC listener and attaches the tunnel server
-func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.GrpcServer) error {
+func runGrpcServer(lc fx.Lifecycle, config *viper.Viper, log *log.Logger, tunnelServer tunnel.GrpcServer) error {
+	logger := log.Named("gRPC")
+
 	listener, err := net.Listen("tcp", config.GetString(ConfigGrpcAddr))
 	if err != nil {
 		return errors.Wrap(err, "could not open grpc listener")
@@ -190,10 +192,25 @@ func runGrpcServer(config *viper.Viper, log *log.Logger, tunnelServer tunnel.Grp
 
 	srv := grpc.NewServer(log)
 	proto.RegisterPassageServer(srv, tunnelServer)
-	log.Named("gRPC").Infow("Ready", zap.String("addr", config.GetString(ConfigGrpcAddr)))
-	if err := srv.Serve(listener); err != nil {
-		return errors.Wrap(err, "could not serve grpc server")
-	}
+	logger.Infow("Ready", zap.String("addr", config.GetString(ConfigGrpcAddr)))
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err := srv.Serve(listener); err != nil {
+					if !errors.Is(err, net.ErrClosed) {
+						logger.Errorw("could not serve gRPC server", zap.Error(err))
+					}
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			srv.GracefulStop()
+			srv.Stop()
+			return nil
+		},
+	})
 
 	return nil
 }

@@ -58,15 +58,20 @@ type GetTunnelRequest struct {
 }
 
 type GetTunnelResponse struct {
-	TunnelType         `json:"type"`
-	Tunnel             `json:"tunnel"`
+	TunnelType `json:"type"`
+	Tunnel     `json:"tunnel"`
+
+	Instances []discovery.TunnelInstance `json:"-"`
+
+	// DEPRECATED
 	*ConnectionDetails `json:"connection"`
-	Healthchecks       []HealthcheckDetails `json:"healthchecks"`
+	// DEPRECATED
+	Healthchecks []HealthcheckDetails `json:"healthchecks"`
 }
 
 type ConnectionDetails struct {
 	Host string `json:"host"`
-	Port int    `json:"port"`
+	Port uint32 `json:"port"`
 }
 
 type HealthcheckDetails struct {
@@ -90,21 +95,35 @@ func (s API) GetTunnel(ctx context.Context, req GetTunnelRequest) (*GetTunnelRes
 	}
 
 	tunnelDetails, err := s.DiscoveryService.GetTunnel(ctx, req.ID)
-	if err == nil {
-		// Populate connection details
-		response.ConnectionDetails = &ConnectionDetails{
-			Host: tunnelDetails.Host,
-			Port: tunnelDetails.Port,
-		}
+	// If we couldn't get the tunnel from service discovery, just return early
+	if err != nil {
+		return &response, nil
+	}
 
-		// Populate healthchecks
-		response.Healthchecks = make([]HealthcheckDetails, len(tunnelDetails.Checks))
-		for i, check := range tunnelDetails.Checks {
-			response.Healthchecks[i] = HealthcheckDetails{
-				ID:      check.ID,
-				Status:  check.Status,
-				Message: check.Message,
-			}
+	response.Instances = tunnelDetails.Instances
+
+	// Find the most healthy tunnel instance
+	bestInstance := tunnelDetails.Instances[0]
+	for _, instance := range tunnelDetails.Instances {
+		if instance.Status == discovery.HealthcheckPassing {
+			bestInstance = instance
+			break
+		}
+	}
+
+	// Populate connection details
+	response.ConnectionDetails = &ConnectionDetails{
+		Host: bestInstance.Host,
+		Port: bestInstance.Port,
+	}
+
+	// Populate healthchecks
+	response.Healthchecks = make([]HealthcheckDetails, len(bestInstance.Checks))
+	for i, check := range bestInstance.Checks {
+		response.Healthchecks[i] = HealthcheckDetails{
+			ID:      check.ID,
+			Status:  string(check.Status),
+			Message: check.Message,
 		}
 	}
 

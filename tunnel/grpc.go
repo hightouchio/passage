@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/log"
+	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/proto"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
@@ -79,22 +80,44 @@ func (g GrpcServer) GetTunnel(ctx context.Context, req *proto.GetTunnelRequest) 
 	}
 
 	return &proto.GetTunnelResponse{
-		Tunnel: response.ToProtoTunnel(),
-		Instances: []*proto.TunnelInstance{
-			{
-				Host:   "localhost",
-				Port:   5432,
-				Status: proto.TunnelHealthcheck_WARNING,
-				Healthchecks: []*proto.TunnelHealthcheck{
-					{
-						Id:      "test",
-						Status:  proto.TunnelHealthcheck_CRITICAL,
-						Message: "Hello world",
-					},
-				},
-			},
-		},
+		Tunnel:    response.ToProtoTunnel(),
+		Instances: formatTunnelInstances(response.Instances),
 	}, nil
+}
+
+func formatTunnelInstances(instances []discovery.TunnelInstance) []*proto.TunnelInstance {
+	convertStatus := func(status discovery.HealthcheckStatus) proto.TunnelHealthcheck_Status {
+		switch status {
+		case discovery.HealthcheckPassing:
+			return proto.TunnelHealthcheck_PASSING
+		case discovery.HealthcheckWarning:
+			return proto.TunnelHealthcheck_WARNING
+		case discovery.HealthcheckCritical:
+			return proto.TunnelHealthcheck_CRITICAL
+		}
+		return proto.TunnelHealthcheck_CRITICAL
+	}
+
+	protoInstances := make([]*proto.TunnelInstance, len(instances))
+	for i, instance := range instances {
+		healthchecks := make([]*proto.TunnelHealthcheck, len(instance.Checks))
+		for i, check := range instance.Checks {
+			healthchecks[i] = &proto.TunnelHealthcheck{
+				Id:      check.ID,
+				Status:  convertStatus(check.Status),
+				Message: check.Message,
+			}
+		}
+
+		protoInstances[i] = &proto.TunnelInstance{
+			Host:         instance.Host,
+			Port:         instance.Port,
+			Status:       convertStatus(instance.Status),
+			Healthchecks: healthchecks,
+		}
+	}
+
+	return protoInstances
 }
 
 func (g GrpcServer) DeleteTunnel(ctx context.Context, req *proto.DeleteTunnelRequest) (*emptypb.Empty, error) {

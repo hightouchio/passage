@@ -32,7 +32,7 @@ func (s TracedService) DeregisterTunnel(ctx context.Context, id uuid.UUID) error
 	return s.Service.DeregisterTunnel(ctx, id)
 }
 
-func (s TracedService) GetTunnel(ctx context.Context, id uuid.UUID) (TunnelDetails, error) {
+func (s TracedService) GetTunnel(ctx context.Context, id uuid.UUID) (Tunnel, error) {
 	ctx, span := s.startSpan(ctx, "GetTunnel", id.String())
 	defer span.End()
 	return s.Service.GetTunnel(ctx, id)

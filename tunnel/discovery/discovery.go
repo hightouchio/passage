@@ -12,24 +12,28 @@ type Service interface {
 
 	RegisterTunnel(ctx context.Context, id uuid.UUID, port int) error
 	DeregisterTunnel(ctx context.Context, id uuid.UUID) error
-	GetTunnel(ctx context.Context, id uuid.UUID) (TunnelDetails, error)
+	GetTunnel(ctx context.Context, id uuid.UUID) (Tunnel, error)
 
 	RegisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, options HealthcheckOptions) error
 	DeregisterHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string) error
 	UpdateHealthcheck(ctx context.Context, tunnelId uuid.UUID, id string, status HealthcheckStatus, message string) error
 }
 
-type HealthcheckDetails struct {
-	ID      string
-	Status  string
-	Message string
+type Tunnel struct {
+	Instances []TunnelInstance
 }
 
-type TunnelDetails struct {
-	Host string
-	Port int
-
+type TunnelInstance struct {
+	Host   string
+	Port   uint32
+	Status HealthcheckStatus
 	Checks []HealthcheckDetails
+}
+
+type HealthcheckDetails struct {
+	ID      string
+	Status  HealthcheckStatus
+	Message string
 }
 
 type HealthcheckOptions struct {
