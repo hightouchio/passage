@@ -4,7 +4,6 @@
 var grpc = require('@grpc/grpc-js');
 var service_pb = require('./service_pb.js');
 var google_protobuf_empty_pb = require('google-protobuf/google/protobuf/empty_pb.js');
-var tunnel_pb = require('./tunnel_pb.js');
 
 function serialize_CreateReverseTunnelRequest(arg) {
   if (!(arg instanceof service_pb.CreateReverseTunnelRequest)) {
@@ -62,14 +61,14 @@ function deserialize_GetTunnelResponse(buffer_arg) {
 }
 
 function serialize_Tunnel(arg) {
-  if (!(arg instanceof tunnel_pb.Tunnel)) {
+  if (!(arg instanceof service_pb.Tunnel)) {
     throw new Error('Expected argument of type Tunnel');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_Tunnel(buffer_arg) {
-  return tunnel_pb.Tunnel.deserializeBinary(new Uint8Array(buffer_arg));
+  return service_pb.Tunnel.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_google_protobuf_Empty(arg) {
@@ -84,13 +83,15 @@ function deserialize_google_protobuf_Empty(buffer_arg) {
 }
 
 
+// *
+// Passage is our tunnel API
 var PassageService = exports.PassageService = {
   createStandardTunnel: {
     path: '/Passage/CreateStandardTunnel',
     requestStream: false,
     responseStream: false,
     requestType: service_pb.CreateStandardTunnelRequest,
-    responseType: tunnel_pb.Tunnel,
+    responseType: service_pb.Tunnel,
     requestSerialize: serialize_CreateStandardTunnelRequest,
     requestDeserialize: deserialize_CreateStandardTunnelRequest,
     responseSerialize: serialize_Tunnel,
@@ -101,7 +102,7 @@ var PassageService = exports.PassageService = {
     requestStream: false,
     responseStream: false,
     requestType: service_pb.CreateReverseTunnelRequest,
-    responseType: tunnel_pb.Tunnel,
+    responseType: service_pb.Tunnel,
     requestSerialize: serialize_CreateReverseTunnelRequest,
     requestDeserialize: deserialize_CreateReverseTunnelRequest,
     responseSerialize: serialize_Tunnel,
