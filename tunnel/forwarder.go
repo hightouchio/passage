@@ -140,9 +140,9 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 
 	done := make(chan struct{})
 	go func() {
-		// Tally up bytes
-		go writeCountTo(pipeline.writeCounterA, &session.bytesReceived)
-		go writeCountTo(pipeline.writeCounterB, &session.bytesSent)
+		// Stream byte counts to stats
+		go writeCountToStats(pipeline.writeCounterA, f.Stats, StatTunnelBytesReceived)
+		go writeCountToStats(pipeline.writeCounterB, f.Stats, StatTunnelBytesSent)
 
 		// Forward bytes.
 		if err := pipeline.Run(); err != nil {
@@ -217,12 +217,15 @@ func (b CounterWriter) Write(p []byte) (n int, err error) {
 	return count, nil
 }
 
-func writeCountTo(counter <-chan uint64, n *uint64) {
+// Stream byte counts to stats
+func writeCountToStats(counter <-chan uint64, st stats.Stats, name string) {
 	for {
 		v, ok := <-counter
 		if !ok {
 			return
 		}
-		*n += v
+
+		// Increment counter
+		st.Count(name, int64(v), stats.Tags{}, 1)
 	}
 }
