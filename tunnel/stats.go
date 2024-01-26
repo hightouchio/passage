@@ -1,10 +1,31 @@
 package tunnel
 
+import "github.com/hightouchio/passage/stats"
+
 const (
-	StatTunnelCount         = "passage.tunnel.count"
-	StatTunnelBytesReceived = "passage.tunnel.bytes_rcvd"
-	StatTunnelBytesSent     = "passage.tunnel.bytes_sent"
+	StatTunnelCount = "passage.tunnel.count"
+
+	StatTunnelClientBytesSent     = "passage.tunnel.client.bytes_sent"
+	StatTunnelClientBytesReceived = "passage.tunnel.client.bytes_rcvd"
+
+	StatTunnelUpstreamBytesSent     = "passage.tunnel.upstream.bytes_sent"
+	StatTunnelUpstreamBytesReceived = "passage.tunnel.upstream.bytes_rcvd"
 
 	StatSshdConnectionsRequests          = "passage.sshd.connection_requests"
 	StatSshReversePortForwardingRequests = "passage.sshd.reverse_port_forwarding_requests"
 )
+
+type ConnectionStatsPayload struct {
+	ClientBytesSent       uint64
+	ClientBytesReceived   uint64
+	UpstreamBytesSent     uint64
+	UpstreamBytesReceived uint64
+}
+
+// reportTunnelConnectionStats reports the number of bytes read and written to the statsd client
+func reportTunnelConnectionStats(st stats.Stats, payload ConnectionStatsPayload) {
+	st.Count(StatTunnelClientBytesSent, int64(payload.ClientBytesSent), stats.Tags{}, 1)
+	st.Count(StatTunnelClientBytesReceived, int64(payload.ClientBytesReceived), stats.Tags{}, 1)
+	st.Count(StatTunnelUpstreamBytesSent, int64(payload.UpstreamBytesSent), stats.Tags{}, 1)
+	st.Count(StatTunnelUpstreamBytesReceived, int64(payload.UpstreamBytesReceived), stats.Tags{}, 1)
+}

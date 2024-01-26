@@ -57,6 +57,14 @@ func (f *TCPForwarder) Serve() error {
 		f.close = make(chan struct{})
 	}
 
+	// Create a channel to receive stat delta reports from connections
+	statReports := make(chan ConnectionStatsPayload)
+	// Aggregate stat delta reports on a per-tunnel basis and report them to the stats client
+	go connectionStatReporter(ctx, f.Stats, statReports)
+
+	// TODO: Can't do this until we wait for connections to exit.
+	//defer close(statReports)
+
 	for {
 		select {
 		case <-f.close:
@@ -81,22 +89,18 @@ func (f *TCPForwarder) Serve() error {
 				}
 				defer session.Close()
 
-				f.handleSession(ctx, session)
+				f.handleSession(ctx, session, statReports)
 			}()
 		}
 	}
 }
 
-func (f *TCPForwarder) Close() error {
-	if f.close != nil {
-		close(f.close)
-	}
-	return nil
-}
-
 // handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
+func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, statReports chan<- ConnectionStatsPayload) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sessionLogger := f.logger.With(zap.String("session_id", session.ID()))
 
 	defer func() {
@@ -106,10 +110,6 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 				sessionLogger.Warnw("Could not close session", zap.Error(err))
 			}
 		}
-
-		// Record pipeline metrics to logs and statsd
-		f.Stats.Count(StatTunnelBytesReceived, int64(session.bytesReceived), nil, 1)
-		f.Stats.Count(StatTunnelBytesSent, int64(session.bytesSent), nil, 1)
 	}()
 
 	// Get upstream connection.
@@ -135,21 +135,20 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 		return
 	}
 
-	// Initialize pipeline, and point the byte counters to bytesReceived and bytesSent on the TCPSession
-	pipeline := NewBidirectionalPipeline(session, upstream)
+	// Wrap the session and upstream in a CountedReadWriteCloser to count bytes sent and received
+	upstreamRwc := NewCountedReadWriteCloser(upstream)
+	sessionRwc := NewCountedReadWriteCloser(session)
 
+	// Stream connection stats to the aggregator
+	go connectionStatProducer(ctx, sessionRwc, upstreamRwc, statReports)
+
+	// Run bidirectional pipeline
 	done := make(chan struct{})
 	go func() {
-		// Tally up bytes
-		go writeCountTo(pipeline.writeCounterA, &session.bytesReceived)
-		go writeCountTo(pipeline.writeCounterB, &session.bytesSent)
-
-		// Forward bytes.
-		if err := pipeline.Run(); err != nil {
+		defer close(done)
+		if err := runPipeline(sessionRwc, upstreamRwc); err != nil {
 			sessionLogger.Errorw("Pipeline", zap.Error(err))
 		}
-
-		close(done)
 	}()
 
 	select {
@@ -158,71 +157,117 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession) {
 	}
 }
 
-// BidirectionalPipeline passes bytes bidirectionally from io.ReadWriters a and b, and records the number of bytes written to each.
-type BidirectionalPipeline struct {
-	a, b io.ReadWriteCloser
-
-	writeCounterA, writeCounterB chan uint64
-}
-
-func NewBidirectionalPipeline(a, b io.ReadWriteCloser) *BidirectionalPipeline {
-	return &BidirectionalPipeline{
-		a:             a,
-		writeCounterA: make(chan uint64),
-
-		b:             b,
-		writeCounterB: make(chan uint64),
+func (f *TCPForwarder) Close() error {
+	if f.close != nil {
+		close(f.close)
 	}
+	return nil
 }
 
-// Run starts the bidirectional copying of bytes, and blocks until completion.
-func (p *BidirectionalPipeline) Run() error {
+// runPipeline passes bytes bidirectionally from io.ReadWriterClosers a and b, and blocks until completion
+func runPipeline(a, b io.ReadWriteCloser) error {
 	// Buffered error channel to allow both sides to send an error without blocking and leaking goroutines.
 	cerr := make(chan error, 1)
 	// Copy data bidirectionally.
 	go func() {
-		defer p.a.Close()
-		defer p.b.Close()
-		defer close(p.writeCounterB)
+		defer a.Close()
+		defer b.Close()
 
-		cerr <- copyWithCounter(p.a, p.b, p.writeCounterB)
+		_, err := io.Copy(b, a)
+		cerr <- err
 	}()
 	go func() {
-		defer p.b.Close()
-		defer p.a.Close()
-		defer close(p.writeCounterA)
+		defer b.Close()
+		defer a.Close()
 
-		cerr <- copyWithCounter(p.b, p.a, p.writeCounterA)
+		_, err := io.Copy(a, b)
+		cerr <- err
 	}()
 
 	// Wait for either side A or B to close, and return err
 	return <-cerr
 }
 
-// copyWithCounter performs an io.Copy from src to dst, and keeps track of the number of bytes written by writing to the *written pointer.
-func copyWithCounter(src io.Reader, dst io.Writer, writeCounter chan<- uint64) error {
-	_, err := io.Copy(io.MultiWriter(dst, CounterWriter{writeCounter}), src)
-	return err
+func NewCountedReadWriteCloser(rwc io.ReadWriteCloser) *CountedReadWriteCloser {
+	return &CountedReadWriteCloser{ReadWriteCloser: rwc}
 }
 
-// CounterWriter is a no-op Writer that records how many bytes have been written to it
-type CounterWriter struct {
-	writeCounter chan<- uint64
+// CountedReadWriteCloser is a wrapper around an io.ReadWriteCloser that counts the number of bytes read and written
+type CountedReadWriteCloser struct {
+	io.ReadWriteCloser
+
+	bytesWritten uint64
+	bytesRead    uint64
 }
 
-// Write does nothing with the input byte slice but records the length to the WriteCounter
-func (b CounterWriter) Write(p []byte) (n int, err error) {
-	count := len(p)
-	b.writeCounter <- uint64(count)
-	return count, nil
+func (c *CountedReadWriteCloser) Read(p []byte) (n int, err error) {
+	bytesRead, err := c.Read(p)
+	c.bytesRead += uint64(bytesRead)
+	return bytesRead, err
 }
 
-func writeCountTo(counter <-chan uint64, n *uint64) {
+func (c *CountedReadWriteCloser) Write(p []byte) (n int, err error) {
+	c.bytesWritten += uint64(len(p))
+	return c.Write(p)
+}
+
+func (c *CountedReadWriteCloser) GetBytesWritten() uint64 {
+	return c.bytesWritten
+}
+
+func (c *CountedReadWriteCloser) GetBytesRead() uint64 {
+	return c.bytesRead
+}
+
+func connectionStatProducer(ctx context.Context, client, upstream *CountedReadWriteCloser, deltas chan<- ConnectionStatsPayload) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	var last ConnectionStatsPayload
+
 	for {
-		v, ok := <-counter
-		if !ok {
+		select {
+		case <-ctx.Done():
 			return
+
+		case <-ticker.C:
+			current := ConnectionStatsPayload{
+				ClientBytesSent:       client.GetBytesWritten(),
+				ClientBytesReceived:   client.GetBytesRead(),
+				UpstreamBytesSent:     upstream.GetBytesWritten(),
+				UpstreamBytesReceived: upstream.GetBytesRead(),
+			}
+
+			// Report the delta between the last and current stats
+			deltas <- ConnectionStatsPayload{
+				ClientBytesSent:       max(current.ClientBytesSent-last.ClientBytesSent, 0),
+				ClientBytesReceived:   max(current.ClientBytesReceived-last.ClientBytesReceived, 0),
+				UpstreamBytesSent:     max(current.UpstreamBytesSent-last.UpstreamBytesSent, 0),
+				UpstreamBytesReceived: max(current.UpstreamBytesReceived-last.UpstreamBytesReceived, 0),
+			}
+
+			last = current
 		}
-		*n += v
+	}
+}
+
+func connectionStatReporter(ctx context.Context, stat stats.Stats, deltas <-chan ConnectionStatsPayload) {
+	var agg ConnectionStatsPayload
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case delta := <-deltas:
+			// Aggregate deltas and report the aggregated value
+			//	(bundling / batching happens in the stat client)
+			agg.ClientBytesSent += delta.ClientBytesSent
+			agg.ClientBytesReceived += delta.ClientBytesReceived
+			agg.UpstreamBytesSent += delta.UpstreamBytesSent
+			agg.UpstreamBytesReceived += delta.UpstreamBytesReceived
+
+			// Report the aggregated stats to the stats client
+			reportTunnelConnectionStats(stat, agg)
+		}
 	}
 }
