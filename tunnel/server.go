@@ -28,7 +28,7 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.Service, retry
 		if err != nil {
 			return errors.Wrap(err, "open listener")
 		}
-		logger.Debugw("Start listener", "listen_addr", tunnelListener.Addr().String())
+		logger.Debugw("Start listener", zap.String("addr", tunnelListener.Addr().String()))
 		defer tunnelListener.Close()
 
 		// Register tunnel with service discovery.
