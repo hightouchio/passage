@@ -192,6 +192,10 @@ export class CreateStandardTunnelRequest extends jspb.Message {
     setServiceHost(value: string): CreateStandardTunnelRequest;
     getServicePort(): number;
     setServicePort(value: number): CreateStandardTunnelRequest;
+    clearPrivateKeysList(): void;
+    getPrivateKeysList(): Array<string>;
+    setPrivateKeysList(value: Array<string>): CreateStandardTunnelRequest;
+    addPrivateKeys(value: string, index?: number): string;
     getCreateKeyPair(): boolean;
     setCreateKeyPair(value: boolean): CreateStandardTunnelRequest;
 
@@ -212,6 +216,7 @@ export namespace CreateStandardTunnelRequest {
         sshUser?: string,
         serviceHost: string,
         servicePort: number,
+        privateKeysList: Array<string>,
         createKeyPair: boolean,
     }
 }

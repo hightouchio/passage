@@ -152,7 +152,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.CreateStandardTunnelRequest = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.CreateStandardTunnelRequest.repeatedFields_, null);
 };
 goog.inherits(proto.CreateStandardTunnelRequest, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -1403,6 +1403,13 @@ proto.TunnelHealthcheck.prototype.setMessage = function(value) {
 
 
 
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.CreateStandardTunnelRequest.repeatedFields_ = [6];
+
 
 
 if (jspb.Message.GENERATE_TO_OBJECT) {
@@ -1439,7 +1446,8 @@ proto.CreateStandardTunnelRequest.toObject = function(includeInstance, msg) {
     sshUser: jspb.Message.getFieldWithDefault(msg, 3, ""),
     serviceHost: jspb.Message.getFieldWithDefault(msg, 4, ""),
     servicePort: jspb.Message.getFieldWithDefault(msg, 5, 0),
-    createKeyPair: jspb.Message.getBooleanFieldWithDefault(msg, 6, false)
+    privateKeysList: (f = jspb.Message.getRepeatedField(msg, 6)) == null ? undefined : f,
+    createKeyPair: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
   };
 
   if (includeInstance) {
@@ -1497,6 +1505,10 @@ proto.CreateStandardTunnelRequest.deserializeBinaryFromReader = function(msg, re
       msg.setServicePort(value);
       break;
     case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addPrivateKeys(value);
+      break;
+    case 7:
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setCreateKeyPair(value);
       break;
@@ -1564,10 +1576,17 @@ proto.CreateStandardTunnelRequest.serializeBinaryToWriter = function(message, wr
       f
     );
   }
+  f = message.getPrivateKeysList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      6,
+      f
+    );
+  }
   f = message.getCreateKeyPair();
   if (f) {
     writer.writeBool(
-      6,
+      7,
       f
     );
   }
@@ -1683,11 +1702,48 @@ proto.CreateStandardTunnelRequest.prototype.setServicePort = function(value) {
 
 
 /**
- * optional bool create_key_pair = 6;
+ * repeated string private_keys = 6;
+ * @return {!Array<string>}
+ */
+proto.CreateStandardTunnelRequest.prototype.getPrivateKeysList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 6));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.CreateStandardTunnelRequest} returns this
+ */
+proto.CreateStandardTunnelRequest.prototype.setPrivateKeysList = function(value) {
+  return jspb.Message.setField(this, 6, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.CreateStandardTunnelRequest} returns this
+ */
+proto.CreateStandardTunnelRequest.prototype.addPrivateKeys = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 6, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.CreateStandardTunnelRequest} returns this
+ */
+proto.CreateStandardTunnelRequest.prototype.clearPrivateKeysList = function() {
+  return this.setPrivateKeysList([]);
+};
+
+
+/**
+ * optional bool create_key_pair = 7;
  * @return {boolean}
  */
 proto.CreateStandardTunnelRequest.prototype.getCreateKeyPair = function() {
-  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 6, false));
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 7, false));
 };
 
 
@@ -1696,7 +1752,7 @@ proto.CreateStandardTunnelRequest.prototype.getCreateKeyPair = function() {
  * @return {!proto.CreateStandardTunnelRequest} returns this
  */
 proto.CreateStandardTunnelRequest.prototype.setCreateKeyPair = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 6, value);
+  return jspb.Message.setProto3BooleanField(this, 7, value);
 };
 
 
