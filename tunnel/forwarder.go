@@ -146,6 +146,7 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, s
 
 	// Stream connection stats to the aggregator
 	go func() {
+		// Record connection stats every second and report deltas to the aggregator
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		connectionStatProducer(ctx, sessionRwc, upstreamRwc, statReports, ticker.C)
@@ -274,8 +275,6 @@ func connectionStatAggregator(
 	tick <-chan time.Time,
 ) {
 	var agg ConnectionStatsPayload
-
-	// TODO: Maybe we want to do a bit of internal batching rather than calling the report func on each delta?
 
 	for {
 		select {
