@@ -75,7 +75,7 @@ func (f *TCPForwarder) Serve() error {
 	var connectionCount atomic.Int32
 	go intervalMetricReporter(ctx, func() {
 		// Report the current client connection count
-		stats.GetStats(ctx).Gauge(StatTunnelClientActiveConnectionCount, float64(connectionCount.Load()), stats.Tags{}, 1)
+		f.Stats.Gauge(StatTunnelClientActiveConnectionCount, float64(connectionCount.Load()), stats.Tags{}, 1)
 	})
 
 	for {
