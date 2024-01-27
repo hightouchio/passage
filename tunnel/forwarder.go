@@ -252,29 +252,34 @@ func connectionStatProducer(
 	tick <-chan time.Time,
 ) {
 	var last ConnectionStatsPayload
+	doTick := func() {
+		current := ConnectionStatsPayload{
+			ClientBytesSent:       client.GetBytesWritten(),
+			ClientBytesReceived:   client.GetBytesRead(),
+			UpstreamBytesSent:     upstream.GetBytesWritten(),
+			UpstreamBytesReceived: upstream.GetBytesRead(),
+		}
+
+		// Report the delta between the last and current stats
+		deltas <- ConnectionStatsPayload{
+			ClientBytesSent:       max(current.ClientBytesSent-last.ClientBytesSent, 0),
+			ClientBytesReceived:   max(current.ClientBytesReceived-last.ClientBytesReceived, 0),
+			UpstreamBytesSent:     max(current.UpstreamBytesSent-last.UpstreamBytesSent, 0),
+			UpstreamBytesReceived: max(current.UpstreamBytesReceived-last.UpstreamBytesReceived, 0),
+		}
+
+		last = current
+	}
+
+	// Report the final stats before exiting
+	defer doTick()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
 		case <-tick:
-			current := ConnectionStatsPayload{
-				ClientBytesSent:       client.GetBytesWritten(),
-				ClientBytesReceived:   client.GetBytesRead(),
-				UpstreamBytesSent:     upstream.GetBytesWritten(),
-				UpstreamBytesReceived: upstream.GetBytesRead(),
-			}
-
-			// Report the delta between the last and current stats
-			deltas <- ConnectionStatsPayload{
-				ClientBytesSent:       max(current.ClientBytesSent-last.ClientBytesSent, 0),
-				ClientBytesReceived:   max(current.ClientBytesReceived-last.ClientBytesReceived, 0),
-				UpstreamBytesSent:     max(current.UpstreamBytesSent-last.UpstreamBytesSent, 0),
-				UpstreamBytesReceived: max(current.UpstreamBytesReceived-last.UpstreamBytesReceived, 0),
-			}
-
-			last = current
+			doTick()
 		}
 	}
 }
