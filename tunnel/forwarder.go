@@ -222,14 +222,14 @@ type CountedReadWriteCloser struct {
 }
 
 func (c *CountedReadWriteCloser) Read(p []byte) (n int, err error) {
-	bytesRead, err := c.Read(p)
+	bytesRead, err := c.ReadWriteCloser.Read(p)
 	c.bytesRead += uint64(bytesRead)
 	return bytesRead, err
 }
 
 func (c *CountedReadWriteCloser) Write(p []byte) (n int, err error) {
 	c.bytesWritten += uint64(len(p))
-	return c.Write(p)
+	return c.ReadWriteCloser.Write(p)
 }
 
 func (c *CountedReadWriteCloser) GetBytesWritten() uint64 {
