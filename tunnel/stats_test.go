@@ -24,7 +24,7 @@ type fakeConnectionPair struct {
 	tick           func()
 }
 
-func fakePair(ctx context.Context, deltas chan<- ConnectionStatsPayload) fakeConnectionPair {
+func fakePair(ctx context.Context, deltas chan<- forwarderStatsPayload) fakeConnectionPair {
 	client := &fakeConnection{}
 	server := &fakeConnection{}
 
@@ -54,7 +54,7 @@ func Test_StatReporter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	deltas := make(chan ConnectionStatsPayload)
+	deltas := make(chan forwarderStatsPayload)
 
 	// Create three connection pairs to simulate metric aggregation
 	pair1 := fakePair(ctx, deltas)
@@ -68,8 +68,8 @@ func Test_StatReporter(t *testing.T) {
 	}
 
 	// Consume the aggregated reports
-	report := make(chan ConnectionStatsPayload)
-	go connectionStatAggregator(ctx, deltas, func(stats ConnectionStatsPayload) {
+	report := make(chan forwarderStatsPayload)
+	go connectionStatAggregator(ctx, deltas, func(stats forwarderStatsPayload) {
 		report <- stats
 	}, tickAggC)
 
@@ -91,7 +91,7 @@ func Test_StatReporter(t *testing.T) {
 	tickAgg()
 
 	// Assert current state of the result
-	assert.Equal(t, ConnectionStatsPayload{
+	assert.Equal(t, forwarderStatsPayload{
 		ClientBytesSent:       135,
 		ClientBytesReceived:   175,
 		UpstreamBytesSent:     175,
@@ -112,7 +112,7 @@ func Test_StatReporter(t *testing.T) {
 
 	tickAgg()
 
-	assert.Equal(t, ConnectionStatsPayload{
+	assert.Equal(t, forwarderStatsPayload{
 		ClientBytesSent:       512,
 		ClientBytesReceived:   975,
 		UpstreamBytesSent:     975,

@@ -1,121 +1,149 @@
 package tunnel
 
 import (
-	"context"
+	"fmt"
+	"github.com/hightouchio/passage/log"
+	"github.com/hightouchio/passage/stats"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"io"
+	"net"
+	"sync"
 	"testing"
 	"time"
 )
 
-type fakeConnection struct {
-	bytesWritten, bytesRead uint64
+type upstreamService struct {
+	listener *net.TCPListener
 }
 
-func (f *fakeConnection) GetBytesWritten() uint64 {
-	return f.bytesWritten
+func (u *upstreamService) Serve() error {
+	for {
+		conn, err := u.listener.Accept()
+		if err != nil {
+			return err
+		}
+
+		go func() {
+			_, err := io.Copy(conn, conn)
+			if err != nil {
+				fmt.Printf("error copying: %s", err)
+			}
+		}()
+	}
 }
 
-func (f *fakeConnection) GetBytesRead() uint64 {
-	return f.bytesRead
+type dummyStats struct {
+	mux      sync.RWMutex
+	recorded map[string]int64
 }
 
-type fakeConnectionPair struct {
-	client, server *fakeConnection
-	tick           func()
+func newDummyStats() *dummyStats {
+	return &dummyStats{
+		recorded: make(map[string]int64),
+	}
 }
 
-func fakePair(ctx context.Context, deltas chan<- ConnectionStatsPayload) fakeConnectionPair {
-	client := &fakeConnection{}
-	server := &fakeConnection{}
+func (d *dummyStats) Count(name string, value int64, tags stats.Tags, rate float64) {
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	d.recorded[name] = value
+}
 
-	tick := make(chan time.Time)
-	go connectionStatProducer(ctx, client, server, deltas, tick)
+func (d *dummyStats) Gauge(name string, value float64, tags stats.Tags, rate float64) {
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	// convert it to int64 because w/ the forwarder, we're not actually recording floats
+	d.recorded[name] = int64(value)
+}
 
-	return fakeConnectionPair{
-		client: client,
-		server: server,
-		tick: func() {
-			tick <- time.Now()
+func (d *dummyStats) Get() map[string]int64 {
+	d.mux.RLock()
+	defer d.mux.RUnlock()
+	return d.recorded
+}
+
+// Test basic bidirectional forwarding of data, and recording of stats
+func Test_Forwarder(t *testing.T) {
+	// Upstream listener
+	upstreamListener, err := newEphemeralTCPListener(":0")
+	if err != nil {
+		t.Error(errors.Wrap(err, "open upstream listener"))
+	}
+	defer upstreamListener.Close()
+
+	// Upstream service
+	go func() {
+		service := upstreamService{listener: upstreamListener}
+		if err := service.Serve(); err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				t.Error(err)
+			}
+		}
+	}()
+
+	// Client side listener
+	clientListener, err := newEphemeralTCPListener(":0")
+	if err != nil {
+		t.Error(errors.Wrap(err, "open client listener"))
+	}
+	defer clientListener.Close()
+
+	// TCP Forwarder
+	forwarderStats := newDummyStats()
+	forwarder := &TCPForwarder{
+		Listener: clientListener,
+		GetUpstreamConn: func() (io.ReadWriteCloser, error) {
+			return net.Dial("tcp", fmt.Sprintf("localhost:%d", portFromNetAddr(upstreamListener.Addr())))
 		},
+		KeepaliveInterval: 5 * time.Second,
+		Stats:             forwarderStats,
+		logger:            log.Get().Named("Forwarder"),
 	}
-}
+	defer forwarder.Close()
+	go func() {
+		if err := forwarder.Serve(); err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				t.Error(err)
+			}
+		}
+	}()
 
-func (p fakeConnectionPair) clientWrite(bytes uint64) {
-	p.client.bytesWritten += bytes
-	p.server.bytesRead += bytes
-}
-
-func (p fakeConnectionPair) serverWrite(bytes uint64) {
-	p.client.bytesRead += bytes
-	p.server.bytesWritten += bytes
-}
-
-func Test_StatReporter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	deltas := make(chan ConnectionStatsPayload)
-
-	// Create three connection pairs to simulate metric aggregation
-	pair1 := fakePair(ctx, deltas)
-	pair2 := fakePair(ctx, deltas)
-	pair3 := fakePair(ctx, deltas)
-
-	// Create a ticker to control the aggregator
-	tickAggC := make(chan time.Time)
-	tickAgg := func() {
-		tickAggC <- time.Now()
+	clientConn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", portFromNetAddr(clientListener.Addr())))
+	if err != nil {
+		t.Error(err, "could not initiate client conn")
+		return
 	}
 
-	// Consume the aggregated reports
-	report := make(chan ConnectionStatsPayload)
-	go connectionStatAggregator(ctx, deltas, func(stats ConnectionStatsPayload) {
-		report <- stats
-	}, tickAggC)
+	// Write some data
+	if _, err := clientConn.Write([]byte("Hello, world!")); err != nil {
+		t.Error(err, "could not write to client conn")
+		return
+	}
 
-	// Total of 135 bytes written by the client, 175 bytes written by the server
-	pair1.clientWrite(10)
-	pair1.tick()
+	// Read some data
+	buf := make([]byte, 1024)
+	bytesRead, err := clientConn.Read(buf)
+	if err != nil {
+		t.Error(err, "could not read from client conn")
+		return
+	}
+	if string(buf[:bytesRead]) != "Hello, world!" {
+		t.Errorf("read unexpected data from client conn: %s", string(buf[:bytesRead]))
+		return
+	}
 
-	pair2.serverWrite(50)
-	pair2.tick()
+	clientConn.Close()
 
-	pair3.serverWrite(125)
-	pair3.clientWrite(125)
-	pair3.tick()
+	// Wait for metrics to fully report
+	//	Kinda hacky, but it is what it is
+	time.Sleep(1500 * time.Millisecond)
 
-	// Sleep so the deltas are consumed
-	time.Sleep(300 * time.Millisecond)
-
-	// Tick the aggregator
-	tickAgg()
-
-	// Assert current state of the result
-	assert.Equal(t, ConnectionStatsPayload{
-		ClientBytesSent:       135,
-		ClientBytesReceived:   175,
-		UpstreamBytesSent:     175,
-		UpstreamBytesReceived: 135,
-	}, <-report)
-
-	pair2.clientWrite(350)
-	pair2.serverWrite(250)
-	pair2.tick()
-
-	pair3.serverWrite(50)
-	pair3.serverWrite(500)
-	pair3.clientWrite(27)
-	pair3.tick()
-
-	// Sleep so the deltas are consumed
-	time.Sleep(1000 * time.Millisecond)
-
-	tickAgg()
-
-	assert.Equal(t, ConnectionStatsPayload{
-		ClientBytesSent:       512,
-		ClientBytesReceived:   975,
-		UpstreamBytesSent:     975,
-		UpstreamBytesReceived: 512,
-	}, <-report)
+	// Check stats
+	finalStats := forwarderStats.Get()
+	assert.Equal(t, int64(0), finalStats[StatTunnelClientActiveConnectionCount])
+	assert.Equal(t, int64(13), finalStats[StatTunnelClientBytesSent])
+	assert.Equal(t, int64(13), finalStats[StatTunnelClientBytesReceived])
+	assert.Equal(t, int64(13), finalStats[StatTunnelUpstreamBytesSent])
+	assert.Equal(t, int64(13), finalStats[StatTunnelUpstreamBytesReceived])
 }

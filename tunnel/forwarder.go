@@ -27,7 +27,7 @@ type TCPForwarder struct {
 	KeepaliveInterval time.Duration
 
 	logger *log.Logger
-	Stats  stats.Stats
+	Stats  forwarderStats
 
 	conns map[string]net.Conn
 	close chan struct{}
@@ -59,13 +59,13 @@ func (f *TCPForwarder) Serve() error {
 	}
 
 	// Create a channel to receive stat delta reports from connections
-	statReports := make(chan ConnectionStatsPayload)
+	statReports := make(chan forwarderStatsPayload)
 
 	// Aggregate stat delta reports on a per-tunnel basis and report them to the stats client
 	aggregateTicker := time.NewTicker(metricReportInterval)
 	defer aggregateTicker.Stop()
-	go connectionStatAggregator(ctx, statReports, func(report ConnectionStatsPayload) {
-		reportTunnelConnectionStats(f.Stats, report)
+	go connectionStatAggregator(ctx, statReports, func(report forwarderStatsPayload) {
+		reportForwarderStats(f.Stats, report)
 	}, aggregateTicker.C)
 
 	// TODO: Can't do this until we wait for connections to exit.
@@ -113,7 +113,7 @@ func (f *TCPForwarder) Serve() error {
 
 // handleSession takes a TCPSession (backed by a net.TCPConn), then initiates an upstream connection to our forwarding backend
 // and forwards packets between the two.
-func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, statReports chan<- ConnectionStatsPayload) {
+func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, statReports chan<- forwarderStatsPayload) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -240,6 +240,26 @@ func (c *CountedReadWriteCloser) GetBytesRead() uint64 {
 	return c.bytesRead
 }
 
+type forwarderStats interface {
+	Count(name string, value int64, tags stats.Tags, rate float64)
+	Gauge(name string, value float64, tags stats.Tags, rate float64)
+}
+
+type forwarderStatsPayload struct {
+	ClientBytesSent       uint64
+	ClientBytesReceived   uint64
+	UpstreamBytesSent     uint64
+	UpstreamBytesReceived uint64
+}
+
+// reportForwarderStats reports the number of bytes read and written to the statsd client
+func reportForwarderStats(st forwarderStats, payload forwarderStatsPayload) {
+	st.Count(StatTunnelClientBytesSent, int64(payload.ClientBytesSent), stats.Tags{}, 1)
+	st.Count(StatTunnelClientBytesReceived, int64(payload.ClientBytesReceived), stats.Tags{}, 1)
+	st.Count(StatTunnelUpstreamBytesSent, int64(payload.UpstreamBytesSent), stats.Tags{}, 1)
+	st.Count(StatTunnelUpstreamBytesReceived, int64(payload.UpstreamBytesReceived), stats.Tags{}, 1)
+}
+
 type trackedConnection interface {
 	GetBytesWritten() uint64
 	GetBytesRead() uint64
@@ -248,12 +268,12 @@ type trackedConnection interface {
 func connectionStatProducer(
 	ctx context.Context,
 	client, upstream trackedConnection,
-	deltas chan<- ConnectionStatsPayload,
+	deltas chan<- forwarderStatsPayload,
 	tick <-chan time.Time,
 ) {
-	var last ConnectionStatsPayload
+	var last forwarderStatsPayload
 	doTick := func() {
-		current := ConnectionStatsPayload{
+		current := forwarderStatsPayload{
 			ClientBytesSent:       client.GetBytesWritten(),
 			ClientBytesReceived:   client.GetBytesRead(),
 			UpstreamBytesSent:     upstream.GetBytesWritten(),
@@ -261,7 +281,7 @@ func connectionStatProducer(
 		}
 
 		// Report the delta between the last and current stats
-		deltas <- ConnectionStatsPayload{
+		deltas <- forwarderStatsPayload{
 			ClientBytesSent:       max(current.ClientBytesSent-last.ClientBytesSent, 0),
 			ClientBytesReceived:   max(current.ClientBytesReceived-last.ClientBytesReceived, 0),
 			UpstreamBytesSent:     max(current.UpstreamBytesSent-last.UpstreamBytesSent, 0),
@@ -286,11 +306,11 @@ func connectionStatProducer(
 
 func connectionStatAggregator(
 	ctx context.Context,
-	deltas <-chan ConnectionStatsPayload,
-	reportFunc func(ConnectionStatsPayload),
+	deltas <-chan forwarderStatsPayload,
+	reportFunc func(forwarderStatsPayload),
 	tick <-chan time.Time,
 ) {
-	var agg ConnectionStatsPayload
+	var agg forwarderStatsPayload
 
 	for {
 		select {
