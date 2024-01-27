@@ -1,39 +1,121 @@
 package tunnel
 
 import (
+	"context"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 )
 
-func Test_reportStats(t *testing.T) {
-	ticker := make(chan time.Time)
+type fakeConnection struct {
+	bytesWritten, bytesRead uint64
+}
 
-	var payloads *[]ConnectionStatsPayload
+func (f *fakeConnection) GetBytesWritten() uint64 {
+	return f.bytesWritten
+}
 
-	go reportStats(func() []ConnectionStatsPayload {
-		return *payloads
-	}, ticker)
+func (f *fakeConnection) GetBytesRead() uint64 {
+	return f.bytesRead
+}
 
-	payloads = &[]ConnectionStatsPayload{
-		{
-			ClientBytesSent:     100,
-			ClientBytesReceived: 100,
+type fakeConnectionPair struct {
+	client, server *fakeConnection
+	tick           func()
+}
+
+func fakePair(ctx context.Context, deltas chan<- ConnectionStatsPayload) fakeConnectionPair {
+	client := &fakeConnection{}
+	server := &fakeConnection{}
+
+	tick := make(chan time.Time)
+	go connectionStatProducer(ctx, client, server, deltas, tick)
+
+	return fakeConnectionPair{
+		client: client,
+		server: server,
+		tick: func() {
+			tick <- time.Now()
 		},
 	}
+}
 
-	ticker <- time.Now()
+func (p fakeConnectionPair) clientWrite(bytes uint64) {
+	p.client.bytesWritten += bytes
+	p.server.bytesRead += bytes
+}
 
-	payloads = &[]ConnectionStatsPayload{
-		{
-			ClientBytesSent:     200,
-			ClientBytesReceived: 100,
-		},
+func (p fakeConnectionPair) serverWrite(bytes uint64) {
+	p.client.bytesRead += bytes
+	p.server.bytesWritten += bytes
+}
 
-		{
-			ClientBytesSent:     500,
-			ClientBytesReceived: 500,
-		},
+func Test_StatReporter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	deltas := make(chan ConnectionStatsPayload)
+
+	// Create three connection pairs to simulate metric aggregation
+	pair1 := fakePair(ctx, deltas)
+	pair2 := fakePair(ctx, deltas)
+	pair3 := fakePair(ctx, deltas)
+
+	// Create a ticker to control the aggregator
+	tickAggC := make(chan time.Time)
+	tickAgg := func() {
+		tickAggC <- time.Now()
 	}
 
-	ticker <- time.Now()
+	// Consume the aggregated reports
+	report := make(chan ConnectionStatsPayload)
+	go connectionStatAggregator(ctx, deltas, func(stats ConnectionStatsPayload) {
+		report <- stats
+	}, tickAggC)
+
+	// Total of 135 bytes written by the client, 175 bytes written by the server
+	pair1.clientWrite(10)
+	pair1.tick()
+
+	pair2.serverWrite(50)
+	pair2.tick()
+
+	pair3.serverWrite(125)
+	pair3.clientWrite(125)
+	pair3.tick()
+
+	// Sleep so the deltas are consumed
+	time.Sleep(300 * time.Millisecond)
+
+	// Tick the aggregator
+	tickAgg()
+
+	// Assert current state of the result
+	assert.Equal(t, ConnectionStatsPayload{
+		ClientBytesSent:       135,
+		ClientBytesReceived:   175,
+		UpstreamBytesSent:     175,
+		UpstreamBytesReceived: 135,
+	}, <-report)
+
+	pair2.clientWrite(350)
+	pair2.serverWrite(250)
+	pair2.tick()
+
+	pair3.serverWrite(50)
+	pair3.serverWrite(500)
+	pair3.clientWrite(27)
+	pair3.tick()
+
+	// Sleep so the deltas are consumed
+	time.Sleep(1000 * time.Millisecond)
+
+	tickAgg()
+
+	assert.Equal(t, ConnectionStatsPayload{
+		ClientBytesSent:       512,
+		ClientBytesReceived:   975,
+		UpstreamBytesSent:     975,
+		UpstreamBytesReceived: 512,
+	}, <-report)
 }

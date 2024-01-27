@@ -59,8 +59,13 @@ func (f *TCPForwarder) Serve() error {
 
 	// Create a channel to receive stat delta reports from connections
 	statReports := make(chan ConnectionStatsPayload)
+
 	// Aggregate stat delta reports on a per-tunnel basis and report them to the stats client
-	go connectionStatReporter(ctx, f.Stats, statReports)
+	aggregateTicker := time.NewTicker(1 * time.Second)
+	defer aggregateTicker.Stop()
+	go connectionStatAggregator(ctx, statReports, func(report ConnectionStatsPayload) {
+		reportTunnelConnectionStats(f.Stats, report)
+	}, aggregateTicker.C)
 
 	// TODO: Can't do this until we wait for connections to exit.
 	//defer close(statReports)
@@ -140,7 +145,11 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, s
 	sessionRwc := NewCountedReadWriteCloser(session)
 
 	// Stream connection stats to the aggregator
-	go connectionStatProducer(ctx, sessionRwc, upstreamRwc, statReports)
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		connectionStatProducer(ctx, sessionRwc, upstreamRwc, statReports, ticker.C)
+	}()
 
 	// Run bidirectional pipeline
 	done := make(chan struct{})
@@ -219,10 +228,17 @@ func (c *CountedReadWriteCloser) GetBytesRead() uint64 {
 	return c.bytesRead
 }
 
-func connectionStatProducer(ctx context.Context, client, upstream *CountedReadWriteCloser, deltas chan<- ConnectionStatsPayload) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+type trackedConnection interface {
+	GetBytesWritten() uint64
+	GetBytesRead() uint64
+}
 
+func connectionStatProducer(
+	ctx context.Context,
+	client, upstream trackedConnection,
+	deltas chan<- ConnectionStatsPayload,
+	tick <-chan time.Time,
+) {
 	var last ConnectionStatsPayload
 
 	for {
@@ -230,7 +246,7 @@ func connectionStatProducer(ctx context.Context, client, upstream *CountedReadWr
 		case <-ctx.Done():
 			return
 
-		case <-ticker.C:
+		case <-tick:
 			current := ConnectionStatsPayload{
 				ClientBytesSent:       client.GetBytesWritten(),
 				ClientBytesReceived:   client.GetBytesRead(),
@@ -251,13 +267,21 @@ func connectionStatProducer(ctx context.Context, client, upstream *CountedReadWr
 	}
 }
 
-func connectionStatReporter(ctx context.Context, stat stats.Stats, deltas <-chan ConnectionStatsPayload) {
+func connectionStatAggregator(
+	ctx context.Context,
+	deltas <-chan ConnectionStatsPayload,
+	reportFunc func(ConnectionStatsPayload),
+	tick <-chan time.Time,
+) {
 	var agg ConnectionStatsPayload
+
+	// TODO: Maybe we want to do a bit of internal batching rather than calling the report func on each delta?
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
 		case delta := <-deltas:
 			// Aggregate deltas and report the aggregated value
 			//	(bundling / batching happens in the stat client)
@@ -266,8 +290,9 @@ func connectionStatReporter(ctx context.Context, stat stats.Stats, deltas <-chan
 			agg.UpstreamBytesSent += delta.UpstreamBytesSent
 			agg.UpstreamBytesReceived += delta.UpstreamBytesReceived
 
-			// Report the aggregated stats to the stats client
-			reportTunnelConnectionStats(stat, agg)
+		case <-tick:
+			// Report the aggregated stats to the reporter
+			reportFunc(agg)
 		}
 	}
 }
