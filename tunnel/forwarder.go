@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -61,7 +62,7 @@ func (f *TCPForwarder) Serve() error {
 	statReports := make(chan ConnectionStatsPayload)
 
 	// Aggregate stat delta reports on a per-tunnel basis and report them to the stats client
-	aggregateTicker := time.NewTicker(1 * time.Second)
+	aggregateTicker := time.NewTicker(metricReportInterval)
 	defer aggregateTicker.Stop()
 	go connectionStatAggregator(ctx, statReports, func(report ConnectionStatsPayload) {
 		reportTunnelConnectionStats(f.Stats, report)
@@ -69,6 +70,13 @@ func (f *TCPForwarder) Serve() error {
 
 	// TODO: Can't do this until we wait for connections to exit.
 	//defer close(statReports)
+
+	// Keep track of the number of active connections and report metrics
+	var connectionCount atomic.Int32
+	go intervalMetricReporter(ctx, func() {
+		// Report the current client connection count
+		stats.GetStats(ctx).Gauge(StatTunnelClientActiveConnectionCount, float64(connectionCount.Load()), stats.Tags{}, 1)
+	})
 
 	for {
 		select {
@@ -93,6 +101,9 @@ func (f *TCPForwarder) Serve() error {
 					id:      uuid.New().String(),
 				}
 				defer session.Close()
+
+				connectionCount.Add(1)
+				defer connectionCount.Add(-1)
 
 				f.handleSession(ctx, session, statReports)
 			}()
@@ -147,7 +158,7 @@ func (f *TCPForwarder) handleSession(ctx context.Context, session *TCPSession, s
 	// Stream connection stats to the aggregator
 	go func() {
 		// Record connection stats every second and report deltas to the aggregator
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(metricReportInterval)
 		defer ticker.Stop()
 		connectionStatProducer(ctx, sessionRwc, upstreamRwc, statReports, ticker.C)
 	}()

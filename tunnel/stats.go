@@ -1,18 +1,25 @@
 package tunnel
 
-import "github.com/hightouchio/passage/stats"
+import (
+	"context"
+	"github.com/hightouchio/passage/stats"
+	"time"
+)
 
 const (
 	StatTunnelCount = "passage.tunnel.count"
 
-	StatTunnelClientBytesSent     = "passage.tunnel.client.bytes_sent"
-	StatTunnelClientBytesReceived = "passage.tunnel.client.bytes_rcvd"
+	StatTunnelClientActiveConnectionCount = "passage.tunnel.client.connection_count"
+	StatTunnelClientBytesSent             = "passage.tunnel.client.bytes_sent"
+	StatTunnelClientBytesReceived         = "passage.tunnel.client.bytes_rcvd"
 
 	StatTunnelUpstreamBytesSent     = "passage.tunnel.upstream.bytes_sent"
 	StatTunnelUpstreamBytesReceived = "passage.tunnel.upstream.bytes_rcvd"
 
+	StatTunnelReverseForwardClientConnectionCount = "passage.tunnel.reverse.forward_client_connection_count"
+
 	StatSshdConnectionsRequests          = "passage.sshd.connection_requests"
-	StatSshReversePortForwardingRequests = "passage.sshd.reverse_port_forwarding_requests"
+	StatSshReversePortForwardingRequests = "passage.sshd.forwarding_connection_requests"
 )
 
 type ConnectionStatsPayload struct {
@@ -28,4 +35,22 @@ func reportTunnelConnectionStats(st stats.Stats, payload ConnectionStatsPayload)
 	st.Count(StatTunnelClientBytesReceived, int64(payload.ClientBytesReceived), stats.Tags{}, 1)
 	st.Count(StatTunnelUpstreamBytesSent, int64(payload.UpstreamBytesSent), stats.Tags{}, 1)
 	st.Count(StatTunnelUpstreamBytesReceived, int64(payload.UpstreamBytesReceived), stats.Tags{}, 1)
+}
+
+// Standardized metric reporting interval
+const metricReportInterval = 1 * time.Second
+
+func intervalMetricReporter(ctx context.Context, fn func()) {
+	ticker := time.NewTicker(metricReportInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			fn()
+		}
+	}
 }
