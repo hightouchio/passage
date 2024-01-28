@@ -3,7 +3,7 @@ import * as protoLoader from "@grpc/proto-loader";
 import {ProtoGrpcType} from "../proto/service";
 import {GetTunnelResponse__Output} from "../proto/GetTunnelResponse";
 
-const packageDefinition = protoLoader.loadSync('../../proto/service.proto');
+const packageDefinition = protoLoader.loadSync('../proto/service.proto');
 const proto = grpc.loadPackageDefinition(
     packageDefinition
 ) as unknown as ProtoGrpcType;
