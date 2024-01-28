@@ -12,18 +12,7 @@ protoc --go_out=$GO_OUTPUT_DIR \
        -I $PROTO_DIR \
        proto/*.proto
 
-# Generate Node code
-NODE_OUTPUT_DIR="./clients/node/src"
-grpc_tools_node_protoc \
-  --js_out=import_style=commonjs,binary:$NODE_OUTPUT_DIR \
-  --grpc_out=grpc_js:$NODE_OUTPUT_DIR \
-  --plugin=protoc-gen-grpc=`which grpc_tools_node_protoc_plugin` \
-  -I $PROTO_DIR \
-  $PROTO_DIR/*.proto
 
-# Generate TypeScript types
-protoc \
-  --plugin=protoc-gen-ts=./clients/node/node_modules/.bin/protoc-gen-ts \
-  --ts_out=grpc_js:$NODE_OUTPUT_DIR \
-  -I $PROTO_DIR \
-  $PROTO_DIR/*.proto
+# Generate Node code
+NODE_OUTPUT_DIR="./clients/node/proto"
+./clients/node/node_modules/.bin/proto-loader-gen-types --grpcLib=@grpc/grpc-js --outDir=$NODE_OUTPUT_DIR proto/*.proto
