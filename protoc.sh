@@ -15,4 +15,5 @@ protoc --go_out=$GO_OUTPUT_DIR \
 
 # Generate Node code
 NODE_OUTPUT_DIR="./clients/node/proto"
+cp proto/*.proto $NODE_OUTPUT_DIR
 ./clients/node/node_modules/.bin/proto-loader-gen-types --grpcLib=@grpc/grpc-js --outDir=$NODE_OUTPUT_DIR proto/*.proto
