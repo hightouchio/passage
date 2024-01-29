@@ -7,7 +7,6 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"go.uber.org/zap"
 	"io"
-	"net"
 	"time"
 )
 
@@ -159,63 +158,6 @@ func testUpstream(ctx context.Context, fn GetUpstreamFn) error {
 	case err := <-errchan:
 		return err
 	}
-}
-
-const (
-	listenerHealthcheckID       = "listener"
-	listenerHealthcheckName     = "Listener reachability"
-	listenerHealthcheckTTL      = 180 * time.Second
-	listenerHealthcheckInterval = 90 * time.Second
-)
-
-// listenerHealthcheck continuously checks the status of the tunnel listener
-func listenerHealthcheck(
-	ctx context.Context,
-	tunnel Tunnel,
-	log *log.Logger,
-	serviceDiscovery discovery.Service,
-	addr net.Addr,
-) {
-	options := discovery.HealthcheckOptions{
-		ID:   listenerHealthcheckID,
-		Name: listenerHealthcheckName,
-		TTL:  listenerHealthcheckTTL,
-	}
-
-	// Register the healthcheck
-	withTunnelHealthcheck(
-		tunnel.GetID(),
-		log,
-		serviceDiscovery,
-		options,
-		func(updateHealthcheck func(status discovery.HealthcheckStatus, message string)) {
-			runOnceAndTick(ctx, listenerHealthcheckInterval, func() {
-				if err := testListener(ctx, addr); err != nil {
-					updateHealthcheck(discovery.HealthcheckCritical, err.Error())
-				} else {
-					updateHealthcheck(discovery.HealthcheckPassing, "Listener is reachable")
-				}
-			})
-		},
-	)
-}
-
-const (
-	healthcheckDialTimeout = 5 * time.Second
-)
-
-// testListener dials the listener to confirm that its open
-func testListener(ctx context.Context, addr net.Addr) error {
-	dialer := &net.Dialer{
-		Timeout: healthcheckDialTimeout,
-	}
-	conn, err := dialer.DialContext(ctx, "tcp", addr.String())
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	return nil
 }
 
 // withTunnelHealthcheck registers a healthcheck with service discovery, calls the given function, and deregisters the healthcheck when the function exits
