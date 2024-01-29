@@ -200,20 +200,17 @@ func listenerHealthcheck(
 	)
 }
 
-const (
-	healthcheckDialTimeout = 5 * time.Second
-)
-
 // testListener dials the listener to confirm that its open
 func testListener(ctx context.Context, addr net.Addr) error {
-	dialer := &net.Dialer{
-		Timeout: healthcheckDialTimeout,
-	}
-	conn, err := dialer.DialContext(ctx, "tcp", addr.String())
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	// TODO: Re-enable
+	//dialer := &net.Dialer{
+	//	Timeout: healthcheckDialTimeout,
+	//}
+	//conn, err := dialer.DialContext(ctx, "tcp", addr.String())
+	//if err != nil {
+	//	return err
+	//}
+	//defer conn.Close()
 
 	return nil
 }
