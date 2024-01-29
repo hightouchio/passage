@@ -310,7 +310,7 @@ func connectionStatAggregator(
 	reportFunc func(forwarderStatsPayload),
 	tick <-chan time.Time,
 ) {
-	var agg forwarderStatsPayload
+	var agg, lastReported forwarderStatsPayload
 
 	for {
 		select {
@@ -326,8 +326,14 @@ func connectionStatAggregator(
 			agg.UpstreamBytesReceived += delta.UpstreamBytesReceived
 
 		case <-tick:
-			// Report the aggregated stats to the reporter
-			reportFunc(agg)
+			// Report the change in stats since the last report
+			reportFunc(forwarderStatsPayload{
+				ClientBytesSent:       max(agg.ClientBytesSent-lastReported.ClientBytesSent, 0),
+				ClientBytesReceived:   max(agg.ClientBytesReceived-lastReported.ClientBytesReceived, 0),
+				UpstreamBytesSent:     max(agg.UpstreamBytesSent-lastReported.UpstreamBytesSent, 0),
+				UpstreamBytesReceived: max(agg.UpstreamBytesReceived-lastReported.UpstreamBytesReceived, 0),
+			})
+			lastReported = agg
 		}
 	}
 }

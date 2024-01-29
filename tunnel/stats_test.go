@@ -113,9 +113,9 @@ func Test_StatReporter(t *testing.T) {
 	tickAgg()
 
 	assert.Equal(t, forwarderStatsPayload{
-		ClientBytesSent:       512,
-		ClientBytesReceived:   975,
-		UpstreamBytesSent:     975,
-		UpstreamBytesReceived: 512,
+		ClientBytesSent:       377,
+		ClientBytesReceived:   800,
+		UpstreamBytesSent:     800,
+		UpstreamBytesReceived: 377,
 	}, <-report)
 }
