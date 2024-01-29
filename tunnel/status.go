@@ -28,7 +28,7 @@ const (
 	statusHealthcheckID       = "tunnel"
 	statusHealthcheckName     = "Tunnel"
 	statusHealthcheckTTL      = 180 * time.Second
-	statusHealthcheckInterval = 15 * time.Second
+	statusHealthcheckInterval = 20 * time.Second
 )
 
 // intervalStatusReporter sends regular status updates to a StatusUpdate channel
@@ -92,7 +92,7 @@ const (
 	upstreamHealthcheckID       = "upstream"
 	upstreamHealthcheckName     = "Upstream reachability"
 	upstreamHealthcheckTTL      = 180 * time.Second
-	upstreamHealthcheckInterval = 15 * time.Second
+	upstreamHealthcheckInterval = 60 * time.Second
 )
 
 // upstreamHealthcheck reports the health of the upstream service to service discovery
@@ -164,8 +164,8 @@ func testUpstream(ctx context.Context, fn GetUpstreamFn) error {
 const (
 	listenerHealthcheckID       = "listener"
 	listenerHealthcheckName     = "Listener reachability"
-	listenerHealthcheckTTL      = 60 * time.Second
-	listenerHealthcheckInterval = 15 * time.Second
+	listenerHealthcheckTTL      = 180 * time.Second
+	listenerHealthcheckInterval = 60 * time.Second
 )
 
 // listenerHealthcheck continuously checks the status of the tunnel listener
