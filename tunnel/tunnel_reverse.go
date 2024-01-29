@@ -74,6 +74,12 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 		}
 	})
 
+	// Regularly report server-wide stats
+	go intervalMetricReporter(ctx, func() {
+		// Report the current client connection count
+		stats.GetStats(ctx).Gauge(StatTunnelReverseForwardClientConnectionCount, float64(connectionCount.Load()), stats.Tags{}, 1)
+	})
+
 	// Handle incoming SSH port forwarding connections
 	logger.Info("Tunnel registered with SSH server. Waiting for connections")
 	connWg := sync.WaitGroup{}
