@@ -58,13 +58,6 @@ func TCPServeStrategy(bindHost string, serviceDiscovery discovery.Service, retry
 			statusHealthcheck(ctx, tunnel, logger, serviceDiscovery, statusUpdates)
 		}()
 
-		// Start listener healthcheck
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			listenerHealthcheck(ctx, tunnel, logger, serviceDiscovery, tunnelListener.Addr())
-		}()
-
 		// Run the tunnel, and restart it if it crashes
 		err = retryTunnel(ctx, func() error {
 			logger.Info("Starting tunnel")
