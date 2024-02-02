@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"slices"
 )
 
 type GrpcServer struct {
@@ -116,6 +117,17 @@ func formatTunnelInstances(instances []discovery.TunnelInstance) []*proto.Tunnel
 			Healthchecks: healthchecks,
 		}
 	}
+
+	// Sort instances by status. Best candidate instances should come first.
+	slices.SortFunc(protoInstances, func(a, b *proto.TunnelInstance) int {
+		if a.Status == proto.TunnelHealthcheck_PASSING && b.Status != proto.TunnelHealthcheck_PASSING {
+			return -1
+		} else if a.Status != proto.TunnelHealthcheck_PASSING && b.Status == proto.TunnelHealthcheck_PASSING {
+			return 1
+		} else {
+			return 0
+		}
+	})
 
 	return protoInstances
 }
