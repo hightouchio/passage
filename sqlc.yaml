@@ -1,0 +1,10 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "tunnel/postgres/queries"
+    schema: "tunnel/postgres/migrations"
+    gen:
+      go:
+        package: "postgres"
+        out: "tunnel/postgres"
+        sql_package: "pgx/v5"
