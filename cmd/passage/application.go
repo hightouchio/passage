@@ -19,6 +19,8 @@ import (
 	keystoreInMemory "github.com/hightouchio/passage/tunnel/keystore/in_memory"
 	keystorePostgres "github.com/hightouchio/passage/tunnel/keystore/postgres"
 	keystoreS3 "github.com/hightouchio/passage/tunnel/keystore/s3"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"net/http/pprof"
 
@@ -170,9 +172,9 @@ func startApplication(bootFuncs ...interface{}) error {
 	return nil
 }
 
-func newTunnelAPI(sql *sqlx.DB, stats stats.Stats, keystore keystore.Keystore, discovery discovery.Service) (tunnel.API, error) {
+func newTunnelAPI(sql *pgx.Conn, stats stats.Stats, keystore keystore.Keystore, discovery discovery.Service) (tunnel.API, error) {
 	return tunnel.API{
-		SQL:              postgres.NewClient(sql),
+		SQL:              postgres.New(sql),
 		DiscoveryService: discovery,
 		Keystore:         keystore,
 		Stats:            stats,
@@ -216,7 +218,7 @@ func newTunnelDiscoveryService(config *viper.Viper, log *log.Logger) (discovery.
 	return discoveryService, nil
 }
 
-func newTunnelKeystore(config *viper.Viper, db *sqlx.DB) (keystore.Keystore, error) {
+func newTunnelKeystore(config *viper.Viper, db *pgxpool.Conn) (keystore.Keystore, error) {
 	if !config.IsSet(ConfigKeystoreType) {
 		return nil, newConfigError(ConfigKeystoreType, "must be set")
 	}

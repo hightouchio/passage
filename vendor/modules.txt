@@ -65,9 +65,6 @@ github.com/DataDog/sketches-go/ddsketch/mapping
 github.com/DataDog/sketches-go/ddsketch/pb/sketchpb
 github.com/DataDog/sketches-go/ddsketch/stat
 github.com/DataDog/sketches-go/ddsketch/store
-# github.com/Masterminds/squirrel v1.5.0
-## explicit; go 1.14
-github.com/Masterminds/squirrel
 # github.com/Microsoft/go-winio v0.6.1
 ## explicit; go 1.17
 github.com/Microsoft/go-winio
@@ -294,6 +291,11 @@ github.com/jackc/pgx/v5/pgconn
 github.com/jackc/pgx/v5/pgconn/internal/ctxwatch
 github.com/jackc/pgx/v5/pgproto3
 github.com/jackc/pgx/v5/pgtype
+github.com/jackc/pgx/v5/pgxpool
+# github.com/jackc/puddle/v2 v2.2.0
+## explicit; go 1.19
+github.com/jackc/puddle/v2
+github.com/jackc/puddle/v2/internal/genstack
 # github.com/jmespath/go-jmespath v0.4.0
 ## explicit; go 1.14
 github.com/jmespath/go-jmespath
@@ -301,12 +303,6 @@ github.com/jmespath/go-jmespath
 ## explicit; go 1.10
 github.com/jmoiron/sqlx
 github.com/jmoiron/sqlx/reflectx
-# github.com/lann/builder v0.0.0-20180802200727-47ae307949d0
-## explicit
-github.com/lann/builder
-# github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0
-## explicit
-github.com/lann/ps
 # github.com/lib/pq v1.10.2
 ## explicit; go 1.13
 github.com/lib/pq

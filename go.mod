@@ -5,7 +5,6 @@ go 1.21
 require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/DataDog/datadog-go v4.7.0+incompatible
-	github.com/Masterminds/squirrel v1.5.0
 	github.com/aws/aws-sdk-go v1.44.327
 	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/gliderlabs/ssh v0.3.5
@@ -71,9 +70,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/puddle/v2 v2.2.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
-	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
