@@ -100,8 +100,10 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		return sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
 	}
 
-	// Start upstream reachability test
-	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
+	if t.HealthcheckEnabled {
+		// Start upstream reachability test
+		go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
+	}
 
 	// If the context has been cancelled at this point in time, stop the tunnel.
 	if ctx.Err() != nil {

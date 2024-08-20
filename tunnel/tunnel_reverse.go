@@ -139,10 +139,12 @@ func (t ReverseTunnel) handleConnection(
 		}
 	}()
 
-	// Start upstream reachability test
-	// TODO: If we have multiple forwarders, the healthchecks can conflict.
-	//	We should probably have a single healthcheck for the tunnel
-	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+	if t.HealthcheckEnabled {
+		// Start upstream reachability test
+		// TODO: If we have multiple forwarders, the healthchecks can conflict.
+		//		We should probably have a single healthcheck for the tunnel
+		go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+	}
 
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
