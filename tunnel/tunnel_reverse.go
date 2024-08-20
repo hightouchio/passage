@@ -37,8 +37,6 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 
 	logger := log.FromContext(ctx)
 
-	logger.Infow("Healthcheck", zap.Bool("enabled", t.HealthcheckEnabled))
-
 	logger.Debug("Get authorized keys")
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
 	if err != nil {
@@ -140,6 +138,7 @@ func (t ReverseTunnel) handleConnection(
 	}()
 
 	if t.HealthcheckEnabled {
+		logger.Debug("Starting upstream healthcheck")
 		// Start upstream reachability test
 		// TODO: If we have multiple forwarders, the healthchecks can conflict.
 		//		We should probably have a single healthcheck for the tunnel

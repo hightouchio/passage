@@ -96,6 +96,7 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 	}
 
 	if t.HealthcheckEnabled {
+		logger.Debug("Starting upstream healthcheck")
 		// Start upstream reachability test
 		go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
 	}
