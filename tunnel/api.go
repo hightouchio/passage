@@ -29,7 +29,11 @@ func (s API) GetNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
 	// convert all the SQL records to our primary struct
 	tunnels := make([]NormalTunnel, len(normalTunnels))
 	for i, record := range normalTunnels {
-		tunnel := normalTunnelFromSQL(record)
+		tunnel, err := normalTunnelFromSQL(record)
+		if err != nil {
+			return []NormalTunnel{}, errors.Wrapf(err, "could not convert tunnel %s", record.ID.String())
+		}
+
 		tunnels[i] = tunnel
 	}
 
@@ -46,7 +50,11 @@ func (s API) GetReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
 	// convert all the SQL records to our primary struct
 	tunnels := make([]ReverseTunnel, len(reverseTunnels))
 	for i, record := range reverseTunnels {
-		tunnel := reverseTunnelFromSQL(record)
+		tunnel, err := reverseTunnelFromSQL(record)
+		if err != nil {
+			return []ReverseTunnel{}, errors.Wrapf(err, "could not convert tunnel %s", record.ID.String())
+		}
+
 		tunnels[i] = tunnel
 	}
 
@@ -153,13 +161,14 @@ func (s API) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Update
 			"sshPort":     "ssh_port",
 			"sshUser":     "ssh_user",
 		}))
-		tunnel = normalTunnelFromSQL(newTunnel)
+
+		tunnel, err = normalTunnelFromSQL(newTunnel)
 	case Reverse:
 		var newTunnel postgres.ReverseTunnel
 		newTunnel, err = s.SQL.UpdateReverseTunnel(ctx, req.ID, mapUpdateFields(req.UpdateFields, map[string]string{
 			"enabled": "enabled",
 		}))
-		tunnel = reverseTunnelFromSQL(newTunnel)
+		tunnel, err = reverseTunnelFromSQL(newTunnel)
 	default:
 		return nil, fmt.Errorf("invalid tunnel type %s", tunnelType)
 	}

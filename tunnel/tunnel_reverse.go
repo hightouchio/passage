@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -25,6 +26,8 @@ type ReverseTunnel struct {
 
 	SSHDPort   int `json:"sshdPort"`
 	TunnelPort int `json:"tunnelPort"`
+
+	Healthcheck HealthcheckConfig `json:"healthcheck"`
 
 	authorizedKeysHash string
 	services           ReverseTunnelServices
@@ -227,15 +230,23 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
-func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
+func reverseTunnelFromSQL(record postgres.ReverseTunnel) (ReverseTunnel, error) {
+	var healthcheckConfig HealthcheckConfig
+	if record.HealthcheckConfig.Valid {
+		if err := json.Unmarshal([]byte(record.HealthcheckConfig.String), &healthcheckConfig); err != nil {
+			return ReverseTunnel{}, errors.Wrap(err, "could not unmarshal healthcheck config")
+		}
+	}
+
 	return ReverseTunnel{
 		ID:                 record.ID,
 		CreatedAt:          record.CreatedAt,
 		Enabled:            record.Enabled,
 		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
+		Healthcheck:        healthcheckConfig,
 		authorizedKeysHash: record.AuthorizedKeysHash,
-	}
+	}, nil
 }
 
 func (t ReverseTunnel) GetID() uuid.UUID {

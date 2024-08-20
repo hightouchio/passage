@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -30,11 +31,18 @@ type NormalTunnel struct {
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
 
+	Healthcheck HealthcheckConfig `json:"healthcheck"`
+
 	// Deprecated
 	TunnelPort int `json:"tunnelPort"`
 
 	clientOptions SSHClientOptions
 	services      NormalTunnelServices
+}
+
+type HealthcheckConfig struct {
+	Enabled  bool          `json:"enabled"`
+	Interval time.Duration `json:"interval"`
 }
 
 func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
@@ -237,7 +245,14 @@ func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 }
 
 // convert a SQL DB representation of a postgres.NormalTunnel into the primary NormalTunnel struct
-func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
+func normalTunnelFromSQL(record postgres.NormalTunnel) (NormalTunnel, error) {
+	var healthcheckConfig HealthcheckConfig
+	if record.HealthcheckConfig.Valid {
+		if err := json.Unmarshal([]byte(record.HealthcheckConfig.String), &healthcheckConfig); err != nil {
+			return NormalTunnel{}, errors.Wrap(err, "could not unmarshal healthcheck config")
+		}
+	}
+
 	return NormalTunnel{
 		ID:          record.ID,
 		CreatedAt:   record.CreatedAt,
@@ -247,8 +262,9 @@ func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 		SSHPort:     record.SSHPort,
 		ServiceHost: record.ServiceHost,
 		ServicePort: record.ServicePort,
+		Healthcheck: healthcheckConfig,
 		TunnelPort:  record.TunnelPort,
-	}
+	}, nil
 }
 
 func (t NormalTunnel) GetID() uuid.UUID {
