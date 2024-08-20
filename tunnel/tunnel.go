@@ -81,7 +81,7 @@ func (s API) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelR
 		}
 	}
 
-	tunnel, err := normalTunnelFromSQL(record)
+	tunnel := normalTunnelFromSQL(record)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get connection details")
 	}
@@ -159,7 +159,7 @@ func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunne
 		return nil, errors.Wrap(err, "could not insert")
 	}
 
-	response.Tunnel, err = reverseTunnelFromSQL(record)
+	response.Tunnel = reverseTunnelFromSQL(record)
 
 	return &response, nil
 }
@@ -169,11 +169,7 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 	// Reverse funnel first
 	reverseTunnel, err := sql.GetReverseTunnel(ctx, id)
 	if err == nil {
-		tunnel, err := reverseTunnelFromSQL(reverseTunnel)
-		if err != nil {
-			return nil, Reverse, errors.Wrap(err, "could not convert tunnel")
-		}
-		return tunnel, Reverse, nil
+		return reverseTunnelFromSQL(reverseTunnel), Reverse, nil
 	} else if err != postgres.ErrTunnelNotFound {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")
@@ -182,11 +178,7 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 	// Normal tunnel next
 	normalTunnel, err := sql.GetNormalTunnel(ctx, id)
 	if err == nil {
-		tunnel, err := normalTunnelFromSQL(normalTunnel)
-		if err != nil {
-			return nil, Normal, errors.Wrap(err, "could not convert tunnel")
-		}
-		return tunnel, Normal, nil
+		return normalTunnelFromSQL(normalTunnel), Normal, nil
 	} else if err != postgres.ErrTunnelNotFound {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")

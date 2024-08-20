@@ -15,12 +15,12 @@ type NormalTunnel struct {
 	CreatedAt time.Time `db:"created_at"`
 	Enabled   bool      `db:"enabled"`
 
-	SSHUser           sql.NullString `db:"ssh_user"`
-	SSHHost           string         `db:"ssh_host"`
-	SSHPort           int            `db:"ssh_port"`
-	ServiceHost       string         `db:"service_host"`
-	ServicePort       int            `db:"service_port"`
-	HealthcheckConfig sql.NullString `db:"healthcheck_config"`
+	SSHUser            sql.NullString `db:"ssh_user"`
+	SSHHost            string         `db:"ssh_host"`
+	SSHPort            int            `db:"ssh_port"`
+	ServiceHost        string         `db:"service_host"`
+	ServicePort        int            `db:"service_port"`
+	HealthcheckEnabled bool           `db:"healthcheck_enabled"`
 
 	// Deprecated
 	TunnelPort int            `db:"tunnel_port"`

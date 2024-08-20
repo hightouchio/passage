@@ -11,13 +11,13 @@ import (
 )
 
 type ReverseTunnel struct {
-	ID                 uuid.UUID      `db:"id"`
-	CreatedAt          time.Time      `db:"created_at"`
-	Enabled            bool           `db:"enabled"`
-	SSHDPort           int            `db:"sshd_port"`
-	AuthorizedKeysHash string         `db:"authorized_keys_hash"`
-	TunnelPort         int            `db:"tunnel_port"`
-	HealthcheckConfig  sql.NullString `db:"healthcheck_config"`
+	ID                 uuid.UUID `db:"id"`
+	CreatedAt          time.Time `db:"created_at"`
+	Enabled            bool      `db:"enabled"`
+	SSHDPort           int       `db:"sshd_port"`
+	AuthorizedKeysHash string    `db:"authorized_keys_hash"`
+	TunnelPort         int       `db:"tunnel_port"`
+	HealthcheckEnabled bool      `db:"healthcheck_enabled"`
 
 	// Deprecated
 	HttpProxy  bool           `db:"http_proxy"`

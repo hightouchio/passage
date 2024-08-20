@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -31,7 +30,7 @@ type NormalTunnel struct {
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
 
-	Healthcheck HealthcheckConfig `json:"healthcheck"`
+	HealthcheckEnabled bool `json:"healthcheck_enabled"`
 
 	// Deprecated
 	TunnelPort int `json:"tunnelPort"`
@@ -230,7 +229,8 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHHost == t2.SSHHost &&
 		t.SSHPort == t2.SSHPort &&
 		t.ServiceHost == t2.ServiceHost &&
-		t.ServicePort == t2.ServicePort
+		t.ServicePort == t2.ServicePort &&
+		t.HealthcheckEnabled == t2.HealthcheckEnabled
 }
 
 // sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
@@ -245,26 +245,19 @@ func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
 }
 
 // convert a SQL DB representation of a postgres.NormalTunnel into the primary NormalTunnel struct
-func normalTunnelFromSQL(record postgres.NormalTunnel) (NormalTunnel, error) {
-	var healthcheckConfig HealthcheckConfig
-	if record.HealthcheckConfig.Valid {
-		if err := json.Unmarshal([]byte(record.HealthcheckConfig.String), &healthcheckConfig); err != nil {
-			return NormalTunnel{}, errors.Wrap(err, "could not unmarshal healthcheck config")
-		}
-	}
-
+func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
 	return NormalTunnel{
-		ID:          record.ID,
-		CreatedAt:   record.CreatedAt,
-		Enabled:     record.Enabled,
-		SSHUser:     record.SSHUser.String,
-		SSHHost:     record.SSHHost,
-		SSHPort:     record.SSHPort,
-		ServiceHost: record.ServiceHost,
-		ServicePort: record.ServicePort,
-		Healthcheck: healthcheckConfig,
-		TunnelPort:  record.TunnelPort,
-	}, nil
+		ID:                 record.ID,
+		CreatedAt:          record.CreatedAt,
+		Enabled:            record.Enabled,
+		SSHUser:            record.SSHUser.String,
+		SSHHost:            record.SSHHost,
+		SSHPort:            record.SSHPort,
+		ServiceHost:        record.ServiceHost,
+		ServicePort:        record.ServicePort,
+		HealthcheckEnabled: record.HealthcheckEnabled,
+		TunnelPort:         record.TunnelPort,
+	}
 }
 
 func (t NormalTunnel) GetID() uuid.UUID {

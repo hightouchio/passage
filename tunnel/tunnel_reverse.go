@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/gliderlabs/ssh"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -24,10 +23,9 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int `json:"sshdPort"`
-	TunnelPort int `json:"tunnelPort"`
-
-	Healthcheck HealthcheckConfig `json:"healthcheck"`
+	SSHDPort           int  `json:"sshdPort"`
+	TunnelPort         int  `json:"tunnelPort"`
+	HealthcheckEnabled bool `json:"healthcheck_enabled"`
 
 	authorizedKeysHash string
 	services           ReverseTunnelServices
@@ -38,6 +36,8 @@ func (t ReverseTunnel) Start(ctx context.Context, listener *net.TCPListener, sta
 	defer cancel()
 
 	logger := log.FromContext(ctx)
+
+	logger.Infow("Healthcheck", zap.Bool("enabled", t.HealthcheckEnabled))
 
 	logger.Debug("Get authorized keys")
 	authorizedKeys, err := t.getAuthorizedKeys(ctx)
@@ -226,27 +226,24 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.TunnelPort == t2.TunnelPort && t.authorizedKeysHash == t2.authorizedKeysHash
+	return t.ID == t2.ID &&
+		t.SSHDPort == t2.SSHDPort &&
+		t.TunnelPort == t2.TunnelPort &&
+		t.authorizedKeysHash == t2.authorizedKeysHash &&
+		t.HealthcheckEnabled == t2.HealthcheckEnabled
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
-func reverseTunnelFromSQL(record postgres.ReverseTunnel) (ReverseTunnel, error) {
-	var healthcheckConfig HealthcheckConfig
-	if record.HealthcheckConfig.Valid {
-		if err := json.Unmarshal([]byte(record.HealthcheckConfig.String), &healthcheckConfig); err != nil {
-			return ReverseTunnel{}, errors.Wrap(err, "could not unmarshal healthcheck config")
-		}
-	}
-
+func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 	return ReverseTunnel{
 		ID:                 record.ID,
 		CreatedAt:          record.CreatedAt,
 		Enabled:            record.Enabled,
 		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
-		Healthcheck:        healthcheckConfig,
+		HealthcheckEnabled: record.HealthcheckEnabled,
 		authorizedKeysHash: record.AuthorizedKeysHash,
-	}, nil
+	}
 }
 
 func (t ReverseTunnel) GetID() uuid.UUID {
