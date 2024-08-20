@@ -39,11 +39,6 @@ type NormalTunnel struct {
 	services      NormalTunnelServices
 }
 
-type HealthcheckConfig struct {
-	Enabled  bool          `json:"enabled"`
-	Interval time.Duration `json:"interval"`
-}
-
 func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, statusUpdate chan<- StatusUpdate) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
