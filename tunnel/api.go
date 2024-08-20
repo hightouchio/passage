@@ -29,8 +29,7 @@ func (s API) GetNormalTunnels(ctx context.Context) ([]NormalTunnel, error) {
 	// convert all the SQL records to our primary struct
 	tunnels := make([]NormalTunnel, len(normalTunnels))
 	for i, record := range normalTunnels {
-		tunnel := normalTunnelFromSQL(record)
-		tunnels[i] = tunnel
+		tunnels[i] = normalTunnelFromSQL(record)
 	}
 
 	return tunnels, nil
@@ -46,8 +45,7 @@ func (s API) GetReverseTunnels(ctx context.Context) ([]ReverseTunnel, error) {
 	// convert all the SQL records to our primary struct
 	tunnels := make([]ReverseTunnel, len(reverseTunnels))
 	for i, record := range reverseTunnels {
-		tunnel := reverseTunnelFromSQL(record)
-		tunnels[i] = tunnel
+		tunnels[i] = reverseTunnelFromSQL(record)
 	}
 
 	return tunnels, nil
@@ -153,6 +151,7 @@ func (s API) UpdateTunnel(ctx context.Context, req UpdateTunnelRequest) (*Update
 			"sshPort":     "ssh_port",
 			"sshUser":     "ssh_user",
 		}))
+
 		tunnel = normalTunnelFromSQL(newTunnel)
 	case Reverse:
 		var newTunnel postgres.ReverseTunnel

@@ -17,6 +17,7 @@ type ReverseTunnel struct {
 	SSHDPort           int       `db:"sshd_port"`
 	AuthorizedKeysHash string    `db:"authorized_keys_hash"`
 	TunnelPort         int       `db:"tunnel_port"`
+	HealthcheckEnabled bool      `db:"healthcheck_enabled"`
 
 	// Deprecated
 	HttpProxy  bool           `db:"http_proxy"`
