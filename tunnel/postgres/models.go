@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -55,13 +56,13 @@ func (ns NullPassageTunnelType) Value() (driver.Value, error) {
 
 type PassageKeyAuthorization struct {
 	CreatedAt  pgtype.Timestamp
-	KeyID      pgtype.UUID
+	KeyID      uuid.UUID
 	TunnelType PassageTunnelType
-	TunnelID   pgtype.UUID
+	TunnelID   uuid.UUID
 }
 
 type PassageReverseTunnel struct {
-	ID                 pgtype.UUID
+	ID                 uuid.UUID
 	CreatedAt          pgtype.Timestamp
 	Enabled            bool
 	SshdPort           pgtype.Int4
@@ -72,7 +73,7 @@ type PassageReverseTunnel struct {
 }
 
 type PassageTunnel struct {
-	ID                 pgtype.UUID
+	ID                 uuid.UUID
 	CreatedAt          pgtype.Timestamp
 	Enabled            bool
 	TunnelPort         pgtype.Int4

@@ -8,7 +8,7 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const authorizeKeyForTunnel = `-- name: AuthorizeKeyForTunnel :exec
@@ -18,7 +18,7 @@ WHERE tunnel_id = $1
   AND tunnel_type = 'normal'
 `
 
-func (q *Queries) AuthorizeKeyForTunnel(ctx context.Context, tunnelID pgtype.UUID) error {
+func (q *Queries) AuthorizeKeyForTunnel(ctx context.Context, tunnelID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, authorizeKeyForTunnel, tunnelID)
 	return err
 }
@@ -30,15 +30,15 @@ WHERE tunnel_id = $1
   AND tunnel_type = 'normal'
 `
 
-func (q *Queries) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID pgtype.UUID) ([]pgtype.UUID, error) {
+func (q *Queries) GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, getNormalTunnelPrivateKeys, tunnelID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []pgtype.UUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var key_id pgtype.UUID
+		var key_id uuid.UUID
 		if err := rows.Scan(&key_id); err != nil {
 			return nil, err
 		}
@@ -57,15 +57,15 @@ WHERE tunnel_id = $1
   AND tunnel_type = 'normal'
 `
 
-func (q *Queries) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID pgtype.UUID) ([]pgtype.UUID, error) {
+func (q *Queries) GetReverseTunnelAuthorizedKeys(ctx context.Context, tunnelID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, getReverseTunnelAuthorizedKeys, tunnelID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []pgtype.UUID
+	var items []uuid.UUID
 	for rows.Next() {
-		var key_id pgtype.UUID
+		var key_id uuid.UUID
 		if err := rows.Scan(&key_id); err != nil {
 			return nil, err
 		}

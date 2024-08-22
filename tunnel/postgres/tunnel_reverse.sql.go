@@ -8,6 +8,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -37,7 +38,7 @@ FROM passage.reverse_tunnels
 WHERE id = $1
 `
 
-func (q *Queries) DeleteReverseTunnel(ctx context.Context, id pgtype.UUID) error {
+func (q *Queries) DeleteReverseTunnel(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteReverseTunnel, id)
 	return err
 }
@@ -48,7 +49,7 @@ FROM passage.reverse_tunnels
 WHERE id = $1
 `
 
-func (q *Queries) GetReverseTunnel(ctx context.Context, id pgtype.UUID) (PassageReverseTunnel, error) {
+func (q *Queries) GetReverseTunnel(ctx context.Context, id uuid.UUID) (PassageReverseTunnel, error) {
 	row := q.db.QueryRow(ctx, getReverseTunnel, id)
 	var i PassageReverseTunnel
 	err := row.Scan(
@@ -73,7 +74,7 @@ GROUP BY rt.id
 `
 
 type ListEnabledReverseTunnelsRow struct {
-	ID                 pgtype.UUID
+	ID                 uuid.UUID
 	CreatedAt          pgtype.Timestamp
 	Enabled            bool
 	SshdPort           pgtype.Int4
@@ -122,7 +123,7 @@ RETURNING id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error, 
 `
 
 type UpdateReverseTunnelParams struct {
-	ID      pgtype.UUID
+	ID      uuid.UUID
 	Enabled pgtype.Bool
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/hightouchio/passage/tunnel/postgres"
+	"github.com/jackc/pgx/v5"
 	"github.com/pkg/errors"
 	"net"
 )
@@ -69,7 +70,13 @@ func (s API) CreateNormalTunnel(ctx context.Context, request CreateNormalTunnelR
 	}
 
 	// insert into DB
-	record, err := s.SQL.CreateNormalTunnel(ctx, sqlFromNormalTunnel(request.NormalTunnel))
+	record, err := s.SQL.CreateNormalTunnel(ctx, postgres.CreateNormalTunnelParams{
+		SshUser:     request.SSHUser,
+		SshHost:     request.SSHHost,
+		SshPort:     int32(request.SSHPort),
+		ServiceHost: request.ServiceHost,
+		ServicePort: int32(request.ServicePort),
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not insert")
 	}
@@ -126,7 +133,7 @@ type CreateReverseTunnelResponse struct {
 }
 
 func (s API) CreateReverseTunnel(ctx context.Context, request CreateReverseTunnelRequest) (*CreateReverseTunnelResponse, error) {
-	var tunnelData postgres.ReverseTunnel
+	var tunnelData postgres.PassageReverseTunnel
 	var response CreateReverseTunnelResponse
 
 	// Default authorized keys to those provided in API request
@@ -170,7 +177,7 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 	reverseTunnel, err := sql.GetReverseTunnel(ctx, id)
 	if err == nil {
 		return reverseTunnelFromSQL(reverseTunnel), Reverse, nil
-	} else if err != postgres.ErrTunnelNotFound {
+	} else if err != pgx.ErrNoRows {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")
 	}
@@ -179,10 +186,10 @@ func findTunnel(ctx context.Context, sql sqlClient, id uuid.UUID) (Tunnel, Tunne
 	normalTunnel, err := sql.GetNormalTunnel(ctx, id)
 	if err == nil {
 		return normalTunnelFromSQL(normalTunnel), Normal, nil
-	} else if err != postgres.ErrTunnelNotFound {
+	} else if err != pgx.ErrNoRows {
 		// internal server error
 		return nil, "", errors.Wrap(err, "could not fetch from database")
 	}
 
-	return nil, "", postgres.ErrTunnelNotFound
+	return nil, "", pgx.ErrNoRows
 }

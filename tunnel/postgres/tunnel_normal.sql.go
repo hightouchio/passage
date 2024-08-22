@@ -8,6 +8,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -56,7 +57,7 @@ FROM passage.tunnels
 WHERE id = $1
 `
 
-func (q *Queries) DeleteNormalTunnel(ctx context.Context, id pgtype.UUID) error {
+func (q *Queries) DeleteNormalTunnel(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteNormalTunnel, id)
 	return err
 }
@@ -67,7 +68,7 @@ FROM passage.tunnels
 WHERE id = $1
 `
 
-func (q *Queries) GetNormalTunnel(ctx context.Context, id pgtype.UUID) (PassageTunnel, error) {
+func (q *Queries) GetNormalTunnel(ctx context.Context, id uuid.UUID) (PassageTunnel, error) {
 	row := q.db.QueryRow(ctx, getNormalTunnel, id)
 	var i PassageTunnel
 	err := row.Scan(
@@ -137,7 +138,7 @@ RETURNING id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, se
 `
 
 type UpdateNormalTunnelParams struct {
-	ID          pgtype.UUID
+	ID          uuid.UUID
 	Enabled     pgtype.Bool
 	ServiceHost pgtype.Text
 	ServicePort pgtype.Int4

@@ -8,7 +8,6 @@ import (
 	"github.com/hightouchio/passage/tunnel/discovery"
 	"github.com/hightouchio/passage/tunnel/keystore"
 	"github.com/hightouchio/passage/tunnel/postgres"
-	"github.com/pkg/errors"
 )
 
 // API provides a source of truth for Tunnel configuration. It serves remote clients via HTTP APIs, as well as Manager instances via an exported ListFunc
@@ -217,17 +216,17 @@ func (s API) CheckTunnel(ctx context.Context, req CheckTunnelRequest) (*CheckTun
 }
 
 type sqlClient interface {
-	CreateReverseTunnel(ctx context.Context, data postgres.ReverseTunnel, authorizedKeys []uuid.UUID) (postgres.ReverseTunnel, error)
-	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.ReverseTunnel, error)
-	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.ReverseTunnel, error)
-	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ReverseTunnel, error)
+	CreateReverseTunnel(ctx context.Context, data postgres.PassageReverseTunnel, authorizedKeys []uuid.UUID) (postgres.PassageReverseTunnel, error)
+	GetReverseTunnel(ctx context.Context, id uuid.UUID) (postgres.PassageReverseTunnel, error)
+	UpdateReverseTunnel(ctx context.Context, id uuid.UUID, data postgres.UpdateReverseTunnelParams) (postgres.PassageReverseTunnel, error)
+	ListReverseActiveTunnels(ctx context.Context) ([]postgres.ListEnabledReverseTunnelsRow, error)
 
-	CreateNormalTunnel(ctx context.Context, data postgres.NormalTunnel) (postgres.NormalTunnel, error)
-	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.NormalTunnel, error)
-	UpdateNormalTunnel(ctx context.Context, id uuid.UUID, data map[string]interface{}) (postgres.NormalTunnel, error)
-	ListNormalActiveTunnels(ctx context.Context) ([]postgres.NormalTunnel, error)
+	CreateNormalTunnel(ctx context.Context, data postgres.CreateNormalTunnelParams) (postgres.PassageTunnel, error)
+	GetNormalTunnel(ctx context.Context, id uuid.UUID) (postgres.PassageTunnel, error)
+	UpdateNormalTunnel(ctx context.Context, id uuid.UUID, data postgres.UpdateNormalTunnelParams) (postgres.PassageTunnel, error)
+	ListNormalActiveTunnels(ctx context.Context) ([]postgres.PassageTunnel, error)
 
-	DeleteTunnel(ctx context.Context, tunnelID uuid.UUID) error
+	DeleteTunnel(ctx context.Context, id uuid.UUID) error
 
 	AuthorizeKeyForTunnel(ctx context.Context, tunnelType string, tunnelID uuid.UUID, keyID uuid.UUID) error
 }
