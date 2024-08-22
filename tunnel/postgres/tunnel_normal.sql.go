@@ -14,7 +14,7 @@ import (
 const createNormalTunnel = `-- name: CreateNormalTunnel :one
 INSERT INTO passage.tunnels (ssh_user, ssh_host, ssh_port, service_host, service_port)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error
+RETURNING id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error, healthcheck_enabled
 `
 
 type CreateNormalTunnelParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) CreateNormalTunnel(ctx context.Context, arg CreateNormalTunnel
 		&i.ServiceHost,
 		&i.ServicePort,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }
@@ -61,7 +62,7 @@ func (q *Queries) DeleteNormalTunnel(ctx context.Context, id pgtype.UUID) error 
 }
 
 const getNormalTunnel = `-- name: GetNormalTunnel :one
-SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error
+SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error, healthcheck_enabled
 FROM passage.tunnels
 WHERE id = $1
 `
@@ -80,12 +81,13 @@ func (q *Queries) GetNormalTunnel(ctx context.Context, id pgtype.UUID) (PassageT
 		&i.ServiceHost,
 		&i.ServicePort,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }
 
 const listEnabledNormalTunnels = `-- name: ListEnabledNormalTunnels :many
-SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error
+SELECT id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error, healthcheck_enabled
 FROM passage.tunnels
 WHERE enabled = true
 `
@@ -110,6 +112,7 @@ func (q *Queries) ListEnabledNormalTunnels(ctx context.Context) ([]PassageTunnel
 			&i.ServiceHost,
 			&i.ServicePort,
 			&i.Error,
+			&i.HealthcheckEnabled,
 		); err != nil {
 			return nil, err
 		}
@@ -130,7 +133,7 @@ SET enabled=COALESCE($2, enabled),
     ssh_port=COALESCE($6, ssh_port),
     ssh_user=COALESCE($7, ssh_user)
 WHERE id = $1
-RETURNING id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error
+RETURNING id, created_at, enabled, tunnel_port, ssh_user, ssh_host, ssh_port, service_host, service_port, error, healthcheck_enabled
 `
 
 type UpdateNormalTunnelParams struct {
@@ -165,6 +168,7 @@ func (q *Queries) UpdateNormalTunnel(ctx context.Context, arg UpdateNormalTunnel
 		&i.ServiceHost,
 		&i.ServicePort,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }

@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/hightouchio/passage/log"
 	"github.com/hightouchio/passage/stats"
@@ -29,6 +28,8 @@ type NormalTunnel struct {
 	SSHPort     int    `json:"sshPort"`
 	ServiceHost string `json:"serviceHost"`
 	ServicePort int    `json:"servicePort"`
+
+	HealthcheckEnabled bool `json:"healthcheck_enabled"`
 
 	// Deprecated
 	TunnelPort int `json:"tunnelPort"`
@@ -93,8 +94,11 @@ func (t NormalTunnel) Start(ctx context.Context, listener *net.TCPListener, stat
 		return sshClient.Dial("tcp", net.JoinHostPort(t.ServiceHost, strconv.Itoa(t.ServicePort)))
 	}
 
-	// Start upstream reachability test
-	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
+	if t.HealthcheckEnabled {
+		logger.Debug("Starting upstream healthcheck")
+		// Start upstream reachability test
+		go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, getUpstreamConn)
+	}
 
 	// If the context has been cancelled at this point in time, stop the tunnel.
 	if ctx.Err() != nil {
@@ -188,7 +192,7 @@ func (t NormalTunnel) getAuthSigners(ctx context.Context) ([]ssh.Signer, error) 
 // NormalTunnelServices are the external dependencies that NormalTunnel needs to do its job
 type NormalTunnelServices struct {
 	SQL interface {
-		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Key, error)
+		GetNormalTunnelPrivateKeys(ctx context.Context, tunnelID uuid.UUID) ([]postgres.Passage, error)
 	}
 	Keystore keystore.Keystore
 
@@ -222,32 +226,23 @@ func (t NormalTunnel) Equal(v interface{}) bool {
 		t.SSHHost == t2.SSHHost &&
 		t.SSHPort == t2.SSHPort &&
 		t.ServiceHost == t2.ServiceHost &&
-		t.ServicePort == t2.ServicePort
-}
-
-// sqlFromNormalTunnel converts tunnel data into something that can be inserted into the DB
-func sqlFromNormalTunnel(tunnel NormalTunnel) postgres.NormalTunnel {
-	return postgres.NormalTunnel{
-		SSHUser:     sql.NullString{String: tunnel.SSHUser, Valid: tunnel.SSHUser != ""},
-		SSHHost:     tunnel.SSHHost,
-		SSHPort:     tunnel.SSHPort,
-		ServiceHost: tunnel.ServiceHost,
-		ServicePort: tunnel.ServicePort,
-	}
+		t.ServicePort == t2.ServicePort &&
+		t.HealthcheckEnabled == t2.HealthcheckEnabled
 }
 
 // convert a SQL DB representation of a postgres.NormalTunnel into the primary NormalTunnel struct
-func normalTunnelFromSQL(record postgres.NormalTunnel) NormalTunnel {
+func normalTunnelFromSQL(record postgres.PassageTunnel) NormalTunnel {
 	return NormalTunnel{
-		ID:          record.ID,
-		CreatedAt:   record.CreatedAt,
-		Enabled:     record.Enabled,
-		SSHUser:     record.SSHUser.String,
-		SSHHost:     record.SSHHost,
-		SSHPort:     record.SSHPort,
-		ServiceHost: record.ServiceHost,
-		ServicePort: record.ServicePort,
-		TunnelPort:  record.TunnelPort,
+		ID:                 record.ID,
+		CreatedAt:          record.CreatedAt,
+		Enabled:            record.Enabled,
+		SSHUser:            record.SshUser,
+		SSHHost:            record.SshHost,
+		SSHPort:            int(record.SshPort),
+		ServiceHost:        record.ServiceHost,
+		ServicePort:        int(record.ServicePort),
+		HealthcheckEnabled: record.HealthcheckEnabled,
+		TunnelPort:         record.TunnelPort,
 	}
 }
 

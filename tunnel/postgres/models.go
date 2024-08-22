@@ -61,24 +61,26 @@ type PassageKeyAuthorization struct {
 }
 
 type PassageReverseTunnel struct {
-	ID         pgtype.UUID
-	CreatedAt  pgtype.Timestamp
-	Enabled    bool
-	SshdPort   pgtype.Int4
-	TunnelPort pgtype.Int4
-	LastUsedAt pgtype.Timestamp
-	Error      pgtype.Text
+	ID                 pgtype.UUID
+	CreatedAt          pgtype.Timestamp
+	Enabled            bool
+	SshdPort           pgtype.Int4
+	TunnelPort         pgtype.Int4
+	LastUsedAt         pgtype.Timestamp
+	Error              pgtype.Text
+	HealthcheckEnabled bool
 }
 
 type PassageTunnel struct {
-	ID          pgtype.UUID
-	CreatedAt   pgtype.Timestamp
-	Enabled     bool
-	TunnelPort  pgtype.Int4
-	SshUser     pgtype.Text
-	SshHost     string
-	SshPort     int32
-	ServiceHost string
-	ServicePort int32
-	Error       pgtype.Text
+	ID                 pgtype.UUID
+	CreatedAt          pgtype.Timestamp
+	Enabled            bool
+	TunnelPort         pgtype.Int4
+	SshUser            pgtype.Text
+	SshHost            string
+	SshPort            int32
+	ServiceHost        string
+	ServicePort        int32
+	Error              pgtype.Text
+	HealthcheckEnabled bool
 }

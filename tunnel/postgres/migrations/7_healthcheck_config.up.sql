@@ -1,0 +1,2 @@
+ALTER TABLE passage.tunnels ADD COLUMN IF NOT EXISTS healthcheck_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE passage.reverse_tunnels ADD COLUMN IF NOT EXISTS healthcheck_enabled BOOLEAN NOT NULL DEFAULT TRUE;

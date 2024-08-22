@@ -23,8 +23,9 @@ type ReverseTunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Enabled   bool      `json:"enabled"`
 
-	SSHDPort   int `json:"sshdPort"`
-	TunnelPort int `json:"tunnelPort"`
+	SSHDPort           int  `json:"sshdPort"`
+	TunnelPort         int  `json:"tunnelPort"`
+	HealthcheckEnabled bool `json:"healthcheck_enabled"`
 
 	authorizedKeysHash string
 	services           ReverseTunnelServices
@@ -136,10 +137,13 @@ func (t ReverseTunnel) handleConnection(
 		}
 	}()
 
-	// Start upstream reachability test
-	// TODO: If we have multiple forwarders, the healthchecks can conflict.
-	//	We should probably have a single healthcheck for the tunnel
-	go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+	if t.HealthcheckEnabled {
+		logger.Debug("Starting upstream healthcheck")
+		// Start upstream reachability test
+		// TODO: If we have multiple forwarders, the healthchecks can conflict.
+		//		We should probably have a single healthcheck for the tunnel
+		go upstreamHealthcheck(ctx, t, logger, t.services.Discovery, conn.Dial)
+	}
 
 	// Create a TCPForwarder, which will bidirectionally proxy connections and traffic between a local
 	//	tunnel listener and a remote SSH connection.
@@ -223,7 +227,11 @@ func (t ReverseTunnel) Equal(v interface{}) bool {
 		return false
 	}
 
-	return t.ID == t2.ID && t.SSHDPort == t2.SSHDPort && t.TunnelPort == t2.TunnelPort && t.authorizedKeysHash == t2.authorizedKeysHash
+	return t.ID == t2.ID &&
+		t.SSHDPort == t2.SSHDPort &&
+		t.TunnelPort == t2.TunnelPort &&
+		t.authorizedKeysHash == t2.authorizedKeysHash &&
+		t.HealthcheckEnabled == t2.HealthcheckEnabled
 }
 
 // convert a SQL DB representation of a postgres.ReverseTunnel into the primary ReverseTunnel struct
@@ -234,6 +242,7 @@ func reverseTunnelFromSQL(record postgres.ReverseTunnel) ReverseTunnel {
 		Enabled:            record.Enabled,
 		TunnelPort:         record.TunnelPort,
 		SSHDPort:           record.SSHDPort,
+		HealthcheckEnabled: record.HealthcheckEnabled,
 		authorizedKeysHash: record.AuthorizedKeysHash,
 	}
 }

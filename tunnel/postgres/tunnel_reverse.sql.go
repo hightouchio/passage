@@ -12,7 +12,7 @@ import (
 )
 
 const createReverseTunnel = `-- name: CreateReverseTunnel :one
-INSERT INTO passage.reverse_tunnels DEFAULT VALUES RETURNING id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error
+INSERT INTO passage.reverse_tunnels DEFAULT VALUES RETURNING id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error, healthcheck_enabled
 `
 
 func (q *Queries) CreateReverseTunnel(ctx context.Context) (PassageReverseTunnel, error) {
@@ -26,6 +26,7 @@ func (q *Queries) CreateReverseTunnel(ctx context.Context) (PassageReverseTunnel
 		&i.TunnelPort,
 		&i.LastUsedAt,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }
@@ -42,7 +43,7 @@ func (q *Queries) DeleteReverseTunnel(ctx context.Context, id pgtype.UUID) error
 }
 
 const getReverseTunnel = `-- name: GetReverseTunnel :one
-SELECT id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error
+SELECT id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error, healthcheck_enabled
 FROM passage.reverse_tunnels
 WHERE id = $1
 `
@@ -58,12 +59,13 @@ func (q *Queries) GetReverseTunnel(ctx context.Context, id pgtype.UUID) (Passage
 		&i.TunnelPort,
 		&i.LastUsedAt,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }
 
 const listEnabledReverseTunnels = `-- name: ListEnabledReverseTunnels :many
-SELECT rt.id, rt.created_at, rt.enabled, rt.sshd_port, rt.tunnel_port, rt.last_used_at, rt.error, encode(sha256(array_to_string(array_agg(ka.key_id), ',')::bytea), 'hex') AS authorized_keys_hash
+SELECT rt.id, rt.created_at, rt.enabled, rt.sshd_port, rt.tunnel_port, rt.last_used_at, rt.error, rt.healthcheck_enabled, encode(sha256(array_to_string(array_agg(ka.key_id), ',')::bytea), 'hex') AS authorized_keys_hash
 FROM passage.reverse_tunnels rt
          LEFT JOIN passage.key_authorizations ka ON ka.tunnel_id = rt.id
 WHERE rt.enabled = true
@@ -78,6 +80,7 @@ type ListEnabledReverseTunnelsRow struct {
 	TunnelPort         pgtype.Int4
 	LastUsedAt         pgtype.Timestamp
 	Error              pgtype.Text
+	HealthcheckEnabled bool
 	AuthorizedKeysHash string
 }
 
@@ -98,6 +101,7 @@ func (q *Queries) ListEnabledReverseTunnels(ctx context.Context) ([]ListEnabledR
 			&i.TunnelPort,
 			&i.LastUsedAt,
 			&i.Error,
+			&i.HealthcheckEnabled,
 			&i.AuthorizedKeysHash,
 		); err != nil {
 			return nil, err
@@ -114,7 +118,7 @@ const updateReverseTunnel = `-- name: UpdateReverseTunnel :one
 UPDATE passage.reverse_tunnels
 SET enabled=COALESCE($2, enabled)
 WHERE id = $1
-RETURNING id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error
+RETURNING id, created_at, enabled, sshd_port, tunnel_port, last_used_at, error, healthcheck_enabled
 `
 
 type UpdateReverseTunnelParams struct {
@@ -133,6 +137,7 @@ func (q *Queries) UpdateReverseTunnel(ctx context.Context, arg UpdateReverseTunn
 		&i.TunnelPort,
 		&i.LastUsedAt,
 		&i.Error,
+		&i.HealthcheckEnabled,
 	)
 	return i, err
 }
