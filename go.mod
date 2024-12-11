@@ -25,7 +25,7 @@ require (
 	go.uber.org/dig v1.12.0
 	go.uber.org/fx v1.14.2
 	go.uber.org/zap v1.26.0
-	golang.org/x/crypto v0.30.0
+	golang.org/x/crypto v0.31.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.59.0
 )
 
