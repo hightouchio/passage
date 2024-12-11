@@ -75,6 +75,8 @@ func (s *SSHServer) Start() error {
 
 	// Validate incoming public keys, match them against registered tunnels, and store the list of authorized
 	// 	tunnels in the session context for future reference when evaluating reverse port forwarding requests.
+	// 	NOTE: There is no guarantee that any key passed to this callback has been authenticated with a client private key.
+	//		Only the last key passed to this callback has been authenticated (https://github.com/golang/go/issues/70779)
 	if err := server.SetOption(ssh.PublicKeyAuth(func(ctx ssh.Context, incomingKey ssh.PublicKey) bool {
 		logger := sshSessionLogger(s.logger, ctx)
 
@@ -102,7 +104,9 @@ func (s *SSHServer) Start() error {
 		s.stats.Incr(StatSshdConnectionsRequests, stats.Tags{"success": success}, 1)
 
 		// Register the authorized tunnels onto the ssh.Context
-		registerAuthorizedTunnels(ctx, authorizedTunnels)
+		//	Note: This must override the set of authorized tunnels, as only the last key passed to this function
+		//	is considered to be authenticated.
+		setAuthorizedTunnels(ctx, authorizedTunnels)
 
 		return success
 	})); err != nil {
@@ -256,11 +260,9 @@ func sshSessionLogger(logger *log.Logger, ctx ssh.Context) *log.Logger {
 	)
 }
 
-// registerAuthorizedTunnels adds new authorized tunnels to the ssh.Context
-func registerAuthorizedTunnels(ctx ssh.Context, newAuthorizedTunnels []SSHServerRegisteredTunnel) {
-	authorizedTunnels := getAuthorizedTunnels(ctx)
-	authorizedTunnels = append(authorizedTunnels, newAuthorizedTunnels...)
-	ctx.SetValue("authorized_tunnels", authorizedTunnels)
+// setAuthorizedTunnels adds new authorized tunnels to the ssh.Context
+func setAuthorizedTunnels(ctx ssh.Context, newAuthorizedTunnels []SSHServerRegisteredTunnel) {
+	ctx.SetValue("authorized_tunnels", newAuthorizedTunnels)
 }
 
 // getAuthorizedTunnels extracts the authorized tunnels from the ssh.Context
